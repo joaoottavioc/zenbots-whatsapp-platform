@@ -9,3 +9,5 @@ python-jose[cryptography]
 bcrypt==3.2.0
 passlib[bcrypt]==1.7.4
 asyncpg
+pgvector
+sentence-transformers

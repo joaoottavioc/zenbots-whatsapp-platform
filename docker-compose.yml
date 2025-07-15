@@ -1,6 +1,8 @@
+version: '3.9'
+
 services:
   db:
-    image: postgres:14
+    image: pgvector/pgvector:pg14
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -9,15 +11,11 @@ services:
       - "5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
-    
+      - ./init.sql:/docker-entrypoint-initdb.d/init-vector.sql
+    restart: unless-stopped
+
   ollama:
     image: ollama/ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    environment:
-      - OLLAMA_KEEP_ALIVE=1h
     deploy:
       resources:
         reservations:
@@ -25,19 +23,27 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=1h
+    restart: unless-stopped
 
   backend:
     build: .
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    volumes:
-      - .:/code
     ports:
       - "8000:8000"
+    volumes:
+      - .:/code
     depends_on:
       - db
       - ollama
     env_file:
       - .env
+    restart: unless-stopped
 
 volumes:
   db_data:

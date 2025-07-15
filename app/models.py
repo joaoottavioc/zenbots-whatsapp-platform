@@ -1,47 +1,62 @@
-from sqlmodel import SQLModel, Field, Relationship
+from sqlmodel import SQLModel, Field, Relationship, Column, TEXT
+from pgvector.sqlalchemy import Vector
 from typing import Optional, List
 from datetime import datetime
 
-# Tabela para armazenar as mensagens individuais de cada conversa
-class ConversationHistory(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    
-    bot_id: int = Field(foreign_key="bot.id")
-    contact_number: str = Field(index=True)
-    
-    # Define o autor da mensagem: 'user' ou 'assistant' (o bot)
-    role: str 
-    # O conteúdo real da mensagem
-    content: str 
-    
-    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
-    
-    # Cria o link de volta para o objeto Bot
-    bot: "Bot" = Relationship(back_populates="history")
+# Forward declarations para resolver dependências circulares de tipo
+class Bot(SQLModel):
+    pass
 
-# Tabela de Bots, agora com o relacionamento para o histórico
+class Product(SQLModel):
+    pass
+
+class ConversationHistory(SQLModel):
+    pass
+
+class User(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    email: str = Field(unique=True, index=True)
+    hashed_password: str
+    
+    bots: List["Bot"] = Relationship(back_populates="user")
+
+
 class Bot(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    whatsapp_number: str
-    system_prompt: str
+    restaurant_name: Optional[str] = Field(default=None)
+    whatsapp_number: str = Field(unique=True, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
     user_id: int = Field(foreign_key="user.id")
-    
-    # Cria os links para User e ConversationHistory
     user: "User" = Relationship(back_populates="bots")
+    
+    # ✅ CORREÇÃO: Relacionamentos com Product e ConversationHistory
+    products: List["Product"] = Relationship(back_populates="bot")
     history: List["ConversationHistory"] = Relationship(back_populates="bot")
 
-# Tabela de Usuários, agora com o relacionamento para os bots
-class User(SQLModel, table=True):
+
+class Product(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    email: str
-    hashed_password: str
+    name: str = Field(index=True)
+    description: Optional[str] = Field(default=None)
+    price: float
+    embedding: List[float] = Field(sa_column=Column(Vector(384)))
     
-    # Cria o link para a lista de Bots que este usuário possui
-    bots: List["Bot"] = Relationship(back_populates="user")
+    bot_id: int = Field(foreign_key="bot.id")
+    bot: "Bot" = Relationship(back_populates="products")
+
+
+class ConversationHistory(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    contact_number: str = Field(index=True)
+    role: str 
+    content: str = Field(sa_column=Column(TEXT))
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     
-# Tabela para evitar processamento duplicado de webhooks (está ótima, sem alterações)
+    bot_id: int = Field(foreign_key="bot.id")
+    bot: "Bot" = Relationship(back_populates="history")
+    
+
 class ProcessedMessage(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     message_id: str = Field(index=True, unique=True)
