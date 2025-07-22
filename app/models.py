@@ -26,13 +26,20 @@ class Bot(SQLModel, table=True):
     restaurant_name: Optional[str] = Field(default=None)
     whatsapp_number: str = Field(unique=True, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    pix_key: Optional[str] = Field(default=None, index=True)
     
     user_id: int = Field(foreign_key="user.id")
     user: "User" = Relationship(back_populates="bots")
     
     # ✅ CORREÇÃO: Relacionamentos com Product e ConversationHistory
-    products: List["Product"] = Relationship(back_populates="bot")
-    history: List["ConversationHistory"] = Relationship(back_populates="bot")
+    products: List["Product"] = Relationship(
+        back_populates="bot",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+    history: List["ConversationHistory"] = Relationship(
+        back_populates="bot",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
 
 
 class Product(SQLModel, table=True):

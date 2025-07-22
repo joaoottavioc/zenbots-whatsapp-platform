@@ -4,7 +4,7 @@ from typing import Any, Dict
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -12,7 +12,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app import crud
 from app.database import async_session
 from app.models import ProcessedMessage
-from app.openai_client import get_phi3_response
+from app.openai_client import get_chat_response  # Usa a função de chat otimizada
 from app.prompt_builder import create_prompt_with_context
 
 load_dotenv()
@@ -31,6 +31,7 @@ async def whatsapp_webhook(request: Request):
     """
     data = await request.json()
     
+    # Valida se o webhook é de mensagem do WhatsApp para evitar processar outros eventos
     if data.get("object") == "whatsapp_business_account" and data.get("entry"):
         if data["entry"][0].get("changes")[0].get("value").get("messages"):
             asyncio.create_task(process_whatsapp_message(data))
@@ -79,16 +80,16 @@ async def process_whatsapp_message(data: Dict[str, Any]):
             past_messages = [{"role": h.role, "content": h.content} for h in history_records]
 
             # 5. AUGMENTATION: Gera o prompt dinâmico com o contexto encontrado
-            # 👇 CORREÇÃO APLICADA AQUI 👇
             full_conversation_prompt = create_prompt_with_context(
                 search_results=found_products,
                 user_query=text_body,
                 history=past_messages,
-                restaurant_name=bot.restaurant_name # Passa o nome do restaurante
+                restaurant_name=bot.restaurant_name,
+                pix_key=bot.pix_key # ✅ CORREÇÃO APLICADA AQUI
             )
 
             # 6. GENERATION: Chama a IA com o prompt inteligente
-            bot_response_text = await get_phi3_response(full_conversation_prompt)
+            bot_response_text = await get_chat_response(full_conversation_prompt)
 
             # 7. SALVAR E RESPONDER
             session.add(ProcessedMessage(message_id=message_id))

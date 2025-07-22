@@ -18,6 +18,14 @@ class ProductResponse(ProductBase):
     bot_id: int
     model_config = ConfigDict(from_attributes=True)
 
+class ProductUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[float] = None
+
+class ProductBulkDeleteRequest(BaseModel):
+    product_ids: List[int]
+
 # --- Schemas de Histórico ---
 # Usado para exibir o histórico de conversas
 
@@ -34,10 +42,13 @@ class BotCreate(BaseModel):
     """Schema para criar um bot 'casca', apenas com os dados essenciais."""
     restaurant_name: str
     whatsapp_number: str
+    pix_key: Optional[str] = None
 
 class BotUpdate(BaseModel):
     """Schema para atualizar os dados de um bot."""
     restaurant_name: Optional[str] = None
+    whatsapp_number: Optional[str] = None
+    pix_key: Optional[str] = None
 
 class BotResponse(BaseModel):
     """
@@ -49,6 +60,7 @@ class BotResponse(BaseModel):
     restaurant_name: Optional[str] = None
     whatsapp_number: str
     created_at: datetime
+    pix_key: Optional[str] = None
     
     # O bot agora retorna a lista de produtos e de histórico associados a ele
     products: List[ProductResponse] = []

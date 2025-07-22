@@ -1,13 +1,22 @@
-fastapi
-uvicorn[standard]
-sqlmodel
-psycopg2-binary
-python-dotenv
-httpx
-openai
-python-jose[cryptography]
-bcrypt==3.2.0
+# --- Frameworks Principais ---
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+sqlmodel==0.0.19
+pydantic[email]==2.7.1
+python-dotenv==1.0.1
+
+# --- Banco de Dados ---
+asyncpg==0.29.0
+pgvector==0.2.5
+
+# --- IA e Machine Learning (Otimizado) ---
+# Força a instalação da versão leve (CPU) do PyTorch ANTES do sentence-transformers
+torch --extra-index-url https://download.pytorch.org/whl/cpu
+sentence-transformers==3.0.1
+openai==1.35.3
+
+# --- Autenticação e Utilitários ---
+python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
-asyncpg
-pgvector
-sentence-transformers
+bcrypt==4.1.3
+httpx==0.27.0
