@@ -3,6 +3,7 @@ from sqlmodel import select
 from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict
 from sqlmodel import delete # Importe a função delete
+from app.models import Order, OrderItem # 👈 Adicione os novos modelos
 
 
 # Importações de modelos e schemas
@@ -260,3 +261,56 @@ async def delete_product(session: AsyncSession, db_product: Product):
     await session.delete(db_product)
     await session.commit()
     return {"ok": True}
+
+# --- NOVAS FUNÇÕES DE PEDIDO ---
+
+async def create_order(
+    session: AsyncSession,
+    bot_id: int,
+    items: List[Dict] # Espera uma lista de dicionários, ex: [{"product_id": 1, "quantity": 2}, ...]
+) -> Optional[Order]:
+    """
+    Cria um novo pedido com seus itens no banco de dados.
+    """
+    try:
+        total_amount = 0.0
+        order_items_to_create = []
+        
+        # Itera sobre os itens para calcular o total e buscar os preços atuais
+        for item_data in items:
+            product = await session.get(Product, item_data["product_id"])
+            if not product:
+                # Se um produto não for encontrado, falha a criação do pedido
+                print(f"Erro: Produto com ID {item_data['product_id']} não encontrado.")
+                return None
+            
+            price = product.price
+            quantity = item_data["quantity"]
+            total_amount += price * quantity
+            
+            # Prepara o OrderItem para ser criado
+            order_items_to_create.append(
+                OrderItem(
+                    product_id=product.id,
+                    quantity=quantity,
+                    price_at_time_of_order=price
+                )
+            )
+
+        # Cria o objeto do pedido principal
+        new_order = Order(
+            bot_id=bot_id,
+            total_amount=round(total_amount, 2), # Arredonda para 2 casas decimais
+            items=order_items_to_create
+        )
+        
+        session.add(new_order)
+        await session.commit()
+        await session.refresh(new_order)
+        
+        return new_order
+        
+    except Exception as e:
+        print(f"Erro ao criar pedido no banco de dados: {e}")
+        await session.rollback()
+        return None

@@ -39,6 +39,7 @@ async def get_chat_response(messages: List[Dict]) -> str:
         return "Desculpe, tive um problema para gerar sua resposta. Tente novamente."
 
 
+
 async def get_extraction_response(messages: List[Dict]) -> str:
     """
     Usa um modelo potente da API da OpenAI para a tarefa de extração de dados,
@@ -57,3 +58,47 @@ async def get_extraction_response(messages: List[Dict]) -> str:
     except Exception as e:
         print(f"Erro na chamada ao modelo de EXTRAÇÃO (OpenAI API): {e}")
         return "[]"  # Retorna um array JSON vazio em caso de erro
+
+
+async def get_chat_response_gpt(messages: List[Dict]) -> str:
+    """
+    Usa um modelo rápido e de alta fiabilidade (gpt-4o-mini) da API da OpenAI
+    para o chat em tempo real, forçando uma resposta em JSON.
+    """
+    def sync_call():
+        return client_openai_api.chat.completions.create(
+            model="gpt-4o-mini", # 👈 Modelo alterado
+            messages=messages,
+            temperature=0.2,
+            max_tokens=300,
+            # 👇 A instrução crucial para garantir a fiabilidade
+            response_format={"type": "json_object"}
+        )
+    try:
+        response = await asyncio.to_thread(sync_call)
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"Erro na chamada ao modelo de CHAT (OpenAI API): {e}")
+        # Retorna um JSON de fallback em caso de erro
+        return '{"action": "CONTINUE_CONVERSATION", "response_to_user": "Desculpe, ocorreu um erro. Pode tentar novamente?"}'
+
+async def get_ai_decision(messages: List[Dict], tools: List[Dict]) -> Dict:
+    """
+    Usa o gpt-4o-mini com a funcionalidade de "tools" para que a IA possa
+    decidir qual ação tomar.
+    """
+    def sync_call():
+        return client_openai_api.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            tools=tools,
+            tool_choice="auto",  # Permite que a IA escolha a ferramenta
+            temperature=0.1,
+        )
+    try:
+        response = await asyncio.to_thread(sync_call)
+        # Retorna a mensagem de resposta completa, que pode conter a chamada de uma ferramenta
+        return response.choices[0].message
+    except Exception as e:
+        print(f"Erro na chamada à API com ferramentas (OpenAI): {e}")
+        return None
