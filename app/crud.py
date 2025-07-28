@@ -3,7 +3,7 @@ from sqlmodel import select
 from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict
 from sqlmodel import delete # Importe a função delete
-from app.models import Order, OrderItem # 👈 Adicione os novos modelos
+from app.models import Order, OrderItem, ProcessedMessage # 👈 Adicione os novos modelos
 
 
 # Importações de modelos e schemas
@@ -12,6 +12,19 @@ from app.schemas import BotUpdate, ProductUpdate
 
 # Importação dos nossos serviços de IA
 from app.embedding_service import generate_embedding
+
+async def is_message_processed(session: AsyncSession, message_id: str) -> bool:
+    """Verifica se um ID de mensagem já foi processado para evitar duplicatas."""
+    result = await session.execute(
+        select(ProcessedMessage).where(ProcessedMessage.message_id == message_id)
+    )
+    return result.scalar_one_or_none() is not None
+
+async def add_processed_message(session: AsyncSession, message_id: str):
+    """Adiciona um novo ID de mensagem à tabela de controle para evitar reprocessamento."""
+    processed_message = ProcessedMessage(message_id=message_id)
+    session.add(processed_message)
+    # O commit é feito no final do bloco `async with async_session()` em whatsapp.py
 
 # --- FUNÇÕES DE USUÁRIO ---
 

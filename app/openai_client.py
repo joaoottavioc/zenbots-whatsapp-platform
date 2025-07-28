@@ -3,6 +3,7 @@ import os
 from typing import List, Dict
 from dotenv import load_dotenv
 from openai import OpenAI
+import json
 
 # Carrega as variáveis de ambiente do arquivo .env
 load_dotenv()
@@ -102,3 +103,52 @@ async def get_ai_decision(messages: List[Dict], tools: List[Dict]) -> Dict:
     except Exception as e:
         print(f"Erro na chamada à API com ferramentas (OpenAI): {e}")
         return None
+
+async def extract_potential_items(user_query: str) -> List[str]:
+    """
+    Usa um modelo de IA potente para extrair os nomes dos itens de uma frase.
+    Retorna uma lista de strings. Ex: "2 pizzas e uma coca" -> ["pizza", "coca-cola"]
+    """
+    prompt = f"""
+    Analise a frase de um cliente de restaurante e extraia os nomes dos pratos ou bebidas que ele está pedindo.
+    Ignore quantidades, adjetivos e frases de cortesia.
+    Sua resposta DEVE ser um objeto JSON com uma única chave "items", que contém um array de strings.
+    Se não encontrar nenhum item, retorne um array vazio.
+
+    Frase: "Eu quero dois x-burger com queijo e uma porção de batata frita, por favor"
+    Resultado: {{"items": ["x-burger com queijo", "batata frita"]}}
+
+    Frase: "me vê um steak au poivre e um croque monsieur"
+    Resultado: {{"items": ["steak au poivre", "croque monsieur"]}}
+    
+    Frase: "pode ser um ouef e dois moules"
+    Resultado: {{"items": ["ouef", "moules"]}}
+
+    Frase: "só uma água, obrigado"
+    Resultado: {{"items": ["água"]}}
+    
+    Frase: "tem mais sugestoes?"
+    Resultado: {{"items": []}}
+
+    Frase: "{user_query}"
+    Resultado:
+    """
+    
+    def sync_call():
+        return client_openai_api.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0,
+            response_format={"type": "json_object"}
+        )
+    
+    try:
+        response = await asyncio.to_thread(sync_call)
+        data = json.loads(response.choices[0].message.content)
+        items = data.get("items", [])
+        if isinstance(items, list):
+            return items
+        return []
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        print(f"Erro ao extrair itens da frase: {e}")
+        return []
