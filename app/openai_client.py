@@ -152,3 +152,52 @@ async def extract_potential_items(user_query: str) -> List[str]:
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         print(f"Erro ao extrair itens da frase: {e}")
         return []
+
+async def get_user_intent(user_query: str, cart_items: List[Dict]) -> str:
+    """
+    Usa a IA para uma tarefa simples de classificação de intenção.
+    Retorna "ADD", "REMOVE", "MODIFY", "FINISH" ou "CONVERSE".
+    """
+    # Se o carrinho estiver vazio, a intenção não pode ser remover ou modificar.
+    possible_intents = ["ADD", "FINISH", "CONVERSE"]
+    if cart_items:
+        possible_intents.extend(["REMOVE", "MODIFY"])
+
+    prompt = f"""
+    Analise a frase do cliente e classifique sua intenção principal em uma das seguintes categorias: {', '.join(possible_intents)}.
+    - ADD: O cliente quer adicionar um ou mais itens ao pedido.
+    - REMOVE: O cliente quer remover, retirar, cancelar ou indica que não quer mais um item.
+    - MODIFY: O cliente quer alterar a quantidade de um item que já está no carrinho.
+    - FINISH: O cliente indica que terminou o pedido (ex: "só isso", "pode fechar a conta").
+    - CONVERSE: Qualquer outra coisa (saudações, perguntas, etc.).
+
+    Sua resposta DEVE ser um objeto JSON com uma única chave "intent".
+
+    Frase: "quero duas pizzas e uma coca" -> {{"intent": "ADD"}}
+    Frase: "mudei de ideia, nao quero mais as coxas" -> {{"intent": "REMOVE"}}
+    Frase: "pensando bem, também nao vou querer a saladinha" -> {{"intent": "REMOVE"}}
+    Frase: "pode tirar a salada?" -> {{"intent": "REMOVE"}}
+    Frase: "na verdade, quero 2 nhoques" -> {{"intent": "MODIFY"}}
+    Frase: "só isso" -> {{"intent": "FINISH"}}
+    Frase: "oi tudo bem?" -> {{"intent": "CONVERSE"}}
+
+    Frase: "{user_query}"
+    Resultado:
+    """
+    
+    def sync_call():
+        return client_openai_api.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0,
+            response_format={"type": "json_object"}
+        )
+    
+    try:
+        response = await asyncio.to_thread(sync_call)
+        data = json.loads(response.choices[0].message.content)
+        intent = data.get("intent", "CONVERSE")
+        # Garante que a intenção seja válida
+        return intent if intent in possible_intents else "CONVERSE"
+    except Exception:
+        return "CONVERSE" # Fallback seguro
