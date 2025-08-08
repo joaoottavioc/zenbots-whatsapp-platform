@@ -4,6 +4,7 @@ from sqlmodel import select, delete
 from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict
 from datetime import datetime
+from app.utils import normalize_phone
 
 # 1. Imports unificados e limpos
 from app.models import (
@@ -32,6 +33,7 @@ async def add_processed_message(session: AsyncSession, message_id: str):
 
 async def get_or_create_contact(session: AsyncSession, bot_id: int, contact_number: str) -> Contact:
     """Busca um contato pelo número ou o cria, sem commitar a sessão."""
+    #contact_number = normalize_phone(contact_number)
     result = await session.execute(
         select(Contact).where(Contact.phone_number == contact_number, Contact.bot_id == bot_id)
     )
@@ -102,7 +104,6 @@ async def modify_item_quantity_in_db_cart(session: AsyncSession, cart_id: int, p
 
 async def clear_db_cart(session: AsyncSession, cart_id: int) -> Optional[ShoppingCart]:
     """Limpa todos os itens de um carrinho e reseta o seu estado."""
-    # CORREÇÃO: Busca o carrinho pelo ID dentro da sessão atual
     cart = await session.get(ShoppingCart, cart_id, options=[selectinload(ShoppingCart.items)])
     if not cart:
         return None
@@ -112,7 +113,10 @@ async def clear_db_cart(session: AsyncSession, cart_id: int) -> Optional[Shoppin
     
     cart.items = [] # Limpa a lista na memória também
     cart.state = "GREETING"
-    cart.last_activity_at = datetime.utcnow()
+    
+    # A linha que definia 'last_activity_at' foi REMOVIDA.
+    # A responsabilidade de atualizar o timestamp é da função principal que orquestra a conversa.
+    
     await session.flush()
     return cart
 
@@ -138,30 +142,54 @@ async def add_interaction_to_history(session: AsyncSession, bot_id: int, contact
     await session.flush()
 
 async def find_relevant_products(session: AsyncSession, bot_id: int, extracted_items: List[str], limit_per_item: int = 2) -> List[Product]:
-    """Executa uma busca em funil com múltiplas camadas, agora segura para descrições nulas."""
-    candidate_products = {}
-    for item_name in extracted_items:
-        # Nível 1: Busca no NOME
-        name_query = select(Product).where(Product.bot_id == bot_id, Product.name.ilike(f"%{item_name}%")).limit(limit_per_item)
-        name_results = await session.execute(name_query)
-        for p in name_results.scalars().all():
-            candidate_products[p.id] = p
+    """Busca em camadas: nome > descrição > embedding (fallback)."""
 
-        # Nível 2: Busca na DESCRIÇÃO (segura para nulos)
-        desc_query = select(Product).where(Product.bot_id == bot_id, Product.description != None, Product.description.ilike(f"%{item_name}%")).limit(limit_per_item)
+    all_results = []
+
+    for item_name in extracted_items:
+        results_set = {}
+
+        # 🔹 1. Busca por nome
+        name_query = select(Product).where(
+            Product.bot_id == bot_id,
+            Product.name.ilike(f"%{item_name}%")
+        ).limit(limit_per_item)
+        name_results = await session.execute(name_query)
+        name_products = name_results.scalars().all()
+
+        if name_products:
+            for p in name_products:
+                results_set[p.id] = p
+            all_results.extend(results_set.values())
+            continue  # 👉 já encontrou pelo nome, ignora os próximos
+
+        # 🔹 2. Busca por descrição (se não achou pelo nome)
+        desc_query = select(Product).where(
+            Product.bot_id == bot_id,
+            Product.description != None,
+            Product.description.ilike(f"%{item_name}%")
+        ).limit(limit_per_item)
         desc_results = await session.execute(desc_query)
-        for p in desc_results.scalars().all():
-            candidate_products[p.id] = p
-            
-        # Nível 3: Busca por Significado (fallback)
-        text_to_embed = f"PRODUTO PRINCIPAL: {item_name}."
-        query_embedding = generate_embedding(text_to_embed)
-        embedding_query = select(Product).where(Product.bot_id == bot_id).order_by(Product.embedding.cosine_distance(query_embedding)).limit(limit_per_item)
+        desc_products = desc_results.scalars().all()
+
+        if desc_products:
+            for p in desc_products:
+                results_set[p.id] = p
+            all_results.extend(results_set.values())
+            continue  # 👉 achou por descrição, não vai para embedding
+
+        # 🔹 3. Fallback: busca semântica (RAG)
+        query_embedding = generate_embedding(f"PRODUTO PRINCIPAL: {item_name}")
+        embedding_query = select(Product).where(Product.bot_id == bot_id).order_by(
+            Product.embedding.cosine_distance(query_embedding)
+        ).limit(limit_per_item)
         embedding_results = await session.execute(embedding_query)
         for p in embedding_results.scalars().all():
-            candidate_products[p.id] = p
-    return list(candidate_products.values())
+            results_set[p.id] = p
 
+        all_results.extend(results_set.values())
+
+    return all_results
 
 # --- Funções de API (Podem e devem fazer commit) ---
 
@@ -177,8 +205,10 @@ async def create_bot(session: AsyncSession, user_id: int, whatsapp_number: str, 
     new_bot = Bot(user_id=user_id, whatsapp_number=whatsapp_number, restaurant_name=restaurant_name, pix_key=pix_key)
     session.add(new_bot)
     await session.commit()
-    await session.refresh(new_bot)
-    return new_bot
+    # A linha abaixo é a chave da correção.
+    # Em vez de apenas dar refresh, nós re-buscamos o bot usando a função
+    # que já faz o 'selectinload' das relações 'products' e 'history'.
+    return await get_bot_by_id(session, bot_id=new_bot.id)
 
 async def get_bot_by_id(session: AsyncSession, bot_id: int) -> Optional[Bot]:
     query = select(Bot).where(Bot.id == bot_id).options(selectinload(Bot.history), selectinload(Bot.products))
@@ -191,7 +221,7 @@ async def list_user_bots(session: AsyncSession, user_id: int) -> List[Bot]:
     return result.scalars().all()
 
 async def update_bot(session: AsyncSession, bot_id: int, update_data: BotUpdate) -> Optional[Bot]:
-    """CORREÇÃO: Recebe bot_id e busca o bot dentro da sessão."""
+    """CORREÇÃO: A assinatura já estava recebendo bot_id, o que é ótimo."""
     db_bot = await session.get(Bot, bot_id)
     if not db_bot:
         return None
@@ -202,8 +232,9 @@ async def update_bot(session: AsyncSession, bot_id: int, update_data: BotUpdate)
         
     session.add(db_bot)
     await session.commit()
-    await session.refresh(db_bot)
-    return db_bot
+    
+    # Chave da correção: Retorna o bot com as relações carregadas para o FastAPI.
+    return await get_bot_by_id(session, bot_id=db_bot.id)
 
 async def delete_bot(session: AsyncSession, bot_id: int) -> bool:
     """CORREÇÃO: Recebe bot_id e busca o bot para deletar."""
@@ -293,27 +324,80 @@ async def delete_product(session: AsyncSession, product_id: int) -> bool:
     await session.commit()
     return True
 
-async def create_order(session: AsyncSession, bot_id: int, items: List[Dict]) -> Optional[Order]:
+async def create_order(
+    session: AsyncSession,
+    bot_id: int,
+    items: List[Dict],
+    customer_address: str | None = None,
+) -> Optional[Order]:
+    """
+    Registra um novo pedido e seus itens.
+
+    Args:
+        session: sessão assíncrona do SQLAlchemy.
+        bot_id: identificador do bot/restaurante.
+        items: lista de dicts no formato {"product_id": int, "quantity": int}.
+        customer_address: endereço do cliente, se disponível.
+
+    Returns:
+        Instância de Order recém-criada ou None em caso de erro.
+    """
     try:
         total_amount = 0.0
-        order_items_to_create = []
+        order_items_to_create: list[OrderItem] = []
+
         for item_data in items:
             product = await session.get(Product, item_data["product_id"])
-            if not product:
+            if product is None:
                 raise ValueError(f"Product with id {item_data['product_id']} not found.")
-            
-            price = product.price
+
             quantity = item_data["quantity"]
+            price = product.price
             total_amount += price * quantity
+
             order_items_to_create.append(
-                OrderItem(product_id=product.id, quantity=quantity, price_at_time_of_order=price)
+                OrderItem(
+                    product_id=product.id,
+                    quantity=quantity,
+                    price_at_time_of_order=price,
+                )
             )
-            
-        new_order = Order(bot_id=bot_id, total_amount=round(total_amount, 2), items=order_items_to_create)
+
+        new_order = Order(
+            bot_id=bot_id,
+            total_amount=round(total_amount, 2),
+            customer_address=customer_address,
+            items=order_items_to_create,
+        )
+
         session.add(new_order)
         await session.commit()
-        await session.refresh(new_order, attribute_names=["items"]) # Garante que os itens sejam carregados
+        await session.refresh(new_order, attribute_names=["items"])  # garante lazy-load resolvido
         return new_order
-    except Exception:
+
+    except (SQLAlchemyError, ValueError) as exc:
         await session.rollback()
+        # opcional: faça um logger.error("Erro ao criar pedido", exc_info=True)
         return None
+
+async def save_customer_address(session: AsyncSession, cart_id: int, address: str) -> Optional[ShoppingCart]:
+    """
+    Atualiza o endereço do cliente no carrinho e cria uma nova ordem no banco.
+    """
+    cart = await session.get(ShoppingCart, cart_id)
+    if not cart:
+        return None
+
+    # Cria o pedido vinculado ao bot e ao carrinho
+    await session.refresh(cart, attribute_names=["items"])
+    bot_id = cart.contact.bot_id  # Assumindo que você tem o relacionamento reverso de cart -> contact -> bot
+
+    # Validação mínima
+    if not cart.items or not bot_id:
+        return None
+
+    items = [{"product_id": item.product_id, "quantity": item.quantity} for item in cart.items]
+    from app.crud import create_order
+    await create_order(session, bot_id=bot_id, items=items, customer_address=address)
+
+    return cart

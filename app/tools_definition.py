@@ -6,10 +6,10 @@
 # app/tools_definition.py
 
 tools_schema = [
-        {
+    {
         "type": "function",
         "function": {
-            "name": "add_items_to_cart", # Nome no plural
+            "name": "add_items_to_cart",  # Nome no plural
             "description": "Adiciona UM OU MAIS itens ao carrinho. Use para todos os produtos que o cliente pedir em uma única mensagem.",
             "parameters": {
                 "type": "object",
@@ -20,8 +20,14 @@ tools_schema = [
                         "items": {
                             "type": "object",
                             "properties": {
-                                "product_id": {"type": "integer", "description": "O ID do produto."},
-                                "quantity": {"type": "integer", "description": "A quantidade."},
+                                "product_id": {
+                                    "type": "integer",
+                                    "description": "O ID do produto.",
+                                },
+                                "quantity": {
+                                    "type": "integer",
+                                    "description": "A quantidade.",
+                                },
                             },
                             "required": ["product_id", "quantity"],
                         },
@@ -32,56 +38,74 @@ tools_schema = [
         },
     },
     {
-        "type": "function", "function": {
+        "type": "function",
+        "function": {
             "name": "request_customer_address",
             "description": "Use esta ferramenta APENAS quando o cliente indicar que terminou de adicionar itens (ex: 'só isso', 'pode fechar a conta').",
             "parameters": {"type": "object", "properties": {}},
         },
     },
     {
-        "type": "function", "function": {
+        "type": "function",
+        "function": {
             "name": "process_order_with_address",
             "description": "Use esta ferramenta APENAS quando o ESTADO DA CONVERSA for 'AWAITING_ADDRESS' e o cliente tiver fornecido um endereço.",
             "parameters": {
-                "type": "object", "properties": {
-                     "customer_address": {"type": "string"},
-                }, "required": ["customer_address"],
-            },
-        },
-    },
-    {
-        "type": "function", "function": {
-            "name": "process_payment_choice",
-            "description": "Use esta ferramenta APENAS quando o ESTADO DA CONVERSA for 'AWAITING_PAYMENT_METHOD' e o cliente tiver escolhido um método de pagamento.",
-            "parameters": {
-                "type": "object", "properties": {
-                     "method": {"type": "string", "enum": ["PIX", "CARD"], "description": "O método de pagamento escolhido."},
-                }, "required": ["method"],
-            },
-        },
-    },
-    {
-        "type": "function", "function": {
-            "name": "answer_conversationally",
-            "description": "Use para responder a saudações e perguntas gerais sobre o cardápio.",
-            "parameters": {
-                "type": "object", "properties": {
-                     "response_text": {"type": "string"},
-                }, "required": ["response_text"],
+                "type": "object",
+                "properties": {
+                    "customer_address": {"type": "string"},
+                },
+                "required": ["customer_address"],
             },
         },
     },
     {
         "type": "function",
         "function": {
-            "name": "remove_item_from_cart",
-            "description": "Use esta ferramenta APENAS quando o cliente pedir para REMOVER COMPLETAMENTE um item do carrinho, sem mencionar uma nova quantidade. Ex: 'tire o polvo', 'não quero mais o steak tartare'.",
+            "name": "process_payment_choice",
+            "description": "Use esta ferramenta APENAS quando o ESTADO DA CONVERSA for 'AWAITING_PAYMENT_METHOD' e o cliente tiver escolhido um método de pagamento.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "product_id": {"type": "integer", "description": "O ID do produto a ser completamente removido."},
+                    "method": {
+                        "type": "string",
+                        "enum": ["PIX", "CARD"],
+                        "description": "O método de pagamento escolhido.",
+                    },
                 },
-                "required": ["product_id"],
+                "required": ["method"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "answer_conversationally",
+            "description": "Use para responder a saudações e perguntas gerais sobre o cardápio.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "response_text": {"type": "string"},
+                },
+                "required": ["response_text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remove_items_from_cart",  # <-- NOME NO PLURAL
+            "description": "Remove UM OU MAIS itens do carrinho. Use quando o cliente pedir para remover, tirar ou cancelar itens.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "product_ids": {  # <-- ACEITA UMA LISTA
+                        "type": "array",
+                        "description": "Uma lista de IDs dos produtos a serem completamente removidos.",
+                        "items": {"type": "integer"},
+                    }
+                },
+                "required": ["product_ids"],
             },
         },
     },
@@ -93,8 +117,14 @@ tools_schema = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "product_id": {"type": "integer", "description": "O ID do produto cuja quantidade será modificada."},
-                    "new_quantity": {"type": "integer", "description": "A nova quantidade final para o produto. Se a nova quantidade for 0, o item será removido."}
+                    "product_id": {
+                        "type": "integer",
+                        "description": "O ID do produto cuja quantidade será modificada.",
+                    },
+                    "new_quantity": {
+                        "type": "integer",
+                        "description": "A nova quantidade final para o produto. Se a nova quantidade for 0, o item será removido.",
+                    },
                 },
                 "required": ["product_id", "new_quantity"],
             },
@@ -108,19 +138,70 @@ tools_schema = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "confirmation_question": {"type": "string", "description": "A pergunta exata a ser feita ao usuário. Ex: 'Não temos espaguete, mas posso adicionar 2 Gnocchis em vez disso. Pode ser?'"},
+                    "confirmation_question": {
+                        "type": "string",
+                        "description": "A pergunta exata a ser feita ao usuário. Ex: 'Não temos espaguete, mas posso adicionar 2 Gnocchis em vez disso. Pode ser?'",
+                    },
                     "proposed_action": {
                         "type": "object",
                         "description": "A ação de ferramenta que será executada se o cliente disser 'sim'.",
                         "properties": {
-                            "tool_name": {"type": "string", "enum": ["add_items_to_cart", "modify_item_quantity"]},
-                            "tool_args": {"type": "object", "description": "Os argumentos para a ferramenta proposta."}
+                            "tool_name": {
+                                "type": "string",
+                                "enum": ["add_items_to_cart", "modify_item_quantity"],
+                            },
+                            "tool_args": {
+                                "type": "object",
+                                "description": "Os argumentos para a ferramenta proposta.",
+                            },
                         },
-                        "required": ["tool_name", "tool_args"]
-                    }
+                        "required": ["tool_name", "tool_args"],
+                    },
                 },
                 "required": ["confirmation_question", "proposed_action"],
             },
         },
-    }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "answer_with_found_products",
+            "description": "Sugere produtos com base na busca semântica",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "product_names": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Lista de nomes dos produtos sugeridos",
+                    }
+                },
+                "required": ["product_names"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "bulk_modify_quantities",
+            "description": "Altera quantidades de vários itens de uma só vez. Use números absolutos (new_quantity).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "updates": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "product_id": {"type": "integer"},
+                                "new_quantity": {"type": "integer"},
+                            },
+                            "required": ["product_id", "new_quantity"],
+                        },
+                    }
+                },
+                "required": ["updates"],
+            },
+        },
+    },
 ]

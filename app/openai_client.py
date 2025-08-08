@@ -83,22 +83,23 @@ async def get_chat_response_gpt(messages: List[Dict]) -> str:
         # Retorna um JSON de fallback em caso de erro
         return '{"action": "CONTINUE_CONVERSATION", "response_to_user": "Desculpe, ocorreu um erro. Pode tentar novamente?"}'
 
-async def get_ai_decision(messages: List[Dict], tools: List[Dict]) -> Dict:
+async def get_ai_decision(messages: List[Dict], tools: List[Dict], force_tool: bool = False) -> Dict:
     """
     Usa o gpt-4o-mini com a funcionalidade de "tools" para que a IA possa
-    decidir qual ação tomar.
+    decidir qual ação tomar. Pode forçar o uso de uma ferramenta.
     """
+    choice = "required" if force_tool else "auto"
+
     def sync_call():
         return client_openai_api.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages,
             tools=tools,
-            tool_choice="auto",  # Permite que a IA escolha a ferramenta
+            tool_choice=choice,
             temperature=0.1,
         )
     try:
         response = await asyncio.to_thread(sync_call)
-        # Retorna a mensagem de resposta completa, que pode conter a chamada de uma ferramenta
         return response.choices[0].message
     except Exception as e:
         print(f"Erro na chamada à API com ferramentas (OpenAI): {e}")
@@ -201,3 +202,139 @@ async def get_user_intent(user_query: str, cart_items: List[Dict]) -> str:
         return intent if intent in possible_intents else "CONVERSE"
     except Exception:
         return "CONVERSE" # Fallback seguro
+
+# ▼▼▼ NOVA FUNÇÃO CENTRAL: O CLASSIFICADOR DE INTENÇÕES ▼▼▼
+async def classify_user_intent(user_query: str, cart_items: List[Dict]) -> str:
+    """
+    Classifica a intenção principal do usuário com base na sua mensagem e no estado do carrinho.
+    Este é o cérebro que substitui as listas de palavras-chave, agora com exemplos ricos.
+    """
+    possible_intents = ["ADD_ITEMS", "REQUEST_SUGGESTION", "FINISH_ORDER", "GREETING_OR_QUESTION", "SHOW_CART"]
+    if cart_items:
+        # Apenas se o carrinho não estiver vazio, estas intenções são possíveis.
+        possible_intents.extend(["REMOVE_ITEMS", "MODIFY_QUANTITY", "CLEAR_CART"])
+
+    prompt = f"""
+    Analise a frase do cliente e classifique sua intenção principal em UMA das seguintes categorias: {possible_intents}.
+    Sua resposta DEVE ser um objeto JSON com uma única chave "intent".
+
+    ---
+    **EXEMPLOS DE CLASSIFICAÇÃO:**
+
+    **intent: "ADD_ITEMS"**
+    - "quero uma pizza e uma coca"
+    - "me ve um x-salada"
+    - "Poderia me enviar um steak au poivre, por favor?"
+    - "manda dois bife a cavalo pra viagem"
+    - "vou querer 3 porções de fritas"
+    - "queria um fetuccine alfredo"
+    - "tem aquele prato com pato?"
+    - "vou querer a costela de cordeiro e uma água com gás"
+    - "uma picanha pra um"
+    - "acho que vou de lasanha hoje"
+
+    **intent: "REMOVE_ITEMS"**
+    - "tira a salada do pedido"
+    - "não vou mais querer o pato, obrigado"
+    - "pode remover o suco e a água por favor"
+    - "cancela o bife de chorizo"
+    - "mudei de ideia sobre o gnocchi"
+    - "acho melhor não pegar o steak tartare"
+    - "remove o fetuccini"
+    - "daquele pedido, tira o último item"
+    - "sem a coca"
+    - "tem como tirar as batatas?"
+
+    **intent: "MODIFY_QUANTITY"**
+    - "na verdade, quero 2 nhoques"
+    - "pode ser só 1 terrine"
+    - "Poderia aumentar a quantidade de águas para 4?"
+    - "bota mais um bife aí, por favor"
+    - "ops, pedi duas cocas, mas quero só uma"
+    - "troca pra 3 porções de fritas"
+    - "acho que vou precisar de mais um steak"
+    - "dobra a quantidade do pato"
+    - "dá pra mudar as costelas pra 3?"
+    - "aumenta o fetuchini pra dois"
+
+    **intent: "CLEAR_CART"**
+    - "esvazie meu carrinho"
+    - "pode limpar meu pedido, por favor?"
+    - "zera tudo aí, mano"
+    - "quero começar de novo"
+    - "cancela o pedido todo"
+    - "esquece, deixa pra lá"
+    - "hmm, acho que vou repensar. pode limpar?"
+    - "limpa o carrinho"
+    - "Gostaria de cancelar todos os itens."
+    - "tem como cancelar tudo?"
+
+    **intent: "REQUEST_SUGGESTION"**
+    - "tem sugestões?"
+    - "o que você me recomenda de massa?"
+    - "o que tem de bom aí hoje?"
+    - "poderia me dar algumas opções de carne?"
+    - "o que você me indica?"
+    - "qual a especialidade da casa?"
+    - "não sei o que pedir, me ajuda?"
+    - "tô em dúvida entre peixe e frango, o que sugere?"
+    - "tem alguma sugestão pra dividir?"
+    - "queria algo mais leve, o que você tem?"
+
+    **intent: "FINISH_ORDER"**
+    - "só isso"
+    - "é só isso, obrigado"
+    - "pode fechar a conta"
+    - "pronto, pode finalizar"
+    - "por enquanto é isso"
+    - "fechou"
+    - "Gostaria de concluir meu pedido."
+    - "podemos fechar?"
+    - "já pedi tudo"
+    - "acabou"
+
+    **intent: "GREETING_OR_QUESTION"**
+    - "oi"
+    - "olá"
+    - "boa tarde"
+    - "e aí, beleza?"
+    - "oi tudo bem?"
+    - "bom dia"
+    - "qual o horário de funcionamento?"
+    - "vocês entregam na Vila Madalena?"
+    - "qual o pix de vocês?"
+    - "vcs aceitam cartão?"
+
+    **intent: "SHOW_CART"**
+    - "qual meu pedido atual?"
+    - "o que tem no meu carrinho?"
+    - "me mostra meu pedido"
+    - "como está meu pedido até agora?"
+    - "quantos itens tem no carrinho?"
+    - "o que pedi até agora?"
+    - "pode me lembrar o que eu pedi?"
+    - "confirma meu pedido"
+    - "revisa meu pedido, por favor"
+    - "me mostra tudo que pedi"
+    ---
+
+    Frase do Cliente: "{user_query}"
+    Resultado:
+    """
+    
+    def sync_call():
+        return client_openai_api.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0,
+            response_format={"type": "json_object"}
+        )
+    
+    try:
+        response = await asyncio.to_thread(sync_call)
+        data = json.loads(response.choices[0].message.content)
+        intent = data.get("intent", "GREETING_OR_QUESTION")
+        return intent if intent in possible_intents else "GREETING_OR_QUESTION"
+    except Exception as e:
+        print(f"Erro ao classificar intenção: {e}")
+        return "GREETING_OR_QUESTION"

@@ -10,11 +10,13 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app import crud, payment_service
 from app.database import async_session
 from app.models import ProcessedMessage, Product, ShoppingCart
-from app.openai_client import get_ai_decision, extract_potential_items, get_user_intent
+from app.openai_client import classify_user_intent, get_ai_decision, extract_potential_items
 from app.prompt_builder import create_tool_prompt
 from app.tools_definition import tools_schema
 from app.embedding_service import generate_embedding
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from app.prompt_central import create_central_prompt
+
 
 load_dotenv()
 router = APIRouter()
@@ -32,15 +34,14 @@ async def whatsapp_webhook(request: Request):
 
 # Em app/whatsapp.py
 
+# app/whatsapp.py (conteúdo integral da função)
+
 async def process_whatsapp_message(data: Dict[str, Any]):
-    """
-    Orquestra o fluxo de conversa com gestão de ciclo de vida do carrinho
-    baseado em inatividade, tratando o DB como a única fonte da verdade.
-    """
     async with async_session() as session:
         contact_number = data["entry"][0]["changes"][0]["value"]["messages"][0]["from"]
         try:
-            # 1. Extração de dados e setup inicial
+            print("📥 Mensagem recebida do WhatsApp")
+
             value = data["entry"][0]["changes"][0]["value"]
             message_data = value["messages"][0]
             message_id, text_body, bot_number = (
@@ -49,123 +50,318 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                 value["metadata"]["display_phone_number"],
             )
 
+            print(f"📨 Mensagem ID: {message_id}")
+            print(f"📱 Bot: {bot_number} | Usuário: {contact_number}")
+            print(f"💬 Conteúdo: {text_body}")
+
             await mark_message_as_read(message_id)
-            if await crud.is_message_processed(session, message_id): return
+
+            if await crud.is_message_processed(session, message_id):
+                print("⏩ Mensagem já processada anteriormente. Ignorando.")
+                return
+
             await crud.add_processed_message(session, message_id)
 
             bot = await crud.get_bot_by_number(session, bot_number)
-            if not bot: return
-            
-            # 2. Obtenção do Contato e do Carrinho Persistente
+            if not bot:
+                print("❌ Bot não encontrado para o número informado.")
+                return
+
             contact = await crud.get_or_create_contact(session, bot.id, contact_number)
+            print(f"📇 Contact: id={contact.id}, número={contact.phone_number}, bot_id={bot.id}")
             cart = await crud.get_or_create_cart(session, contact.id)
-            
-            # --- LÓGICA DE EXPIRAÇÃO DE SESSÃO ---
-            SESSION_TIMEOUT = timedelta(minutes=3)
-            
-            if (datetime.utcnow() - cart.last_activity_at) > SESSION_TIMEOUT:
-                print(f"Sessão para o contato {contact_number} expirou. Limpando o carrinho.")
-                await crud.clear_db_cart(session, cart.id)
-                cart = await crud.get_or_create_cart(session, contact.id)
+            print(f"🛒 Carrinho: id={cart.id}, estado={cart.state}, itens={len(cart.items)}")
 
-            # Lógica de Reinício explícito
-            if "reinicie" in text_body.lower():
+            # Expiração de sessão
+            SESSION_TIMEOUT = timedelta(minutes=15)
+            if datetime.now(timezone.utc) - cart.last_activity_at.replace(tzinfo=timezone.utc) > SESSION_TIMEOUT:
                 await crud.clear_db_cart(session, cart.id)
-                response_to_user = "🗑️ Carrinho esvaziado. Olá! Como posso ajudar?"
-                await send_whatsapp_message(to=contact_number, message=response_to_user)
+                response_to_user = (
+                    "⏰ _Sua sessão expirou por inatividade!_ \n\n"
+                    "Seu carrinho de compras foi esvaziado. 🛒\n\n"
+                    "Deseja iniciar um novo pedido? É só me dizer o que você quer! 😊"
+                )
+                await send_whatsapp_message(contact_number, response_to_user)
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
-                await session.commit()
-                return
-
-            # 3. Lógica de estados explícita para checkout
-            if cart.state == "AWAITING_ADDRESS":
-                cart.state = "AWAITING_PAYMENT_METHOD"
+                cart.last_activity_at = datetime.now(timezone.utc)
                 session.add(cart)
-                line_totals = [(item.product.price * item.quantity) for item in cart.items]
-                total_amount = sum(line_totals)
-                response_to_user = f"📍 Ótimo, pedido para o endereço: {text_body}.\nO total é R$ {total_amount:.2f}. Qual será a forma de pagamento?"
-                
-                await send_whatsapp_message(to=contact_number, message=response_to_user)
+                await session.commit()
+                print("🧹 Sessão expirada e carrinho limpo.")
+                return
+
+            if cart.state == "AWAITING_ADDRESS":
+                print("📍 Estado atual: aguardando endereço")
+
+                # 1️⃣ Primeiro, classifica a intenção do usuário (mesmo em AWAITING_ADDRESS)
+                cart_items_for_intent = [{"id": item.product_id, "name": item.product.name} for item in cart.items]
+                intent = await classify_user_intent(text_body, cart_items_for_intent)
+                print(f"🎯 Intenção classificada: {intent}")
+
+                # 2️⃣ Se o usuário quiser limpar o carrinho mesmo nesse estado
+                if intent == "CLEAR_CART":
+                    await crud.clear_db_cart(session, cart.id)
+                    cart.state = "GREETING"
+                    session.add(cart)
+                    response_to_user = "🛒 Carrinho esvaziado. Pode me dizer o que você deseja pedir!"
+                    await send_whatsapp_message(contact_number, response_to_user)
+                    await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
+                    await session.commit()
+                    return
+
+                # 3️⃣ Tenta extrair o endereço via regex
+                if re.search(r"\b[\w\s]{3,}\s+\d{1,5}\b", text_body, re.IGNORECASE):
+                    await crud.save_customer_address(session, cart.id, text_body.strip())
+                    cart.state = "AWAITING_PAYMENT_METHOD"
+                    response_to_user = "Endereço salvo! Qual será a forma de pagamento? (PIX ou Cartão)"
+                    print("📌 Endereço salvo via regex simples.")
+
+                else:
+                    print("🤖 Endereço não identificado via regex. Chamando IA.")
+
+                    history_records = await crud.get_history_for_contact(session, bot.id, contact_number)
+                    past_messages = [{"role": h.role, "content": h.content} for h in history_records]
+
+                    await session.refresh(cart, attribute_names=['items'])
+                    cart_items_for_prompt = [
+                        {"product_id": item.product.id, "name": item.product.name, "quantity": item.quantity}
+                        for item in cart.items
+                    ]
+
+                    prompt = create_central_prompt(
+                        user_query=text_body,
+                        history=past_messages,
+                        restaurant_name=bot.restaurant_name,
+                        cart_items=cart_items_for_prompt
+                    )
+
+                    print("🧠 Prompt gerado (AWAITING_ADDRESS):")
+                    for p in prompt:
+                        print(p)
+
+                    from app.tools_definition import tools_schema
+                    print("🧰 Tools disponíveis:", [t['function']['name'] for t in tools_schema])
+
+                    ai_message = await get_ai_decision(prompt, tools_schema, force_tool=True)
+                    print("📤 Resposta da IA (AWAITING_ADDRESS):", ai_message)
+
+                    response_to_user = "Desculpe, não entendi. Pode reformular?"
+                    if ai_message and ai_message.tool_calls:
+                        tool_call = ai_message.tool_calls[0]
+                        if tool_call.function.name == "process_order_with_address":
+                                tool_args = json.loads(tool_call.function.arguments)
+                                address = tool_args.get("customer_address")
+                                if address:
+                                    await crud.save_customer_address(session, cart.id, address)
+                                    cart.state = "AWAITING_PAYMENT_METHOD"
+                                    response_to_user = "Endereço salvo! Qual será a forma de pagamento? (PIX ou Cartão)"
+                                    print("🏠 Endereço extraído e salvo com sucesso.")
+                                    
+                        elif tool_name == "bulk_modify_quantities":
+                            for upd in tool_args.get("updates", []):
+                                await crud.modify_item_quantity_in_db_cart(
+                                session, cart.id,
+                                upd.get("product_id"),
+                                upd.get("new_quantity")
+                                )
+                            await session.refresh(cart, attribute_names=['items'])
+                            response_to_user = _build_cart_summary_message(cart, "✏️") + "\n\nAlgo mais?"
+
+                cart.last_activity_at = datetime.now(timezone.utc)
+                session.add(cart)
+                await send_whatsapp_message(contact_number, response_to_user)
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
                 await session.commit()
                 return
 
-            # 4. Busca RAG e chamada da IA
-            extracted_item_names = await extract_potential_items(text_body)
-            found_products = []
-            if extracted_item_names:
-                found_products = await crud.find_relevant_products(session, bot.id, extracted_item_names)
 
-            history_records = await crud.get_history_for_contact(session, bot.id, contact_number)
-            past_messages = [{"role": h.role, "content": h.content} for h in history_records]
-            
-            await session.refresh(cart, attribute_names=['items'])
+            # Classificação de intenção
+            cart_items_for_intent = [{"id": item.product_id, "name": item.product.name} for item in cart.items]
+            intent = await classify_user_intent(text_body, cart_items_for_intent)
+            print(f"🎯 Intenção classificada: {intent}")
 
-            cart_items_for_prompt = [{"product_id": item.product.id, "name": item.product.name, "quantity": item.quantity} for item in cart.items]
-
-            prompt = create_tool_prompt(
-                search_results=found_products, user_query=text_body,
-                history=past_messages, restaurant_name=bot.restaurant_name,
-                cart_items=cart_items_for_prompt, current_state=cart.state
-            )
-            ai_message = await get_ai_decision(prompt, tools_schema)
-
-            # 5. Processamento da resposta da IA
             response_to_user = "Desculpe, não entendi. Pode reformular?"
-            
-            if ai_message and ai_message.tool_calls:
-                tool_call = ai_message.tool_calls[0]
-                tool_name = tool_call.function.name
-                tool_args = json.loads(tool_call.function.arguments)
+
+            from app.tools_definition import tools_schema
+
+            if intent == "CLEAR_CART":
+                await crud.clear_db_cart(session, cart.id)
+                response_to_user = "🛒 Carrinho esvaziado."
                 
-                if tool_name in ["add_items_to_cart", "modify_item_quantity", "remove_item_from_cart"]:
-                    response_emoji = "🛒" # Emoji padrão
-                    
+            elif intent == "SHOW_CART":
+                await session.refresh(cart, attribute_names=['items'])
+                response_to_user = _build_cart_summary_message(cart)
+
+            elif intent == "FINISH_ORDER":
+                cart.state = "AWAITING_ADDRESS"
+                session.add(cart)
+                response_to_user = "Entendido. Para qual endereço será a entrega?"
+
+            elif intent == "REQUEST_SUGGESTION":
+                topic_items = await extract_potential_items(text_body)
+                found_products = await crud.find_relevant_products(session, bot.id, topic_items or ["pratos principais"], limit_per_item=4)
+                # recuperar sugestões anteriores
+                recent_suggestions = None
+                if cart.last_suggestions:
+                    sug_res = await session.execute(select(Product).where(Product.id.in_(cart.last_suggestions)))
+                    sug_map = {p.id: p for p in sug_res.scalars().all()}
+                    recent_suggestions = [sug_map[id] for id in cart.last_suggestions if id in sug_map]
+
+                history_records = await crud.get_history_for_contact(session, bot.id, contact_number)
+                past_messages = [{"role": h.role, "content": h.content} for h in history_records]
+
+                await session.refresh(cart, attribute_names=['items'])
+                cart_items_for_prompt = [
+                    {"product_id": item.product.id, "name": item.product.name, "quantity": item.quantity}
+                    for item in cart.items
+                ]
+
+                prompt = create_central_prompt(
+                    user_query=text_body,
+                    history=past_messages,
+                    restaurant_name=bot.restaurant_name,
+                    cart_items=cart_items_for_prompt,
+                    search_results=found_products,
+                    recent_suggestions=recent_suggestions
+                )
+
+                print("📦 Prompt com sugestão gerado:")
+                for p in prompt:
+                    print(p)
+
+                ai_message = await get_ai_decision(prompt, tools_schema, force_tool=True)
+                print("📤 Resposta da IA:", ai_message)
+
+                if ai_message and ai_message.tool_calls:
+                    tool_call = ai_message.tool_calls[0]
+                    tool_name = tool_call.function.name
+                    tool_args = json.loads(tool_call.function.arguments)
+
                     if tool_name == "add_items_to_cart":
-                        response_emoji = "✅" # Emoji para ADIÇÃO
                         await crud.add_items_to_db_cart(session, cart.id, tool_args.get("items", []))
-                    
+                        used_ids = [item["product_id"] for item in tool_args.get("items", [])]
+                        if not any(pid in (cart.last_suggestions or []) for pid in used_ids):
+                            cart.last_suggestions = None
+                        await session.refresh(cart, attribute_names=['items'])
+                        response_to_user = _build_cart_summary_message(cart, "✅") + "\n\nAlgo mais?"
+
+                    elif tool_name == "answer_conversationally":
+                        response_to_user = tool_args.get("response_text", response_to_user)
+
+                    elif tool_name == "answer_with_found_products":
+                        product_names = tool_args.get("product_names", [])
+                        if product_names:
+                            response_to_user = "Essas são algumas sugestões para você:\n" + "\n".join(f"- {name}" for name in product_names)
+                        else:
+                            response_to_user = "No momento, não encontrei sugestões específicas para o que você pediu."
+                            
+                    elif tool_name == "bulk_modify_quantities":
+                        for upd in tool_args.get("updates", []):
+                            await crud.modify_item_quantity_in_db_cart(
+                            session, cart.id,
+                            upd.get("product_id"),
+                            upd.get("new_quantity")
+                            )
+                        await session.refresh(cart, attribute_names=['items'])
+                        response_to_user = _build_cart_summary_message(cart, "✏️") + "\n\nAlgo mais?"
+
+                if found_products:
+                    cart.last_suggestions = [p.id for p in found_products]
+
+            else:
+                # Casos ADD / REMOVE / MODIFY
+                extracted_items = await extract_potential_items(text_body)
+                found_products = await crud.find_relevant_products(session, bot.id, extracted_items) if extracted_items else []
+
+                recent_suggestions = None
+                if cart.last_suggestions:
+                    sug_res = await session.execute(select(Product).where(Product.id.in_(cart.last_suggestions)))
+                    sug_map = {p.id: p for p in sug_res.scalars().all()}
+                    recent_suggestions = [sug_map[id] for id in cart.last_suggestions if id in sug_map]
+
+                history_records = await crud.get_history_for_contact(session, bot.id, contact_number)
+                past_messages = [{"role": h.role, "content": h.content} for h in history_records]
+
+                await session.refresh(cart, attribute_names=['items'])
+                cart_items_for_prompt = [
+                    {"product_id": item.product.id, "name": item.product.name, "quantity": item.quantity}
+                    for item in cart.items
+                ]
+
+                prompt = create_central_prompt(
+                    user_query=text_body,
+                    history=past_messages,
+                    restaurant_name=bot.restaurant_name,
+                    cart_items=cart_items_for_prompt,
+                    search_results=found_products,
+                    recent_suggestions=recent_suggestions
+                )
+
+                print("🧠 Prompt final:")
+                for p in prompt:
+                    print(p)
+
+                ai_message = await get_ai_decision(prompt, tools_schema, force_tool=True)
+                print("📤 Resposta da IA:", ai_message)
+
+                if ai_message and ai_message.tool_calls:
+                    tool_call = ai_message.tool_calls[0]
+                    tool_name = tool_call.function.name
+                    tool_args = json.loads(tool_call.function.arguments)
+
+                    if tool_name == "add_items_to_cart":
+                        await crud.add_items_to_db_cart(session, cart.id, tool_args.get("items", []))
+                        used_ids = [item["product_id"] for item in tool_args.get("items", [])]
+                        if not any(pid in (cart.last_suggestions or []) for pid in used_ids):
+                            cart.last_suggestions = None
+                        await session.refresh(cart, attribute_names=['items'])
+                        response_to_user = _build_cart_summary_message(cart, "✅") + "\n\nAlgo mais?"
+
+                    elif tool_name == "remove_items_from_cart":
+                        ids_to_remove = tool_args.get("product_ids", [])
+                        for product_id in ids_to_remove:
+                            await crud.modify_item_quantity_in_db_cart(session, cart.id, product_id, 0)
+                        await session.refresh(cart, attribute_names=['items'])
+                        response_to_user = _build_cart_summary_message(cart, "❌") + "\n\nAlgo mais?"
+
                     elif tool_name == "modify_item_quantity":
-                        response_emoji = "✏️" # Emoji para MODIFICAÇÃO
                         await crud.modify_item_quantity_in_db_cart(session, cart.id, tool_args.get("product_id"), tool_args.get("new_quantity"))
+                        await session.refresh(cart, attribute_names=['items'])
+                        response_to_user = _build_cart_summary_message(cart, "✏️") + "\n\nAlgo mais?"
+                        
+                    elif tool_name == "bulk_modify_quantities":
+                        for upd in tool_args.get("updates", []):
+                            await crud.modify_item_quantity_in_db_cart(
+                            session, cart.id,
+                            upd.get("product_id"),
+                            upd.get("new_quantity")
+                            )
+                        await session.refresh(cart, attribute_names=['items'])
+                        response_to_user = _build_cart_summary_message(cart, "✏️") + "\n\nAlgo mais?"
+
+                    elif tool_name == "answer_conversationally":
+                        response_to_user = tool_args.get("response_text", response_to_user)
                     
-                    elif tool_name == "remove_item_from_cart":
-                        response_emoji = "❌" # Emoji para REMOÇÃO
-                        await crud.modify_item_quantity_in_db_cart(session, cart.id, tool_args.get("product_id"), 0)
-                    
-                    # Recarrega o carrinho para ter a visão mais recente
-                    await session.refresh(cart, attribute_names=['items'])
-                    # Passa o emoji escolhido para a função de resumo
-                    response_to_user = _build_cart_summary_message(cart, emoji=response_emoji) + "\n\nAlgo mais?"
+                    elif tool_name == "answer_with_found_products":
+                        product_names = tool_args.get("product_names", [])
+                        if product_names:
+                            response_to_user = "Essas são algumas sugestões para você:\n" + "\n".join(f"- {name}" for name in product_names)
+                        else:
+                            response_to_user = "No momento, não encontrei sugestões específicas para o que você pediu."
 
-                elif tool_name == "request_customer_address":
-                    cart.state = "AWAITING_ADDRESS"
-                    session.add(cart)
-                    response_to_user = "Entendido. Para qual endereço será a entrega?"
-                
-                elif tool_name == "answer_conversationally":
-                    response_to_user = tool_args.get("response_text", response_to_user)
-
-            elif ai_message and ai_message.content:
-                response_to_user = ai_message.content
-
-            # --- ATUALIZAÇÃO DA ÚLTIMA ATIVIDADE ---
-            cart.last_activity_at = datetime.utcnow()
+            cart.last_activity_at = datetime.now(timezone.utc)
             session.add(cart)
-
-            # 6. Envio e persistência
-            await send_whatsapp_message(to=contact_number, message=response_to_user)
+            await send_whatsapp_message(contact_number, response_to_user)
             await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
             await session.commit()
 
+            print("✅ Mensagem processada e resposta enviada.")
+
         except Exception as e:
-            print(f"Erro crítico ao processar a mensagem do contato {contact_number}: {e}")
+            print(f"❌ Erro crítico: {e}")
             if 'session' in locals() and session.is_active:
                 await session.rollback()
-            await send_whatsapp_message(
-                to=contact_number,
-                message="Desculpe, ocorreu um erro inesperado."
-            )
+            await send_whatsapp_message(contact_number, "Desculpe, ocorreu um erro inesperado.")
+
 
 def _build_cart_summary_message(cart: ShoppingCart, emoji: str = "🛒") -> str:
     """Constrói a string formatada do resumo do carrinho, agora com emoji dinâmico."""

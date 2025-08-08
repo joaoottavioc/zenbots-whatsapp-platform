@@ -1,9 +1,10 @@
 from sqlmodel import SQLModel, Field, Relationship, Column
 from pgvector.sqlalchemy import Vector
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import enum
 from sqlmodel import JSON as SA_JSON
+from sqlalchemy import Column, TIMESTAMP, text
 
 # Define forward references for type hinting
 class Bot(SQLModel): pass
@@ -87,8 +88,15 @@ class ShoppingCart(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     state: str = Field(default="GREETING")
     proposed_action: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(SA_JSON))
-    last_activity_at: datetime = Field(default_factory=datetime.utcnow)
 
+    last_activity_at: datetime = Field(
+    default_factory=lambda: datetime.now(timezone.utc),
+    sa_column=Column(
+        TIMESTAMP(timezone=True),  # Define o tipo da coluna no DB como "com fuso horário"
+        server_default=text("now()") # Mantém o default no nível do banco
+    ))
+
+    last_suggestions: Optional[List[int]] = Field(default=None, sa_column=Column(SA_JSON))
 
     contact_id: int = Field(foreign_key="contact.id", unique=True)
     contact: "Contact" = Relationship(back_populates="cart")
@@ -111,6 +119,7 @@ class Order(SQLModel, table=True):
     status: OrderStatus = Field(default=OrderStatus.PENDING)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     psp_charge_id: Optional[str] = Field(default=None, index=True)
+    customer_address: Optional[str] = Field(default=None)
 
     bot_id: int = Field(foreign_key="bot.id")
     bot: "Bot" = Relationship(back_populates="orders")
