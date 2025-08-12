@@ -77,9 +77,8 @@ async def process_whatsapp_message(data: Dict[str, Any]):
             if datetime.now(timezone.utc) - cart.last_activity_at.replace(tzinfo=timezone.utc) > SESSION_TIMEOUT:
                 await crud.clear_db_cart(session, cart.id)
                 response_to_user = (
-                    "⏰ _Sua sessão expirou por inatividade!_ \n\n"
-                    "Seu carrinho de compras foi esvaziado. 🛒\n\n"
-                    "Deseja iniciar um novo pedido? É só me dizer o que você quer! 😊"
+                "⏰ Ficamos um tempinho sem falar e, por segurança, esvaziamos seu carrinho 🛒\n\n"
+                "Mas é só me dizer o que quer pedir e recomeçamos! 😄✅"
                 )
                 await send_whatsapp_message(contact_number, response_to_user)
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
@@ -237,20 +236,58 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                     tool_args = json.loads(tool_call.function.arguments)
 
                     if tool_name == "add_items_to_cart":
-                        await crud.add_items_to_db_cart(session, cart.id, tool_args.get("items", []))
-                        used_ids = [item["product_id"] for item in tool_args.get("items", [])]
-                        if not any(pid in (cart.last_suggestions or []) for pid in used_ids):
-                            cart.last_suggestions = None
-                        await session.refresh(cart, attribute_names=['items'])
-                        response_to_user = _build_cart_summary_message(cart, "✅") + "\n\nAlgo mais?"
+                        items_arg = tool_args.get("items", [])
+
+                        # 🔒 Cinturão de segurança: valida itens
+                        if not items_arg or not isinstance(items_arg, list):
+                            # Não aceita lista vazia. Reforce o contexto de sugestões.
+                            if cart.last_suggestions:
+                                response_to_user = (
+                                    "Acho que você se referiu às sugestões. "
+                                    "Pode confirmar usando os números? Ex: '5 do primeiro e 3 do segundo'."
+                                )
+                            else:
+                                response_to_user = (
+                                    "Não identifiquei os itens para adicionar. "
+                                    "Quer ver algumas sugestões ou repetir os nomes?"
+                                )
+                        else:
+                            # ✅ Valida IDs antes de gravar
+                            product_ids = [i.get("product_id") for i in items_arg if isinstance(i, dict)]
+                            if not product_ids or any(pid is None for pid in product_ids):
+                                response_to_user = (
+                                    "Os itens vieram incompletos. Pode confirmar as quantidades e os itens?"
+                                )
+                            else:
+                                # (opcional) valida se os IDs existem no catálogo do bot
+                                existing = await session.execute(
+                                    select(Product.id).where(Product.bot_id == bot.id, Product.id.in_(product_ids))
+                                )
+                                existing_ids = set(existing.scalars().all())
+                                missing = [pid for pid in product_ids if pid not in existing_ids]
+
+                                if missing:
+                                    response_to_user = (
+                                        "Alguns itens não foram reconhecidos no cardápio. "
+                                        "Pode confirmar usando os números da lista de sugestões?"
+                                    )
+                                else:
+                                    await crud.add_items_to_db_cart(session, cart.id, items_arg)
+                                    used_ids = product_ids
+                                    if not any(pid in (cart.last_suggestions or []) for pid in used_ids):
+                                        cart.last_suggestions = None
+                                    await session.refresh(cart, attribute_names=['items'])
+                                    response_to_user = _build_cart_summary_message(cart, "✅") + "\n\nAlgo mais?"
 
                     elif tool_name == "answer_conversationally":
                         response_to_user = tool_args.get("response_text", response_to_user)
 
                     elif tool_name == "answer_with_found_products":
-                        product_names = tool_args.get("product_names", [])
-                        if product_names:
-                            response_to_user = "Essas são algumas sugestões para você:\n" + "\n".join(f"- {name}" for name in product_names)
+                        # Renderiza usando found_products (IDs + ordem estável), não os nomes soltos do modelo
+                        if found_products:
+                            response_to_user = "Essas são algumas sugestões para você:\n" + \
+                                "\n".join(f"{i+1}. {p.name}" for i, p in enumerate(found_products))
+                            cart.last_suggestions = [p.id for p in found_products] # ordem idêntica à exibida
                         else:
                             response_to_user = "No momento, não encontrei sugestões específicas para o que você pediu."
                             
@@ -309,12 +346,43 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                     tool_args = json.loads(tool_call.function.arguments)
 
                     if tool_name == "add_items_to_cart":
-                        await crud.add_items_to_db_cart(session, cart.id, tool_args.get("items", []))
-                        used_ids = [item["product_id"] for item in tool_args.get("items", [])]
-                        if not any(pid in (cart.last_suggestions or []) for pid in used_ids):
-                            cart.last_suggestions = None
-                        await session.refresh(cart, attribute_names=['items'])
-                        response_to_user = _build_cart_summary_message(cart, "✅") + "\n\nAlgo mais?"
+                        items_arg = tool_args.get("items", [])
+
+                        # 🔒 Cinturão de segurança: bloqueia add vazio
+                        if not items_arg or not isinstance(items_arg, list):
+                            if cart.last_suggestions:
+                                response_to_user = (
+                                    "Entendi a ideia, mas preciso dos itens. "
+                                    "Pode dizer, por exemplo, '5 do primeiro e 3 do segundo'?"
+                                )
+                            else:
+                                response_to_user = (
+                                    "Não consegui mapear os itens. "
+                                    "Pode repetir os nomes ou pedir sugestões?"
+                                )
+                        else:
+                            product_ids = [i.get("product_id") for i in items_arg if isinstance(i, dict)]
+                            if not product_ids or any(pid is None for pid in product_ids):
+                                response_to_user = "Os itens vieram incompletos. Pode confirmar as quantidades e os itens?"
+                            else:
+                                existing = await session.execute(
+                                    select(Product.id).where(Product.bot_id == bot.id, Product.id.in_(product_ids))
+                                )
+                                existing_ids = set(existing.scalars().all())
+                                missing = [pid for pid in product_ids if pid not in existing_ids]
+
+                                if missing:
+                                    response_to_user = (
+                                        "Alguns itens não batem com o cardápio. "
+                                        "Pode confirmar usando os números da última lista?"
+                                    )
+                                else:
+                                    await crud.add_items_to_db_cart(session, cart.id, items_arg)
+                                    used_ids = product_ids
+                                    if not any(pid in (cart.last_suggestions or []) for pid in used_ids):
+                                        cart.last_suggestions = None
+                                    await session.refresh(cart, attribute_names=['items'])
+                                    response_to_user = _build_cart_summary_message(cart, "✅") + "\n\nAlgo mais?"
 
                     elif tool_name == "remove_items_from_cart":
                         ids_to_remove = tool_args.get("product_ids", [])

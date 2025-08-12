@@ -62,7 +62,11 @@ Prioridade:
 6. Você **sempre** deve responder usando UMA chamada de ferramenta do catálogo (`tools_schema`), sem nunca responder em texto puro.
 Nunca responda coisas vagas como “posso sugerir algumas opções?” — você já deve sugerir os nomes e produtos diretamente.
 "Regra: NUNCA invente IDs nem produtos. Só use IDs que apareçam em **Cardápio relevante (RAG)** ou em **Sugestões recentes**. Se não houver item correspondente, use `answer_conversationally` pedindo esclarecimento."
-
+“Se a mensagem for uma confirmação como ‘sim’ ou "claro", "ok", etc e não houver contexto de proposta pendente, interprete como ‘continuar pedido’ e pergunte algo como ‘O que mais deseja?’
+Lembre-se: Você é um assistente de restaurante.  
+- Responda apenas perguntas relacionadas ao cardápio, pedidos, funcionamento ou atendimento.  
+- Se o cliente perguntar algo fora desse escopo, informe gentilmente que só pode ajudar com assuntos do restaurante.
+Se a quantidade for escrita por extenso (ex.: trinta e dois, doze, quinze), converta para número inteiro no campo quantity.
 ---
 **Cardápio relevante (RAG):**
 {menu_context}
@@ -283,6 +287,102 @@ Nunca responda coisas vagas como “posso sugerir algumas opções?” — você
         "content": "Endereço registrado.",
     }
 
+    ex7_user = {"role": "user", "content": "quero cinco do primeiro e três do segundo"}
+    ex7_assistant = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [{
+            "id": "call-ex7",
+            "type": "function",
+            "function": {
+                "name": "add_items_to_cart",
+                "arguments": json.dumps({
+                    # Assumindo que nas Sugestões recentes estão algo como:
+                    # 1. Oeuf Poche Paul Bocuse (ID: 111)
+                    # 2. Magret de Canard (ID: 222)
+                    "items": [
+                        {"product_id": 111, "quantity": 5},
+                        {"product_id": 222, "quantity": 3}
+                    ]
+                })
+            }
+        }]
+    }
+    ex7_tool = {"role": "tool", "tool_call_id": "call-ex7", "content": "Itens adicionados."}
+
+    # Exemplo: usuário escolhe itens usando "primeiro/segundo" da lista de sugestões recentes
+    ex_ordinals_user = {
+        "role": "user",
+        "content": "quero 2 do segundo e 7 do quarto"
+    }
+
+    # Sugestões recentes imaginárias para o exemplo
+    # 1. Crevettes à la Provençale (ID: 22)
+    # 2. Poulpe à la Plancha (ID: 15)
+    # 3. Oeuf Poche Paul Bocuse (ID: 9)
+    # 4. Gnocchis de la Mémé Forte (ID: 23)
+
+    ex_ordinals_assistant = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [{
+            "id": "call-ex-ordinais",
+            "type": "function",
+            "function": {
+                "name": "add_items_to_cart",
+                "arguments": json.dumps({
+                    "items": [
+                        {"product_id": 15, "quantity": 2},
+                        {"product_id": 23, "quantity": 7}
+                    ]
+                })
+            }
+        }]
+    }
+
+    ex_ordinals_tool = {
+        "role": "tool",
+        "tool_call_id": "call-ex-ordinais",
+        "content": "Itens adicionados."
+    }
+
+    # Exemplo: quantidades por extenso + ordinais
+    ex_ordinais_extenso_user = {
+        "role": "user",
+        "content": "quero treze do terceiro e quinze do primeiro"
+    }
+
+    # Sugestões recentes imaginárias para o exemplo:
+    # 1. Crevettes à la Provençale (ID: 22)
+    # 2. Poulpe à la Plancha (ID: 15)
+    # 3. Oeuf Poche Paul Bocuse (ID: 9)
+    # 4. Gnocchis de la Mémé Forte (ID: 23)
+
+    ex_ordinais_extenso_assistant = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [{
+            "id": "call-ex-ordinais-extenso",
+            "type": "function",
+            "function": {
+                "name": "add_items_to_cart",
+                "arguments": json.dumps({
+                    "items": [
+                        {"product_id": 9, "quantity": 13},   # treze → 13
+                        {"product_id": 22, "quantity": 15}   # quinze → 15
+                    ]
+                })
+            }
+        }]
+    }
+
+    ex_ordinais_extenso_tool = {
+        "role": "tool",
+        "tool_call_id": "call-ex-ordinais-extenso",
+        "content": "Itens adicionados."
+    }
+
+
     # --- MONTAGEM FINAL ---
     prompt = (
         [system_message]
@@ -309,6 +409,15 @@ Nunca responda coisas vagas como “posso sugerir algumas opções?” — você
             ex6_user,
             ex6_assistant,
             ex6_tool,
+            ex7_user,
+            ex7_assistant,
+            ex7_tool,
+            ex_ordinals_user,
+            ex_ordinals_assistant,
+            ex_ordinals_tool,
+            ex_ordinais_extenso_user,
+            ex_ordinais_extenso_assistant,
+            ex_ordinais_extenso_tool,
             {"role": "user", "content": user_query},
         ]
     )

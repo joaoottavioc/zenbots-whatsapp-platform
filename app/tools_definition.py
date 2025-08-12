@@ -81,7 +81,7 @@ tools_schema = [
         "type": "function",
         "function": {
             "name": "answer_conversationally",
-            "description": "Use para responder a saudações e perguntas gerais sobre o cardápio.",
+            "description": "Use para responder a saudações e perguntas relacionadas ao cardápio, pratos, pedidos e funcionamento do restaurante. Ignore perguntas não relacionadas.",
             "parameters": {
                 "type": "object",
                 "properties": {
