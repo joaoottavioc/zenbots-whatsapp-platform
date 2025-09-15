@@ -81,22 +81,38 @@ async def process_whatsapp_message(data: Dict[str, Any]):
             # 1. Expira ação pendente se o tempo tiver passado
             expire_if_needed(cart)
 
-            # 2. Expiração de sessão (inatividade)
-            SESSION_TIMEOUT = timedelta(minutes=15)
-            if utcnow() - cart.last_activity_at.replace(tzinfo=timezone.utc) > SESSION_TIMEOUT:
-                clear_pending(cart) # Limpa pending ao expirar sessão
+            # Em app/whatsapp.py
+
+            # 2. Expiração de sessão (inatividade) com lógica corrigida
+            SESSION_TIMEOUT = timedelta(minutes=10)
+            LONG_TIMEOUT = timedelta(hours=12)
+
+            inactivity_duration = utcnow() - cart.last_activity_at.replace(tzinfo=timezone.utc)
+
+            # Primeiro, checamos a condição de inatividade MAIS LONGA.
+            if inactivity_duration > LONG_TIMEOUT:
+                print(f"🧹 Inatividade longa ({inactivity_duration}). Limpando carrinho silenciosamente e continuando o fluxo.")
+                clear_pending(cart)
                 await crud.clear_db_cart(session, cart.id)
+                # Nenhum 'return' aqui. A execução do código continua para processar a nova mensagem.
+
+            # Se não for uma inatividade longa, checamos se é uma inatividade CURTA.
+            elif inactivity_duration > SESSION_TIMEOUT:
+                print(f"🧹 Sessão expirada após {inactivity_duration}. Avisando o usuário.")
+                clear_pending(cart)
+                await crud.clear_db_cart(session, cart.id)
+                
                 response_to_user = (
                     "⏰ Ficamos um tempinho sem falar e, por segurança, esvaziamos seu carrinho 🛒\n\n"
                     "Mas é só me dizer o que quer pedir e recomeçamos! 😄✅"
                 )
+                
                 await send_whatsapp_message(contact_number, response_to_user)
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
                 cart.last_activity_at = utcnow()
                 session.add(cart)
                 await session.commit()
-                print("🧹 Sessão expirada e carrinho limpo.")
-                return
+                return # O 'return' aqui é crucial para interromper o fluxo.
 
             # Tratamento de estados específicos (ex: AWAITING_ADDRESS)
             if cart.state == "AWAITING_ADDRESS":

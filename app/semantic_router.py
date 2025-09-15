@@ -12,11 +12,11 @@ def cos_sim(u: List[float], v: List[float]) -> float:
 PROTOS: Dict[str, List[str]] = {
     "SHOW_CART": ["qual meu pedido","ver carrinho","mostrar carrinho","o que eu pedi","itens do meu carrinho"],
     "ADD": ["quero adicionar itens","adiciona no carrinho","coloca esses pratos","mandar pratos com quantidade"],
-    "CLEAR_CART": ["esvaziar carrinho","limpar carrinho","cancelar tudo"],
+    "CLEAR_CART": ["esvaziar carrinho","limpar carrinho","cancelar tudo", "pode apagar td"],
     "FINISH_ORDER": ["fechar pedido","finalizar compra","pode fechar"],
     "REMOVE": ["remover item","tirar do carrinho"],
     "MODIFY": ["alterar quantidade","trocar quantidade do item"],
-    "REQUEST_SUGGESTION": ["ver sugestões","me indique algo"],
+    "REQUEST_SUGGESTION": ["ver sugestões","me indique algo", "o que você recomenda", "sim, sugestões", "sugestão"],
     "GREETING_OR_QUESTION": ["oi","olá","bom dia","boa tarde","boa noite"],
     "CONFIRM": ["sim","claro","pode ser","confirmo","confirmar", "ok"],
 }
