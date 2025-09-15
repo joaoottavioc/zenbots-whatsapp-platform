@@ -204,4 +204,21 @@ tools_schema = [
             },
         },
     },
+        {
+        "type": "function",
+        "function": {
+            "name": "search_catalog_for_suggestions",
+            "description": "Use esta ferramenta quando o usuário pedir uma sugestão genérica de comida ou bebida (ex: 'tem sobremesa?', 'algo com peixe', 'queria ver os vinhos'). Extraia APENAS o conceito principal da comida/bebida para a busca.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "search_concept": {
+                        "type": "string",
+                        "description": "O conceito principal e limpo da busca. Ex: 'sobremesa', 'peixe', 'vinho', 'pato', 'massa com frutos do mar'."
+                    }
+                },
+                "required": ["search_concept"]
+            }
+        }
+    },
 ]

@@ -7,6 +7,7 @@ from app import crud, schemas, data_extractor
 from app.database import get_session
 from app.models import User
 from app.auth import get_current_user
+import re
 
 router = APIRouter()
 
@@ -99,6 +100,8 @@ async def create_product_for_bot(
 
 # No seu arquivo de rotas (ex: app/bot_routes.py)
 
+# Em app/bot_routes.py
+
 @router.post("/bots/{bot_id}/catalog/upload", status_code=201)
 async def upload_catalog_from_text(
     bot_id: int,
@@ -111,17 +114,35 @@ async def upload_catalog_from_text(
     if not db_bot or db_bot.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Acesso negado.")
 
-    # 1. Extrai os produtos do texto usando o LLM
+    # 1. Extrai os produtos do texto usando o LLM (como antes)
     extracted_products = await data_extractor.extract_products_from_text(request_data.catalog_text)
 
     if not extracted_products:
         raise HTTPException(status_code=400, detail="Não foi possível extrair itens do cardápio.")
 
-    # 2. Chama a nova função de CRUD para salvar tudo em lote
+    # ▼▼▼ PASSO NOVO E CRUCIAL: ENRIQUECER OS DADOS EXTRAÍDOS ▼▼▼
+    
+    enriched_products = []
+    for product in extracted_products:
+        # Pega o nome e a descrição para criar keywords automáticas
+        name_words = product.get("name", "").lower()
+        desc_words = product.get("description", "").lower()
+        
+        # Combina, remove caracteres especiais e cria uma lista de palavras únicas
+        full_text = name_words + " " + desc_words
+        words = set(re.findall(r'\b\w+\b', full_text)) # Extrai palavras
+        
+        # Adiciona a nova chave "keywords" ao dicionário do produto
+        product["keywords"] = list(words)
+        enriched_products.append(product)
+        
+    # ▲▲▲ FIM DO PASSO DE ENRIQUECIMENTO ▲▲▲
+
+    # 2. Chama a função de CRUD com os dados agora enriquecidos
     products_added_count = await crud.bulk_create_products(
         session=session,
         bot_id=bot_id,
-        products_data=extracted_products
+        products_data=enriched_products  # 👈 Usa a lista enriquecida
     )
         
     return {"message": f"{products_added_count} produtos adicionados com sucesso ao bot {bot_id}."}

@@ -131,6 +131,21 @@ async def extract_potential_items(user_query: str) -> List[str]:
     Frase: "tem mais sugestoes?"
     Resultado: {{"items": []}}
 
+    Frase: "quero duas nega maluca e um café"
+    Resultado: {{"items": ["nega maluca", "café"]}}
+
+    Frase: "pode me mandar uma tainha assada"
+    Resultado: {{"items": ["tainha assada"]}}
+
+    Frase: "vou querer um x polenta pra viagem"
+    Resultado: {{"items": ["x polenta"]}}
+
+    Frase: "quero um bolo de macadamias"
+    Resultado: {{"items": ["bolo de macadamias"]}}
+
+    Frase: "quero um XXXXXX"
+    Resultado: {{"items": ["XXXXXX"]}}
+
     Frase: "{user_query}"
     Resultado:
     """
@@ -204,7 +219,7 @@ async def get_user_intent(user_query: str, cart_items: List[Dict]) -> str:
         return "CONVERSE" # Fallback seguro
 
 # ▼▼▼ NOVA FUNÇÃO CENTRAL: O CLASSIFICADOR DE INTENÇÕES ▼▼▼
-async def classify_user_intent(user_query: str, cart_items: List[Dict]) -> str:
+async def classify_user_intent_old(user_query: str, cart_items: List[Dict]) -> str:
     """
     Classifica a intenção principal do usuário com base na sua mensagem e no estado do carrinho.
     Este é o cérebro que substitui as listas de palavras-chave, agora com exemplos ricos.
@@ -330,6 +345,63 @@ async def classify_user_intent(user_query: str, cart_items: List[Dict]) -> str:
             response_format={"type": "json_object"}
         )
     
+    try:
+        response = await asyncio.to_thread(sync_call)
+        data = json.loads(response.choices[0].message.content)
+        intent = data.get("intent", "GREETING_OR_QUESTION")
+        return intent if intent in possible_intents else "GREETING_OR_QUESTION"
+    except Exception as e:
+        print(f"Erro ao classificar intenção: {e}")
+        return "GREETING_OR_QUESTION"
+
+async def classify_user_intent(user_query: str, cart_items: List[Dict]) -> str:
+    """
+    Inclui CONFIRM e NEGATE para confirmações/negações curtas.
+    """
+    possible_intents = [
+        "ADD_ITEMS", "REQUEST_SUGGESTION", "FINISH_ORDER",
+        "GREETING_OR_QUESTION", "SHOW_CART",
+        "CONFIRM", "NEGATE"
+    ]
+    if cart_items:
+        possible_intents.extend(["REMOVE_ITEMS", "MODIFY_QUANTITY", "CLEAR_CART"])
+
+    prompt = f"""
+    Classifique a intenção em UMA destas: {', '.join(possible_intents)}.
+
+    Regras:
+    - "CONFIRM": mensagem curta, equivalente a "sim", "ok", "claro", "perfeito", "fechou", "uhum", "aham", "👍".
+      Use APENAS quando a mensagem for essencialmente só isso.
+    - "NEGATE": mensagem curta equivalente a "não", "nope", "nah". Só isso.
+    - "FINISH_ORDER": "só isso", "pode fechar".
+    - "REQUEST_SUGGESTION": pede sugestão.
+    - "ADD_ITEMS": pede itens.
+    - "REMOVE_ITEMS"/"MODIFY_QUANTITY"/"CLEAR_CART": ajustes do carrinho.
+    - "SHOW_CART": quer ver o carrinho.
+    - "GREETING_OR_QUESTION": saudações/perguntas gerais do restaurante.
+
+    Sua resposta DEVE ser JSON {{ "intent": "<UMA_INTENCAO>" }}.
+
+    Exemplos:
+    "sim" -> {{"intent":"CONFIRM"}}
+    "ok" -> {{"intent":"CONFIRM"}}
+    "não" -> {{"intent":"NEGATE"}}
+    "sim, quero mais" -> {{"intent":"ADD_ITEMS"}}
+    "pode fechar a conta" -> {{"intent":"FINISH_ORDER"}}
+    "tem pratos com carne?" -> {{"intent":"REQUEST_SUGGESTION"}}
+
+    Frase: "{user_query}"
+    Resultado:
+    """
+
+    def sync_call():
+        return client_openai_api.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0,
+            response_format={"type": "json_object"}
+        )
+
     try:
         response = await asyncio.to_thread(sync_call)
         data = json.loads(response.choices[0].message.content)

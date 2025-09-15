@@ -5,6 +5,7 @@ from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict
 from datetime import datetime
 from app.utils import normalize_phone
+from sqlalchemy import text
 
 # 1. Imports unificados e limpos
 from app.models import (
@@ -117,6 +118,15 @@ async def clear_db_cart(session: AsyncSession, cart_id: int) -> Optional[Shoppin
     # A linha que definia 'last_activity_at' foi REMOVIDA.
     # A responsabilidade de atualizar o timestamp é da função principal que orquestra a conversa.
     
+     # ▼▼▼ higiene extra (importante!)
+    cart.pending_action_tool = None
+    cart.pending_action_args = None
+    cart.pending_action_question = None
+    cart.pending_action_expires_at = None
+
+    # se você usa last_suggestions, pode limpar também:
+    cart.last_suggestions = None
+    
     await session.flush()
     return cart
 
@@ -141,57 +151,125 @@ async def add_interaction_to_history(session: AsyncSession, bot_id: int, contact
     session.add_all([user_entry, assistant_entry])
     await session.flush()
 
-async def find_relevant_products(session: AsyncSession, bot_id: int, extracted_items: List[str], limit_per_item: int = 2) -> List[Product]:
-    """Busca em camadas: nome > descrição > embedding (fallback)."""
+async def find_relevant_products(session: AsyncSession, bot_id: int, extracted_items: List[str], limit_per_item: int = 3) -> List[Product]:
+    """
+    Busca em camadas otimizada: 1. Nome > 2. Keywords > 3. Descrição > 4. Embedding.
+    """
+    if not extracted_items:
+        return []
 
-    all_results = []
+    # Usamos um dicionário para evitar produtos duplicados nos resultados
+    all_results_map: Dict[int, Product] = {}
 
     for item_name in extracted_items:
-        results_set = {}
+        # Pula para o próximo item se já atingimos o limite de resultados
+        if len(all_results_map) >= limit_per_item * len(extracted_items):
+            break
 
+        # 🔹 1. Busca por nome (correspondência exata/parcial forte)
+        name_query = select(Product).where(
+            Product.bot_id == bot_id,
+            Product.name.ilike(f"%{item_name}%")
+        ).limit(limit_per_item)
+        for p in (await session.execute(name_query)).scalars().all():
+            if p.id not in all_results_map: all_results_map[p.id] = p
+
+        # 🔹 2. Busca por keywords (nova camada super importante!)
+        keywords_query = select(Product).where(
+            Product.bot_id == bot_id,
+            Product.keywords.ilike(f"%{item_name}%")
+        ).limit(limit_per_item)
+        for p in (await session.execute(keywords_query)).scalars().all():
+            if p.id not in all_results_map: all_results_map[p.id] = p
+
+        # 🔹 3. Busca por descrição
+        desc_query = select(Product).where(
+            Product.bot_id == bot_id,
+            Product.description.is_not(None),
+            Product.description.ilike(f"%{item_name}%")
+        ).limit(limit_per_item)
+        for p in (await session.execute(desc_query)).scalars().all():
+            if p.id not in all_results_map: all_results_map[p.id] = p
+            
+        # 🔹 4. Fallback: busca semântica (RAG)
+        query_embedding = generate_embedding(f"PRODUTO PRINCIPAL: {item_name}") #
+        embedding_query = select(Product).where(Product.bot_id == bot_id).order_by(
+            Product.embedding.cosine_distance(query_embedding) #
+        ).limit(limit_per_item) #
+        for p in (await session.execute(embedding_query)).scalars().all():
+             if p.id not in all_results_map: all_results_map[p.id] = p
+
+    # Retorna apenas os valores do dicionário, garantindo produtos únicos
+    return list(all_results_map.values())
+
+async def find_relevant_products_old(
+    session: AsyncSession, 
+    bot_id: int, 
+    extracted_items: List[str], 
+    limit_per_item: int = 3,
+    min_similarity: float = 0.55  # <-- NOSSO NOVO CONTROLE DE QUALIDADE!
+) -> List[Product]:
+    """
+    Busca em camadas otimizada com threshold de similaridade semântica.
+    1. Nome > 2. Keywords > 3. Descrição (matches de alta confiança)
+    4. Embedding (somente se a similaridade for > min_similarity)
+    """
+    if not extracted_items:
+        return []
+
+    all_results_map: Dict[int, Product] = {}
+
+    for item_name in extracted_items:
+        # Camadas 1, 2 e 3 (buscas por texto) continuam iguais, pois são de alta confiança.
         # 🔹 1. Busca por nome
         name_query = select(Product).where(
             Product.bot_id == bot_id,
             Product.name.ilike(f"%{item_name}%")
         ).limit(limit_per_item)
-        name_results = await session.execute(name_query)
-        name_products = name_results.scalars().all()
+        for p in (await session.execute(name_query)).scalars().all():
+            if p.id not in all_results_map: all_results_map[p.id] = p
 
-        if name_products:
-            for p in name_products:
-                results_set[p.id] = p
-            all_results.extend(results_set.values())
-            continue  # 👉 já encontrou pelo nome, ignora os próximos
+        # 🔹 2. Busca por keywords
+        keywords_query = select(Product).where(
+            Product.bot_id == bot_id,
+            Product.keywords.ilike(f"%{item_name}%")
+        ).limit(limit_per_item)
+        for p in (await session.execute(keywords_query)).scalars().all():
+            if p.id not in all_results_map: all_results_map[p.id] = p
 
-        # 🔹 2. Busca por descrição (se não achou pelo nome)
+        # 🔹 3. Busca por descrição
         desc_query = select(Product).where(
             Product.bot_id == bot_id,
-            Product.description != None,
+            Product.description.is_not(None),
             Product.description.ilike(f"%{item_name}%")
         ).limit(limit_per_item)
-        desc_results = await session.execute(desc_query)
-        desc_products = desc_results.scalars().all()
+        for p in (await session.execute(desc_query)).scalars().all():
+            if p.id not in all_results_map: all_results_map[p.id] = p
+            
+        # ▼▼▼ A MÁGICA ACONTECE AQUI ▼▼▼
+        # 🔹 4. Fallback: busca semântica (RAG) com filtro de qualidade
+        query_embedding = generate_embedding(item_name)
+        
+        # Criamos uma "coluna" virtual com o score de similaridade
+        # Lembre-se: Similaridade = 1 - Distância
+        similarity_score = (1 - Product.embedding.cosine_distance(query_embedding)).label("similarity")
 
-        if desc_products:
-            for p in desc_products:
-                results_set[p.id] = p
-            all_results.extend(results_set.values())
-            continue  # 👉 achou por descrição, não vai para embedding
-
-        # 🔹 3. Fallback: busca semântica (RAG)
-        query_embedding = generate_embedding(f"PRODUTO PRINCIPAL: {item_name}")
-        embedding_query = select(Product).where(Product.bot_id == bot_id).order_by(
-            Product.embedding.cosine_distance(query_embedding)
-        ).limit(limit_per_item)
+        embedding_query = (
+            select(Product, similarity_score)
+            .where(Product.bot_id == bot_id)
+            .filter(similarity_score > min_similarity) # <-- FILTRA PELA QUALIDADE MÍNIMA
+            .order_by(text("similarity DESC")) # <-- Ordena pela maior similaridade
+            .limit(limit_per_item)
+        )
+        
+        # O resultado agora vem como uma tupla (Produto, similaridade)
         embedding_results = await session.execute(embedding_query)
-        for p in embedding_results.scalars().all():
-            results_set[p.id] = p
-
-        all_results.extend(results_set.values())
-
-    return all_results
-
-# --- Funções de API (Podem e devem fazer commit) ---
+        for product, similarity in embedding_results.all():
+            print(f"[DEBUG RAG] Item encontrado: '{product.name}' com similaridade: {similarity:.2f}")
+            if product.id not in all_results_map:
+                all_results_map[product.id] = product
+    
+    return list(all_results_map.values())
 
 async def get_user_by_email(session: AsyncSession, email: str) -> Optional[User]:
     result = await session.execute(select(User).where(User.email == email))
@@ -246,27 +324,45 @@ async def delete_bot(session: AsyncSession, bot_id: int) -> bool:
     await session.commit()
     return True
 
-async def create_product(session: AsyncSession, bot_id: int, name: str, description: Optional[str], price: float) -> Product:
-    text_to_embed = f"PRODUTO PRINCIPAL: {name}. DESCRIÇÃO E INGREDIENTES: {description or 'N/A'}."
+async def create_product(session: AsyncSession, bot_id: int, name: str, description: Optional[str], price: float, keywords: Optional[str] = None) -> Product:
+    # ▼▼▼ LÓGICA DE EMBEDDING CORRIGIDA ▼▼▼
+    text_to_embed = (
+        f"PRODUTO PRINCIPAL: {name}. "
+        f"DESCRIÇÃO E INGREDIENTES: {description or 'N/A'}. "
+        f"CATEGORIAS E TAGS: {keywords or 'N/A'}."
+    )
     embedding_vector = generate_embedding(text_to_embed)
-    new_product = Product(bot_id=bot_id, name=name, description=description, price=price, embedding=embedding_vector)
+    
+    # ▼▼▼ Adiciona keywords ao criar o produto ▼▼▼
+    new_product = Product(
+        bot_id=bot_id, name=name, description=description, 
+        price=price, embedding=embedding_vector, keywords=keywords
+    )
     session.add(new_product)
     await session.commit()
     await session.refresh(new_product)
     return new_product
 
 async def update_product(session: AsyncSession, product_id: int, update_data: ProductUpdate) -> Optional[Product]:
-    """CORREÇÃO: Recebe product_id e busca o produto dentro da sessão."""
     db_product = await session.get(Product, product_id)
     if not db_product:
         return None
 
     update_data_dict = update_data.model_dump(exclude_unset=True)
+    needs_re_embedding = False
     for key, value in update_data_dict.items():
         setattr(db_product, key, value)
-        
-    if "name" in update_data_dict or "description" in update_data_dict:
-        text_to_embed = f"PRODUTO PRINCIPAL: {db_product.name}. DESCRIÇÃO E INGREDIENTES: {db_product.description or 'N/A'}."
+        # ▼▼▼ Verifica se um campo relevante para o embedding mudou ▼▼▼
+        if key in ["name", "description", "keywords"]:
+            needs_re_embedding = True
+    
+    # ▼▼▼ LÓGICA DE RE-EMBEDDING CORRIGIDA ▼▼▼
+    if needs_re_embedding:
+        text_to_embed = (
+            f"PRODUTO PRINCIPAL: {db_product.name}. "
+            f"DESCRIÇÃO E INGREDIENTES: {db_product.description or 'N/A'}. "
+            f"CATEGORIAS E TAGS: {db_product.keywords or 'N/A'}."
+        )
         db_product.embedding = generate_embedding(text_to_embed)
         
     session.add(db_product)

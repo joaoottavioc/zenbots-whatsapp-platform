@@ -4,7 +4,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta, timezone
 import enum
 from sqlmodel import JSON as SA_JSON
-from sqlalchemy import Column, TIMESTAMP, text
+from sqlalchemy import Column, TIMESTAMP, text, JSON, DateTime
 
 # Define forward references for type hinting
 class Bot(SQLModel): pass
@@ -90,11 +90,9 @@ class ShoppingCart(SQLModel, table=True):
     proposed_action: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(SA_JSON))
 
     last_activity_at: datetime = Field(
-    default_factory=lambda: datetime.now(timezone.utc),
-    sa_column=Column(
-        TIMESTAMP(timezone=True),  # Define o tipo da coluna no DB como "com fuso horário"
-        server_default=text("now()") # Mantém o default no nível do banco
-    ))
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True)),
+    )
 
     last_suggestions: Optional[List[int]] = Field(default=None, sa_column=Column(SA_JSON))
 
@@ -102,6 +100,14 @@ class ShoppingCart(SQLModel, table=True):
     contact: "Contact" = Relationship(back_populates="cart")
 
     items: List["CartItem"] = Relationship(back_populates="cart", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
+
+    # ▼▼▼ novos campos para pending_action
+    pending_action_tool: Optional[str] = None
+    pending_action_args: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
+    pending_action_question: Optional[str] = None
+    pending_action_expires_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True))
+    )
 
 class CartItem(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

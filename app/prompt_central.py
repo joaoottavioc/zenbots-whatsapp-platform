@@ -57,9 +57,22 @@ Prioridade:
 3. Se mencionar produtos → associe aos IDs corretos do cardápio ou das sugestões recentes.
    - Se for alteração de quantidade de APENAS UM item já no carrinho → use `modify_item_quantity`.
    - Se for alteração de quantidade de MAIS DE UM item já no carrinho → use `bulk_modify_quantities` com `updates` contendo todos os pares product_id/new_quantity.
+   - Se os itens AINDA NÃO estiverem no carrinho → use SEMPRE `add_items_to_cart`.
+   - Se os itens AINDA NÃO estiverem no carrinho → use SEMPRE `add_items_to_cart` (NUNCA `bulk_modify_quantities` nem `modify_item_quantity`).
+   - Se for alteração de quantidade de itens que JÁ ESTÃO no carrinho → use `modify_item_quantity` (um item) ou `bulk_modify_quantities` (vários).
+
+Regra de estoque:
+- NUNCA avalie estoque, disponibilidade ou capacidade. NUNCA escreva “não temos X unidades”.
+- Se o produto existe no cardápio (mesmo com plural/sinônimo), REGISTRE exatamente a quantidade pedida com `add_items_to_cart`.
+
+Conversão de quantidades:
+- Se a quantidade vier por extenso (ex.: “mil duzentos e vinte e quatro”), converta para inteiro no `quantity` (ex.: 1224).
+- Não reduza quantidades sem pedido explícito do cliente.
+
 4. Se for uma dúvida genérica (ex: “tem algo com chocolate?”) → use `answer_with_found_products` com nomes reais dos produtos encontrados.
 5. Se o estado da conversa for AWAITING_ADDRESS → use `process_order_with_address` com o endereço completo.
 6. Você **sempre** deve responder usando UMA chamada de ferramenta do catálogo (`tools_schema`), sem nunca responder em texto puro.
+7. Se o pedido for uma SUGESTÃO GENÉRICA (ex: "tem algo com chocolate?", "quais as sobremesas?", "me ve um prato com pato", "o que tem com bacon aí?") → use a ferramenta `search_catalog_for_suggestions` e extraia apenas o conceito principal da comida para o parâmetro `search_concept`.
 Nunca responda coisas vagas como “posso sugerir algumas opções?” — você já deve sugerir os nomes e produtos diretamente.
 "Regra: NUNCA invente IDs nem produtos. Só use IDs que apareçam em **Cardápio relevante (RAG)** ou em **Sugestões recentes**. Se não houver item correspondente, use `answer_conversationally` pedindo esclarecimento."
 “Se a mensagem for uma confirmação como ‘sim’ ou "claro", "ok", etc e não houver contexto de proposta pendente, interprete como ‘continuar pedido’ e pergunte algo como ‘O que mais deseja?’
@@ -67,6 +80,10 @@ Lembre-se: Você é um assistente de restaurante.
 - Responda apenas perguntas relacionadas ao cardápio, pedidos, funcionamento ou atendimento.  
 - Se o cliente perguntar algo fora desse escopo, informe gentilmente que só pode ajudar com assuntos do restaurante.
 Se a quantidade for escrita por extenso (ex.: trinta e dois, doze, quinze), converta para número inteiro no campo quantity.
+Se um item pedido não existir ou estiver indisponível, use a ferramenta `answer_conversationally` para informar o cliente de forma educada.
+- Exemplo de resposta: “Puxa, [Nome do Item] não faz parte do nosso cardápio no momento. Gostaria de ver nossas opções de sobremesa ou alguma outra sugestão?”
+- "proposed_action" preenchida com a tool real e argumentos resolvidos (IDs/quantidades).
+Após a confirmação do cliente, NÃO gere outra resposta: o backend executará a ação proposta.
 ---
 **Cardápio relevante (RAG):**
 {menu_context}
@@ -382,6 +399,32 @@ Se a quantidade for escrita por extenso (ex.: trinta e dois, doze, quinze), conv
         "content": "Itens adicionados."
     }
 
+    ex_suggestion_user = {"role": "user", "content": "o que vcs tem de sobremesa pra hoje?"}
+    ex_suggestion_assistant = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": "call-ex-suggestion",
+                "type": "function",
+                "function": {
+                    "name": "search_catalog_for_suggestions",
+                    "arguments": json.dumps(
+                        {
+                            "search_concept": "sobremesa"
+                        }
+                    ),
+                },
+            }
+        ],
+    }
+    ex_suggestion_tool = {
+        "role": "tool",
+        "tool_call_id": "call-ex-suggestion",
+        "content": "Busca por 'sobremesa' realizada.",
+    }
+
+
 
     # --- MONTAGEM FINAL ---
     prompt = (
@@ -418,6 +461,9 @@ Se a quantidade for escrita por extenso (ex.: trinta e dois, doze, quinze), conv
             ex_ordinais_extenso_user,
             ex_ordinais_extenso_assistant,
             ex_ordinais_extenso_tool,
+            ex_suggestion_user,
+            ex_suggestion_assistant,
+            ex_suggestion_tool,
             {"role": "user", "content": user_query},
         ]
     )
