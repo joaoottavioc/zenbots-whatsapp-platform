@@ -42,6 +42,8 @@ class Contact(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     phone_number: str = Field(index=True)
 
+    name: Optional[str] = Field(default=None)
+
     bot_id: int = Field(foreign_key="bot.id")
     bot: "Bot" = Relationship(back_populates="contacts")
 
@@ -87,7 +89,21 @@ class OrderStatus(str, enum.Enum):
 class ShoppingCart(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     state: str = Field(default="GREETING")
+
+    # Usaremos este campo para guardar o endereço encontrado pelo CEP enquanto esperamos o número.
+    partial_address: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(SA_JSON))
+
+    # Usaremos para guardar o endereço completo montado, aguardando o "sim" do cliente.
+    pending_address: Optional[str] = Field(default=None)
+
+    customer_address: Optional[str] = Field(default=None)
+
     proposed_action: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(SA_JSON))
+
+    # ▼▼▼ NOVO CAMPO ▼▼▼
+    # Este campo controlará se o bot está ativo ou não para este carrinho/cliente.
+    # Por padrão, ele é falso, significando que o bot está no controle.
+    human_takeover_active: bool = Field(default=False, index=True)
 
     last_activity_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

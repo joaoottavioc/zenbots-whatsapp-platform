@@ -18,6 +18,8 @@ import regex as re
 from sqlmodel import select
 from app.models import Product
 from app.semantic_router import semantic_intent, THRESHOLDS
+from app.address_service import get_address_from_cep
+import httpx #SIMULADOR
 
 # --- Imports Atualizados ---
 # Helper para gerenciar o estado de "ação pendente"
@@ -77,6 +79,13 @@ async def process_whatsapp_message(data: Dict[str, Any]):
 
             contact = await crud.get_or_create_contact(session, bot.id, contact_number)
             cart = await crud.get_or_create_cart(session, contact.id)
+            
+            # --- INÍCIO DA VERIFICAÇÃO DO INTERRUPTOR ---
+            # Se o atendimento humano foi ativado para este cliente, o bot não faz nada.
+            if cart.human_takeover_active:
+                print(f"🤖 ATENDIMENTO HUMANO ATIVO para {contact_number}. Bot ignorando mensagem.")
+                return # Interrompe todo o processamento da mensagem
+            # --- FIM DA VERIFICAÇÃO ---
 
             # 1. Expira ação pendente se o tempo tiver passado
             expire_if_needed(cart)
@@ -107,87 +116,273 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                     "Mas é só me dizer o que quer pedir e recomeçamos! 😄✅"
                 )
                 
+                try:
+                    async with httpx.AsyncClient() as client:
+                        await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
+                except httpx.RequestError as e:
+                    print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
+                
                 await send_whatsapp_message(contact_number, response_to_user)
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
                 cart.last_activity_at = utcnow()
                 session.add(cart)
                 await session.commit()
                 return # O 'return' aqui é crucial para interromper o fluxo.
-
-            # Tratamento de estados específicos (ex: AWAITING_ADDRESS)
-            if cart.state == "AWAITING_ADDRESS":
+                
+                
+            # ▼▼▼ INÍCIO DA NOVA LÓGICA DE RESET DE ESTADO ▼▼▼
+            # Se o cliente realizar uma ação de compra enquanto estivermos finalizando,
+            # o bot entende que ele voltou a "fazer o pedido"    
+            if cart.state in ["AWAITING_CEP", "AWAITING_NUMBER_COMPLEMENT", "AWAITING_CUSTOMER_NAME"] and not is_likely_shopping_intent(text_body):
+                print(f"⏩ Estado '{cart.state}' detectado e mensagem não parece de compras. Pulando intenção.")
+                intent = None # Definimos a intenção como None para pular a lógica de reset
+            else:
+                # Caso contrário, executamos a classificação de intenção normalmente
                 await session.refresh(cart, attribute_names=["items"])
                 cart_items_for_intent = [{"id": item.product_id, "name": item.product.name} for item in cart.items]
                 intent = await resolve_intent(text_body, cart, cart_items_for_intent)
+                print(f"[INTENT DEBUG] Texto: {text_body!r} → Intent escolhida: {intent}")
 
-                if intent == "CLEAR_CART":
-                    clear_pending(cart)
-                    await crud.clear_db_cart(session, cart.id)
-                    cart.last_suggestions = None
-                    cart.state = "GREETING"
-                    response_to_user = "🛒 Carrinho esvaziado. Pode me dizer o que você deseja pedir!"
-                elif re.search(r"\b[\w\s]{3,}\s+\d{1,5}\b", text_body, re.IGNORECASE):
-                    await crud.save_customer_address(session, cart.id, text_body.strip())
-                    cart.state = "AWAITING_PAYMENT_METHOD"
-                    response_to_user = "Endereço salvo! Qual será a forma de pagamento? (PIX ou Cartão)"
-                else: # Chama IA para extrair endereço ou outra ação
-                    history_records = await crud.get_history_for_contact(session, bot.id, contact_number)
-                    past_messages = [{"role": h.role, "content": h.content} for h in history_records]
-                    cart_items = [{"product_id": item.product.id, "name": item.product.name, "quantity": item.quantity} for item in cart.items]
-                    prompt = create_central_prompt(user_query=text_body, history=past_messages, restaurant_name=bot.restaurant_name, cart_items=cart_items)
-                    ai_message = await get_ai_decision(prompt, tools_schema, force_tool=True)
-                    response_to_user = "Desculpe, não entendi. Pode reformular?"
-                    if ai_message and ai_message.tool_calls:
-                        tool_call, tool_name, tool_args = ai_message.tool_calls[0], ai_message.tool_calls[0].function.name, json.loads(ai_message.tool_calls[0].function.arguments)
-                        if tool_name == "process_order_with_address":
-                            address = tool_args.get("customer_address")
-                            if address:
-                                await crud.save_customer_address(session, cart.id, address)
-                                cart.state = "AWAITING_PAYMENT_METHOD"
-                                response_to_user = "Endereço salvo! Qual será a forma de pagamento? (PIX ou Cartão)"
-                        elif tool_name == "bulk_modify_quantities":
-                            clear_pending(cart)
-                            for upd in tool_args.get("updates", []):
-                                await crud.modify_item_quantity_in_db_cart(session, cart.id, upd.get("product_id"), upd.get("new_quantity"))
-                            await session.refresh(cart, attribute_names=['items'])
-                            response_to_user = _build_cart_summary_message(cart, "✏️") + "\n\nAlgo mais?"
+            # A lógica de reset de estado continua a mesma, mas agora só será
+            # acionada por intenções de compra genuínas.
+            intents_that_resume_shopping = ["ADD", "REMOVE", "MODIFY", "REQUEST_SUGGESTION", "SHOW_CART", "CLEAR_CART", "ADD_ITEMS", "REMOVE_ITEMS"]
+            finalizing_states = ["AWAITING_CEP", "AWAITING_NUMBER_COMPLEMENT", "AWAITING_ADDRESS_CONFIRMATION", "AWAITING_PAYMENT_METHOD", "AWAITING_CUSTOMER_NAME"]
 
+            if intent in intents_that_resume_shopping and cart.state in finalizing_states:
+                print(f"🔄 Cliente voltou a comprar (Intent: {intent}). Resetando estado de '{cart.state}' para 'GREETING'.")
+                cart.state = "GREETING"
+                await session.flush()
+
+            # Etapa 1: Aguardando o CEP do cliente
+            if cart.state == "AWAITING_CEP":
+                address_data = await get_address_from_cep(text_body)
+                
+                if not address_data:
+                    response_to_user = "CEP inválido ou não encontrado. 🤔 Por favor, verifique e tente novamente."
+                else:
+                    cart.partial_address = address_data
+                    cart.state = "AWAITING_NUMBER_COMPLEMENT"
+                    response_to_user = (
+                        f"Encontrei este endereço:\n\n"
+                        f"📍 {address_data['street']}, {address_data['neighborhood']}\n"
+                        f"{address_data['city']} - {address_data['state']}\n\n"
+                        f"Se estiver correto, por favor, me informe o *número* e o *complemento* (se houver)."
+                    )
+                
                 cart.last_activity_at = utcnow()
                 session.add(cart)
+                
+                try:
+                    async with httpx.AsyncClient() as client:
+                        await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
+                except httpx.RequestError as e:
+                    print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
+                
                 await send_whatsapp_message(contact_number, response_to_user)
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
                 await session.commit()
                 return
 
-            # Classificação de intenção geral
-            await session.refresh(cart, attribute_names=["items"])
-            cart_items_for_intent = [{"id": item.product_id, "name": item.product.name} for item in cart.items]
-            intent = await resolve_intent(text_body, cart, cart_items_for_intent)
-            print(f"[INTENT DEBUG] Texto: {text_body!r} → Intent escolhida: {intent}")
+            # Etapa 2: Aguardando número/complemento E PEDINDO CONFIRMAÇÃO
+            elif cart.state == "AWAITING_NUMBER_COMPLEMENT":
+                partial = cart.partial_address
+                number_complement = text_body.strip()
+                
+                full_address = (
+                    f"{partial['street']}, {number_complement}\n"
+                    f"{partial['neighborhood']} - {partial['city']}/{partial['state']}\n"
+                    f"CEP: {partial['cep']}"
+                )
+                
+                # ▼▼▼ LÓGICA DE CONFIRMAÇÃO ▼▼▼
+                # Em vez de salvar, guardamos o endereço e mudamos de estado.
+                cart.pending_address = full_address
+                cart.partial_address = None # Limpamos o dado parcial
+                cart.state = "AWAITING_ADDRESS_CONFIRMATION"
+                
+                response_to_user = (
+                    f"Tudo certo! Por favor, confirme se o endereço final está correto:\n\n"
+                    f"🏠 *{full_address}*\n\n"
+                    f"Posso confirmar? (Sim / Não)"
+                )
+                # ▲▲▲ FIM DA LÓGICA DE CONFIRMAÇÃO ▲▲▲
+
+                cart.last_activity_at = utcnow()
+                session.add(cart)
+                
+                try:
+                    async with httpx.AsyncClient() as client:
+                        await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
+                except httpx.RequestError as e:
+                    print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
+                
+                await send_whatsapp_message(contact_number, response_to_user)
+                await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
+                await session.commit()
+                return
+
+            # Etapa 3: Aguardando a confirmação final do endereço
+            elif cart.state == "AWAITING_ADDRESS_CONFIRMATION":
+                # A intenção aqui será 'CONFIRM' ou 'NEGATE'
+                if intent == "CONFIRM":
+                    final_address = cart.pending_address
+                    # ▼▼▼ USE A NOVA FUNÇÃO AQUI ▼▼▼
+                    await crud.save_address_to_cart(session, cart.id, final_address)
+                    
+                    cart.pending_address = None # Limpa o endereço pendente
+                    cart.state = "AWAITING_CUSTOMER_NAME" # <-- 1. MUDE O ESTADO
+                    response_to_user = "Endereço confirmado! 👍 Agora, por favor, me informe o nome completo para a entrega." # <-- 2. MUDE A PERGUNTA
+                
+                elif intent == "NEGATE":
+                    cart.pending_address = None # Limpa o endereço pendente
+                    cart.state = "AWAITING_CEP" # Volta para o início do fluxo
+                    response_to_user = "Entendido. Vamos recomeçar. Por favor, me informe o seu CEP novamente."
+
+                else:
+                    # Se o usuário digitar algo diferente de sim/não
+                    response_to_user = "Por favor, responda com 'Sim' para confirmar o endereço ou 'Não' para recomeçar."
+
+                cart.last_activity_at = utcnow()
+                session.add(cart)
+                
+                try:
+                    async with httpx.AsyncClient() as client:
+                        await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
+                except httpx.RequestError as e:
+                    print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
+                
+                await send_whatsapp_message(contact_number, response_to_user)
+                await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
+                await session.commit()
+                return
+             
+            # Etapa 4: Aguardando o nome do cliente
+            elif cart.state == "AWAITING_CUSTOMER_NAME":
+                customer_name = text_body.strip()
+            
+                # Salva o nome no contato associado ao carrinho
+                await crud.save_customer_name_to_contact(session, cart.contact_id, customer_name)
+            
+                cart.state = "AWAITING_PAYMENT_METHOD"
+                # Personaliza a próxima pergunta com o primeiro nome do cliente
+                response_to_user = f"Ótimo, {customer_name.split(' ')[0]}! Para finalizar, qual será a forma de pagamento? (PIX ou Cartão)"
+
+                cart.last_activity_at = utcnow()
+                session.add(cart)
+            
+                try:
+                    async with httpx.AsyncClient() as client:
+                        await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
+                except httpx.RequestError as e:
+                    print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
+            
+                await send_whatsapp_message(contact_number, response_to_user)
+                await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
+                await session.commit()
+                return
+                
+            elif cart.state == "AWAITING_PAYMENT_METHOD":
+                user_text = text_body.lower()
+                order_created = False # Flag para saber se devemos limpar o carrinho
+
+                # Verifica se a resposta é uma forma de pagamento válida
+                if "pix" in user_text or "cartão" in user_text or "cartao" in user_text:
+                    # Carrega todos os dados necessários para criar o pedido
+                    await session.refresh(cart, attribute_names=["items", "contact"])
+                    if not cart.contact:
+                         raise Exception(f"Carrinho {cart.id} não possui um contato associado.")
+                    
+                    bot_id = cart.contact.bot_id
+                    items_for_order = [{"product_id": item.product_id, "quantity": item.quantity} for item in cart.items]
+                    address = getattr(cart, 'customer_address', None) # Usamos getattr para segurança
+
+                    # Cria o pedido no banco de dados ANTES de responder ao usuário
+                    await crud.create_order(session, bot_id=bot_id, items=items_for_order, customer_address=address)
+                    order_created = True
+
+                # Agora, monta a resposta com base na escolha
+                if "pix" in user_text:
+                    if bot.pix_key:
+                        response_to_user = (
+                            f"Ótima escolha! Seu pedido foi registrado com sucesso. ✅\n\n"
+                            f"Você pode fazer o pagamento usando nossa chave PIX:\n🔑 *{bot.pix_key}*\n\n"
+                            "Muito obrigado pela sua preferência!"
+                        )
+                    else:
+                        response_to_user = "Puxa, parece que não temos uma chave PIX configurada. Poderia ser no Cartão?"
+                        order_created = False # Impede a finalização se não há chave PIX
+                
+                elif "cartão" in user_text or "cartao" in user_text:
+                    response_to_user = (
+                        "Combinado! Seu pedido foi registrado. ✅\n\n"
+                        "Nosso entregador levará a maquininha de cartão até você.\n\n"
+                        "Muito obrigado pela sua preferência!"
+                    )
+                
+                else:
+                    response_to_user = "Não entendi. Por favor, escolha entre *PIX* ou *Cartão*."
+
+                # Limpa o carrinho APENAS se o pedido foi criado com sucesso
+                if order_created:
+                    await crud.clear_db_cart(session, cart.id)
+
+                cart.last_activity_at = utcnow()
+                session.add(cart)
+                
+                try:
+                    async with httpx.AsyncClient() as client:
+                        await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
+                except httpx.RequestError as e:
+                    print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
+                
+                await send_whatsapp_message(contact_number, response_to_user)
+                await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
+                await session.commit()
+                return
+            # ▲▲▲ FIM DO BLOCO ADICIONADO ▲▲▲
 
             if intent in ("CONFIRM", "NEGATE"):
-                pending_status = has_valid_pending(cart)
-                print(f"VERIFICANDO AÇÃO PENDENTE -> Status: {'Válida' if pending_status else 'Inválida/Expirada'}, Tool: {cart.pending_action_tool}, Expires: {cart.pending_action_expires_at}")
-
-                if pending_status:
+                # Primeiro, checa se há uma ação pendente (ex: "Confirma adicionar X item?").
+                # Esta lógica tem prioridade máxima.
+                if has_valid_pending(cart):
                     if intent == "CONFIRM":
                         response_to_user = await _execute_pending_action(session, cart, bot_id=bot.id)
                     else: # NEGATE
                         clear_pending(cart)
                         response_to_user = "Beleza, cancelei aquela opção. O que gostaria de fazer agora?"
+                
+                # Se NÃO houver ação pendente, tratamos como uma confirmação/negação genérica.
+                # A chave aqui é IGNORAR os estados de finalização, pois eles têm sua própria lógica.
+                elif cart.state in ["GREETING", "SHOPPING"]: # Adicione outros estados "seguros" se tiver
+                    if intent == "CONFIRM":
+                        # Se o bot acabou de dar sugestões, um "ok" pode ser para escolher.
+                        if getattr(cart, "last_suggestions", None):
+                            response_to_user = "Show! Qual deles você quer? Pode responder '1', 'o segundo' ou '2 do primeiro'."
+                        else:
+                            # O "ok" mais comum e seguro.
+                            response_to_user = "Perfeito! O que mais deseja?"
+                    else: # NEGATE
+                        response_to_user = "Tranquilo! Quer ver algumas sugestões ou prefere me dizer o que deseja?"
+                
+                # Se a intenção for de confirmação/negação, mas o estado for de finalização,
+                # a melhor ação é não fazer nada e deixar o fluxo continuar, pois a lógica
+                # específica de cada estado (CEP, Endereço, Pagamento) irá tratar a resposta.
+                # Para evitar um erro de variável não definida, damos uma resposta padrão segura.
                 else:
                     if intent == "CONFIRM":
-                        if cart.state == "AWAITING_ADDRESS": response_to_user = "Beleza! Me envia o endereço completo da entrega (rua, número, bairro/cidade)."
-                        elif cart.state == "AWAITING_PAYMENT_METHOD": response_to_user = "Perfeito! Qual será a forma de pagamento? (PIX ou Cartão)"
-                        elif getattr(cart, "last_suggestions", None): response_to_user = "Show! Qual deles você quer? Pode responder '1', 'o segundo' ou '2 do primeiro'."
-                        else: response_to_user = "Perfeito! O que mais deseja?"
-                    else:  # NEGATE
-                        if cart.state == "AWAITING_ADDRESS": response_to_user = "Sem problemas! Quando quiser, me envie o endereço completo."
-                        elif cart.state == "AWAITING_PAYMENT_METHOD": response_to_user = "Tudo certo! Quando decidir, me diga se prefere PIX ou Cartão."
-                        else: response_to_user = "Tranquilo! Quer ver algumas sugestões ou prefere me dizer o que deseja?"
+                        response_to_user = "Perfeito! O que mais deseja?"
+                    else: # NEGATE
+                        response_to_user = "Entendido. Como posso ajudar?"
 
                 cart.last_activity_at = utcnow()
                 session.add(cart)
+                
+                try:
+                    async with httpx.AsyncClient() as client:
+                        await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
+                except httpx.RequestError as e:
+                    print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
+                
                 await send_whatsapp_message(contact_number, response_to_user)
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
                 await session.commit()
@@ -202,10 +397,64 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                 response_to_user = "🛒 Carrinho esvaziado."
             elif intent == "SHOW_CART":
                 response_to_user = _build_cart_summary_message(cart)
+                
             elif intent == "FINISH_ORDER":
-                cart.state = "AWAITING_ADDRESS"
-                session.add(cart)
-                response_to_user = "Entendido. Para qual endereço será a entrega?"
+                # Garante que o contato associado ao carrinho seja carregado para checar o nome
+                await session.refresh(cart, attribute_names=["items", "contact"])
+                
+                if not cart.items:
+                    response_to_user = "Seu carrinho está vazio. O que você gostaria de pedir?"
+
+                # CASO 1: Já temos um endereço COMPLETO E CONFIRMADO?
+                elif cart.customer_address:
+                    
+                    # CASO 1.1: E TAMBÉM já temos o nome do cliente salvo? Ótimo! Vamos para o pagamento.
+                    if cart.contact and cart.contact.name:
+                        print(f"✅ Endereço e nome já salvos. Pulando para pagamento.")
+                        cart.state = "AWAITING_PAYMENT_METHOD"
+                        response_to_user = (
+                            f"Notei que já temos seu endereço salvo:\n\n"
+                            f"🏠 *{cart.customer_address}*\n\n"
+                            f"E o pedido está no nome de *{cart.contact.name}*.\n\n"
+                            f"Qual será a forma de pagamento? (PIX ou Cartão)"
+                        )
+                    
+                    # CASO 1.2: MAS AINDA NÃO temos o nome? Então pedimos o nome.
+                    else:
+                        print(f"✅ Endereço salvo, mas nome não encontrado. Solicitando nome.")
+                        cart.state = "AWAITING_CUSTOMER_NAME"
+                        response_to_user = (
+                            "Ok, vamos continuar. Já tenho seu endereço. "
+                            "Agora, por favor, me informe o nome completo para a entrega."
+                        )
+
+                # CASO 2: Não temos endereço completo, mas temos um PENDENTE de confirmação?
+                elif cart.pending_address:
+                    print(f"▶️ Retomando fluxo: Aguardando confirmação do endereço.")
+                    cart.state = "AWAITING_ADDRESS_CONFIRMATION"
+                    response_to_user = (
+                        f"Por favor, confirme se o endereço final está correto:\n\n"
+                        f"🏠 *{cart.pending_address}*\n\n"
+                        f"Posso confirmar? (Sim / Não)"
+                    )
+                
+                # CASO 3: Não temos endereço pendente, mas temos um PARCIAL (do CEP)?
+                elif cart.partial_address:
+                    address_data = cart.partial_address
+                    print(f"▶️ Retomando fluxo: Aguardando número/complemento para o CEP.")
+                    cart.state = "AWAITING_NUMBER_COMPLEMENT"
+                    response_to_user = (
+                        f"Ok, vamos continuar de onde paramos. Encontrei este endereço:\n\n"
+                        f"📍 {address_data['street']}, {address_data['neighborhood']}\n"
+                        f"{address_data['city']} - {address_data['state']}\n\n"
+                        f"Por favor, me informe o *número* e o *complemento* (se houver)."
+                    )
+
+                # CASO 4: Se não temos NADA, aí sim começamos do CEP.
+                else:
+                    cart.state = "AWAITING_CEP"
+                    response_to_user = "Entendido. Para finalizar, por favor, me informe o seu CEP."
+                    
             else:  # Lógica principal para ADD, REMOVE, MODIFY, REQUEST_SUGGESTION
                 # Preparação comum para todos os intents deste bloco
                 history_records = await crud.get_history_for_contact(session, bot.id, contact_number)
@@ -383,6 +632,12 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                             else:
                                 response_to_user = "Não consegui montar a proposta com itens válidos do cardápio. Quer que eu adicione diretamente os itens do seu pedido?"
                             
+                            try:
+                                async with httpx.AsyncClient() as client:
+                                    await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
+                            except httpx.RequestError as e:
+                                print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
+                            
                             await send_whatsapp_message(contact_number, response_to_user)
                             await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
                             cart.last_activity_at = utcnow()
@@ -411,6 +666,13 @@ async def process_whatsapp_message(data: Dict[str, Any]):
 
             cart.last_activity_at = utcnow()
             session.add(cart)
+            
+            try:
+                async with httpx.AsyncClient() as client:
+                    await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
+            except httpx.RequestError as e:
+                print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
+            
             await send_whatsapp_message(contact_number, response_to_user)
             await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
             await session.commit()
@@ -593,3 +855,15 @@ def _format_product_suggestions_message(products: List[Product], title: str) -> 
         message_parts.append(item_str)
     footer = "\nÉ só me dizer o número ou o nome do que você mais gostou! 😉"
     return "\n\n".join(message_parts) + footer
+    
+def is_likely_shopping_intent(text: str) -> bool:
+    """Verifica se o texto contém palavras-chave que indicam uma intenção de compra."""
+    shopping_keywords = [
+        "quero", "gostaria", "adiciona", "mais", "tira", "remove", 
+        "muda", "troca", "quanto custa", "cardapio", "menu", "ver",
+        "pedido", "carrinho", "esvaziar", "limpar", "cancelar",
+        "tirar", "remover", "modificar", "tire", "remova"
+    ]
+    text_lower = text.lower()
+    # Usamos \b para garantir que estamos pegando a palavra inteira (evita "quero" em "qualquer")
+    return any(re.search(r'\b' + keyword + r'\b', text_lower) for keyword in shopping_keywords)

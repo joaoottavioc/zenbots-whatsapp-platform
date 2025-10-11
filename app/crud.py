@@ -6,6 +6,7 @@ from typing import List, Optional, Dict
 from datetime import datetime
 from app.utils import normalize_phone
 from sqlalchemy import text
+from app.models import Contact, ShoppingCart 
 
 # 1. Imports unificados e limpos
 from app.models import (
@@ -115,6 +116,7 @@ async def clear_db_cart(session: AsyncSession, cart_id: int) -> Optional[Shoppin
     cart.items = [] # Limpa a lista na memória também
     cart.state = "GREETING"
     
+    cart.customer_address = None
     # A linha que definia 'last_activity_at' foi REMOVIDA.
     # A responsabilidade de atualizar o timestamp é da função principal que orquestra a conversa.
     
@@ -476,24 +478,64 @@ async def create_order(
         # opcional: faça um logger.error("Erro ao criar pedido", exc_info=True)
         return None
 
-async def save_customer_address(session: AsyncSession, cart_id: int, address: str) -> Optional[ShoppingCart]:
+# app/crud.py
+
+async def save_address_to_cart(session: AsyncSession, cart_id: int, address: str) -> Optional[ShoppingCart]:
     """
-    Atualiza o endereço do cliente no carrinho e cria uma nova ordem no banco.
+    Apenas salva o endereço confirmado no objeto do carrinho para uso posterior.
     """
     cart = await session.get(ShoppingCart, cart_id)
     if not cart:
         return None
-
-    # Cria o pedido vinculado ao bot e ao carrinho
-    await session.refresh(cart, attribute_names=["items"])
-    bot_id = cart.contact.bot_id  # Assumindo que você tem o relacionamento reverso de cart -> contact -> bot
-
-    # Validação mínima
-    if not cart.items or not bot_id:
-        return None
-
-    items = [{"product_id": item.product_id, "quantity": item.quantity} for item in cart.items]
-    from app.crud import create_order
-    await create_order(session, bot_id=bot_id, items=items, customer_address=address)
-
+    
+    cart.customer_address = address
+    session.add(cart)
+    await session.flush()
     return cart
+
+async def save_customer_name_to_contact(session: AsyncSession, contact_id: int, name: str) -> Optional[Contact]:
+    """
+    Salva ou atualiza o nome de um contato no banco de dados.
+    """
+    contact = await session.get(Contact, contact_id)
+    if not contact:
+        return None
+    
+    contact.name = name
+    session.add(contact)
+    await session.flush()
+    await session.refresh(contact)
+    return contact
+
+async def set_human_takeover_by_phone(session: AsyncSession, bot_id: int, phone_number: str, active: bool) -> bool:
+    """
+    Encontra o carrinho de um cliente pelo número de telefone e ativa/desativa o modo de atendimento humano.
+    """
+    # Encontra o contato pelo número de telefone para o bot específico
+    contact_result = await session.execute(
+        select(Contact).where(Contact.phone_number == phone_number, Contact.bot_id == bot_id)
+    )
+    contact = contact_result.scalar_one_or_none()
+
+    if not contact:
+        print(f"Contato com o número {phone_number} não encontrado para o bot {bot_id}.")
+        return False
+
+    # Encontra o carrinho associado a esse contato
+    cart_result = await session.execute(
+        select(ShoppingCart).where(ShoppingCart.contact_id == contact.id)
+    )
+    cart = cart_result.scalar_one_or_none()
+
+    if not cart:
+        print(f"Carrinho para o contato {contact.id} não encontrado.")
+        return False
+    
+    # Ativa ou desativa o interruptor
+    cart.human_takeover_active = active
+    session.add(cart)
+    await session.commit()
+    
+    status = "ATIVADO" if active else "DESATIVADO"
+    print(f"✅ Atendimento humano {status} para o número {phone_number}.")
+    return True

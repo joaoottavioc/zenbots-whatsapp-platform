@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Chat WhatsApp (ZenBots)</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; 
+            background-color: #f0f2f5; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            margin: 0; 
+            padding: 20px 0;
+            box-sizing: border-box;
+        }
+        .chat-container { 
+            width: 100%; 
+            max-width: 800px; /* << LARGURA AUMENTADA */
+            height: 100%;
+            max-height: 900px; /* << ALTURA AUMENTADA */
+            border: 1px solid #ddd; 
+            background-color: #e5ddd5; 
+            display: flex; 
+            flex-direction: column; 
+            border-radius: 8px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
+        }
+        .chat-header { 
+            background-color: #005e54; 
+            color: white; 
+            padding: 15px; 
+            font-weight: bold; 
+            border-top-left-radius: 8px; 
+            border-top-right-radius: 8px; 
+            text-align: center; 
+        }
+        .chat-history { 
+            flex-grow: 1; 
+            padding: 20px; /* << MAIS PADDING LATERAL */
+            overflow-y: auto; 
+            display: flex; 
+            flex-direction: column; 
+            background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); 
+        }
+        .message { 
+            padding: 10px 15px; /* << MAIS ESPAÇAMENTO INTERNO */
+            border-radius: 8px; 
+            margin-bottom: 5px; /* << MARGEM MENOR ENTRE MENSAGENS */
+            max-width: 75%; /* << LARGURA MÁXIMA AJUSTADA */
+            word-wrap: break-word; 
+            line-height: 1.4; 
+            box-shadow: 0 1px 1px rgba(0,0,0,0.08); 
+        }
+        .user-message { 
+            background-color: #dcf8c6; 
+            align-self: flex-end; 
+            margin-left: auto; 
+        }
+        .bot-message { 
+            background-color: #ffffff; 
+            align-self: flex-start; 
+        }
+        .input-area { 
+            display: flex; 
+            padding: 10px; 
+            background-color: #f0f2f5; 
+            border-bottom-left-radius: 8px; 
+            border-bottom-right-radius: 8px; 
+            border-top: 1px solid #ddd;
+        }
+        #message-input { 
+            flex-grow: 1; 
+            padding: 10px 15px; /* << PADDING AUMENTADO */
+            border: 1px solid #ccc; 
+            border-radius: 20px; 
+            outline: none; 
+            font-size: 15px;
+        }
+        #send-button { 
+            padding: 10px 15px; 
+            margin-left: 10px; 
+            background-color: #005e54; 
+            color: white; 
+            border: none; 
+            border-radius: 50%; 
+            cursor: pointer; 
+            font-size: 18px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">Bot Teste (ZenBots)</div>
+        <div class="chat-history" id="chat-history">
+            <div class="message bot-message">Olá! Este simulador agora está pronto para receber respostas. Envie uma mensagem para testar.</div>
+        </div>
+        <div class="input-area">
+            <input type="text" id="message-input" placeholder="Digite sua mensagem...">
+            <button id="send-button">➤</button>
+        </div>
+    </div>
+
+    <script>
+        const chatHistory = document.getElementById('chat-history');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+
+        // --- CÓDIGO NOVO PARA RECEBER MENSAGENS ---
+        console.log('Iniciando conexão com o SSE Server na porta 9000...');
+        // Conecta ao nosso servidor de notificações que roda na porta 9000
+        const eventSource = new EventSource('http://127.0.0.1:9000/listen');
+
+        // Função que é acionada toda vez que o servidor envia uma mensagem
+        eventSource.onmessage = function(event) {
+            console.log('Mensagem recebida do backend:', event.data);
+            try {
+                const data = JSON.parse(event.data);
+                
+                // Usa a função que já existe para adicionar a mensagem do bot na tela
+                if (data.text) {
+                    appendMessage(data.text, 'bot-message');
+                }
+            } catch (e) {
+                console.error("Erro ao processar JSON da mensagem recebida:", e);
+            }
+        };
+
+        // Função para lidar com erros de conexão
+        eventSource.onerror = function(err) {
+            console.error('Erro na conexão com o SSE Server. Verifique se o servidor sse_server.py está rodando.', err);
+        };
+        // --- FIM DO CÓDIGO NOVO ---
+
+
+        // --- Configurações Editáveis ---
+        const WEBHOOK_URL = 'http://127.0.0.1:8000/webhook';
+        const BOT_NUMBER = '15551619587';
+        const USER_NUMBER = '5511999998888';
+        // ------------------------------
+
+        async function sendMessage() {
+            const userText = messageInput.value.trim();
+            if (!userText) return;
+
+            appendMessage(userText, 'user-message');
+            messageInput.value = '';
+
+            const webhookPayload = {
+                object: "whatsapp_business_account",
+                entry: [{
+                    id: "mock_business_id",
+                    changes: [{
+                        value: {
+                            messaging_product: "whatsapp",
+                            metadata: {
+                                display_phone_number: BOT_NUMBER,
+                                phone_number_id: "mock_phone_id"
+                            },
+                            messages: [{
+                                from: USER_NUMBER,
+                                id: "wamid.mock_" + Date.now(),
+                                timestamp: String(Math.floor(Date.now() / 1000)),
+                                text: { body: userText },
+                                type: "text"
+                            }]
+                        },
+                        field: "messages"
+                    }]
+                }]
+            };
+
+            try {
+                const response = await fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(webhookPayload)
+                });
+
+                if (response.ok) {
+                    console.log('Webhook enviado com sucesso para o backend!');
+                } else {
+                    console.error('Falha ao enviar webhook:', response.statusText);
+                    appendMessage(`Erro ao contatar o backend: ${response.statusText}`, 'bot-message');
+                }
+            } catch (error) {
+                console.error('Erro de rede:', error);
+                appendMessage(`Erro de rede: não foi possível conectar a ${WEBHOOK_URL}`, 'bot-message');
+            }
+        }
+
+        function appendMessage(text, className) {
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message', className);
+            messageElement.innerText = text;
+            chatHistory.appendChild(messageElement);
+
+            // Comando mais moderno para rolar a tela até o novo elemento
+            messageElement.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }
+
+        sendButton.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
