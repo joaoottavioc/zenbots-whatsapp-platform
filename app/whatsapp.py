@@ -9,16 +9,16 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from app import crud
 from app.database import async_session
-from app.models import ProcessedMessage, Product, ShoppingCart
+from app.models import ProcessedMessage, Product, ShoppingCart, DeliveryMethod, Bot, OrderStatus
 from app.openai_client import classify_user_intent, get_ai_decision, extract_potential_items
 from app.prompt_central import create_central_prompt
 from app.tools_definition import tools_schema
 from datetime import timedelta, timezone
 import regex as re
 from sqlmodel import select
-from app.models import Product
 from app.semantic_router import semantic_intent, THRESHOLDS
 from app.address_service import get_address_from_cep
+from app.payment_service import create_pix_payment, sdk as mercadopago_sdk
 import httpx #SIMULADOR
 
 # --- Imports Atualizados ---
@@ -146,15 +146,64 @@ async def process_whatsapp_message(data: Dict[str, Any]):
             # A lógica de reset de estado continua a mesma, mas agora só será
             # acionada por intenções de compra genuínas.
             intents_that_resume_shopping = ["ADD", "REMOVE", "MODIFY", "REQUEST_SUGGESTION", "SHOW_CART", "CLEAR_CART", "ADD_ITEMS", "REMOVE_ITEMS"]
-            finalizing_states = ["AWAITING_CEP", "AWAITING_NUMBER_COMPLEMENT", "AWAITING_ADDRESS_CONFIRMATION", "AWAITING_PAYMENT_METHOD", "AWAITING_CUSTOMER_NAME"]
+            finalizing_states = ["AWAITING_CEP", "AWAITING_NUMBER_COMPLEMENT", "AWAITING_ADDRESS_CONFIRMATION", "AWAITING_CUSTOMER_NAME"]
 
             if intent in intents_that_resume_shopping and cart.state in finalizing_states:
                 print(f"🔄 Cliente voltou a comprar (Intent: {intent}). Resetando estado de '{cart.state}' para 'GREETING'.")
                 cart.state = "GREETING"
                 await session.flush()
+            
+            # Etapa 1: Escolha entre entrega e retirada
+            if cart.state == "AWAITING_DELIVERY_METHOD":
+                user_text = text_body.lower().strip()
+                
+                # Se o cliente escolher ENTREGA
+                if "entrega" in user_text or user_text == "1":
+                    cart.delivery_method = DeliveryMethod.DELIVERY
+                    cart.state = "AWAITING_CEP" # Progride para o fluxo de endereço
+                    response_to_user = "Ótimo, faremos a entrega! Para começar, por favor, me informe o seu CEP."
+                
+                # Se o cliente escolher RETIRADA
+                elif "retirada" in user_text or "buscar" in user_text or user_text == "2":
+                    cart.delivery_method = DeliveryMethod.PICKUP
+                    # Pula o fluxo de endereço e vai direto para a coleta do nome
+                    await session.refresh(cart, attribute_names=["contact"])
+                    if cart.contact and cart.contact.name:
+                        cart.state = "AWAITING_PAYMENT_METHOD"
+                        
+                        # 1. Gerar o resumo ANTES de perguntar o pagamento
+                        final_summary = _build_cart_summary_message(cart, bot, "🛍️") # Emoji de sacola para retirada
 
-            # Etapa 1: Aguardando o CEP do cliente
-            if cart.state == "AWAITING_CEP":
+                        # 2. Montar a resposta completa
+                        response_to_user = (
+                            f"Combinado, pedido para retirada no nome de *{cart.contact.name}*! ✅\n\n"
+                            f"{final_summary}\n\n" # <-- Resumo incluído aqui
+                            "Qual será a forma de pagamento? (PIX ou Cartão)"
+                        )
+                    else:
+                        cart.state = "AWAITING_CUSTOMER_NAME"
+                        response_to_user = "Combinado, pedido para retirada! Para registrar, por favor, me informe o seu nome completo."
+                
+                # Se a resposta for inválida
+                else:
+                    response_to_user = "Não entendi. Por favor, escolha entre *Entrega* (1) ou *Retirada* (2)."
+                
+                cart.last_activity_at = utcnow()
+                session.add(cart)
+
+                try:
+                    async with httpx.AsyncClient() as client:
+                        await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
+                except httpx.RequestError as e:
+                    print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
+
+                await send_whatsapp_message(contact_number, response_to_user)
+                await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
+                await session.commit()
+                return
+                
+            # Etapa 2: Aguardando o CEP do cliente
+            elif cart.state == "AWAITING_CEP":
                 address_data = await get_address_from_cep(text_body)
                 
                 if not address_data:
@@ -183,7 +232,7 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                 await session.commit()
                 return
 
-            # Etapa 2: Aguardando número/complemento E PEDINDO CONFIRMAÇÃO
+            # Etapa 3: Aguardando número/complemento E PEDINDO CONFIRMAÇÃO
             elif cart.state == "AWAITING_NUMBER_COMPLEMENT":
                 partial = cart.partial_address
                 number_complement = text_body.strip()
@@ -221,7 +270,7 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                 await session.commit()
                 return
 
-            # Etapa 3: Aguardando a confirmação final do endereço
+            # Etapa 4: Aguardando a confirmação final do endereço
             elif cart.state == "AWAITING_ADDRESS_CONFIRMATION":
                 # A intenção aqui será 'CONFIRM' ou 'NEGATE'
                 if intent == "CONFIRM":
@@ -256,7 +305,7 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                 await session.commit()
                 return
              
-            # Etapa 4: Aguardando o nome do cliente
+            # Etapa 5: Aguardando o nome do cliente
             elif cart.state == "AWAITING_CUSTOMER_NAME":
                 customer_name = text_body.strip()
             
@@ -264,8 +313,20 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                 await crud.save_customer_name_to_contact(session, cart.contact_id, customer_name)
             
                 cart.state = "AWAITING_PAYMENT_METHOD"
-                # Personaliza a próxima pergunta com o primeiro nome do cliente
-                response_to_user = f"Ótimo, {customer_name.split(' ')[0]}! Para finalizar, qual será a forma de pagamento? (PIX ou Cartão)"
+                
+                # --- LÓGICA DE MENSAGEM APRIMORADA ---
+                # 1. Gera o resumo final e completo do pedido, já com a taxa de entrega.
+                final_summary = _build_cart_summary_message(cart, bot, "📦")
+
+                # 2. Monta a mensagem final com o título e os detalhes
+                response_to_user = (
+                    f"Ótimo, {customer_name.split(' ')[0]}! Seu pedido foi confirmado. ✅\n\n"
+                    "----- *Detalhes do Pedido* -----\n"
+                    f"{final_summary}\n"
+                    "--------------------------------\n\n"
+                    "Para finalizar, qual será a forma de pagamento? (PIX ou Cartão)"
+                )
+                # --- FIM DA LÓGICA APRIMORADA ---
 
                 cart.last_activity_at = utcnow()
                 session.add(cart)
@@ -284,50 +345,98 @@ async def process_whatsapp_message(data: Dict[str, Any]):
             elif cart.state == "AWAITING_PAYMENT_METHOD":
                 user_text = text_body.lower()
                 order_created = False # Flag para saber se devemos limpar o carrinho
+                pix_code_to_send = None
 
-                # Verifica se a resposta é uma forma de pagamento válida
+                # Ação principal: criar o pedido no banco de dados ANTES de processar o pagamento
                 if "pix" in user_text or "cartão" in user_text or "cartao" in user_text:
-                    # Carrega todos os dados necessários para criar o pedido
                     await session.refresh(cart, attribute_names=["items", "contact"])
                     if not cart.contact:
-                         raise Exception(f"Carrinho {cart.id} não possui um contato associado.")
-                    
+                        raise Exception(f"Carrinho {cart.id} não possui um contato associado.")
+
                     bot_id = cart.contact.bot_id
                     items_for_order = [{"product_id": item.product_id, "quantity": item.quantity} for item in cart.items]
-                    address = getattr(cart, 'customer_address', None) # Usamos getattr para segurança
+                    
+                    # Inclui a taxa de entrega no total do pedido ANTES de salvar
+                    total_amount = sum(item.product.price * item.quantity for item in cart.items)
+                    if cart.delivery_method == DeliveryMethod.DELIVERY and bot.delivery_fee > 0:
+                        total_amount += bot.delivery_fee
 
-                    # Cria o pedido no banco de dados ANTES de responder ao usuário
-                    await crud.create_order(session, bot_id=bot_id, items=items_for_order, customer_address=address)
-                    order_created = True
-
-                # Agora, monta a resposta com base na escolha
-                if "pix" in user_text:
-                    if bot.pix_key:
-                        response_to_user = (
-                            f"Ótima escolha! Seu pedido foi registrado com sucesso. ✅\n\n"
-                            f"Você pode fazer o pagamento usando nossa chave PIX:\n🔑 *{bot.pix_key}*\n\n"
-                            "Muito obrigado pela sua preferência!"
-                        )
-                    else:
-                        response_to_user = "Puxa, parece que não temos uma chave PIX configurada. Poderia ser no Cartão?"
-                        order_created = False # Impede a finalização se não há chave PIX
-                
-                elif "cartão" in user_text or "cartao" in user_text:
-                    response_to_user = (
-                        "Combinado! Seu pedido foi registrado. ✅\n\n"
-                        "Nosso entregador levará a maquininha de cartão até você.\n\n"
-                        "Muito obrigado pela sua preferência!"
+                    order = await crud.create_order(
+                        session,
+                        bot_id=bot_id,
+                        items=items_for_order,
+                        customer_address=cart.customer_address,
+                        total_amount=total_amount # Passa o total já calculado
                     )
+                else:
+                    order = None
+
+                # Agora, com o pedido criado, montamos a resposta específica
+                if "pix" in user_text:
+                    if order:
+                        # 1. Chamar o serviço de pagamento para gerar o PIX real
+                        pix_info = await create_pix_payment(
+                            order_id=order.id,
+                            total_amount=order.total_amount,
+                            bot_name=bot.restaurant_name,
+                            contact_phone=contact.phone_number
+                        )
+
+                        if pix_info:
+                            # 2. Se o PIX foi gerado, envie o "Copia e Cola"
+                            response_to_user = (
+                                "Seu pedido foi registrado! ✅\n\n"
+                                "Use o PIX Copia e Cola acima para fazer o pagamento em até 15 minutos. Enviaremos uma confirmação assim que for aprovado.\n\n"
+                            )
+                            
+                            # Mensagem 2: O código (texto puro, sem formatação)
+                            pix_code_to_send = pix_info['pix_copy_paste']
+                            
+                            order_created = True
+                        else:
+                            # 3. Se falhou, avise o usuário e reverta o pedido
+                            response_to_user = "Tivemos um problema ao gerar o PIX. Por favor, tente pagar com Cartão."
+                            await crud.delete_order(session, order.id) # Reverte o pedido
+                    else:
+                        response_to_user = "Não entendi. Por favor, escolha entre *PIX* ou *Cartão*."
+
+                elif "cartão" in user_text or "cartao" in user_text:
+                    if order:
+                        order_created = True
+                        if cart.delivery_method == DeliveryMethod.DELIVERY:
+                            response_to_user = (
+                                "Combinado! Seu pedido foi registrado. ✅\n\n"
+                                "Nosso entregador levará a maquininha de cartão até você.\n\n"
+                                "Muito obrigado pela sua preferência!"
+                            )
+                        else:
+                            response_to_user = (
+                                "Combinado! Seu pedido foi registrado. ✅\n\n"
+                                "O pagamento com cartão será feito no balcão ao retirar o pedido.\n\n"
+                                "Muito obrigado pela sua preferência!"
+                            )
+                    else:
+                        response_to_user = "Não entendi. Por favor, escolha entre *PIX* ou *Cartão*."
                 
                 else:
                     response_to_user = "Não entendi. Por favor, escolha entre *PIX* ou *Cartão*."
 
-                # Limpa o carrinho APENAS se o pedido foi criado com sucesso
+                # Limpa o carrinho APENAS se o pedido foi criado e o pagamento iniciado com sucesso
                 if order_created:
                     await crud.clear_db_cart(session, cart.id)
 
                 cart.last_activity_at = utcnow()
                 session.add(cart)
+                
+                
+                # Envia a Mensagem 2 (O CÓDIGO) se ela existir
+                if pix_code_to_send:
+                    try:
+                        async with httpx.AsyncClient() as client:
+                            await client.post("http://host.docker.internal:9000/broadcast", json={"text": pix_code_to_send})
+                    except httpx.RequestError as e:
+                        print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
+                    await send_whatsapp_message(contact_number, pix_code_to_send)
                 
                 try:
                     async with httpx.AsyncClient() as client:
@@ -346,7 +455,7 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                 # Esta lógica tem prioridade máxima.
                 if has_valid_pending(cart):
                     if intent == "CONFIRM":
-                        response_to_user = await _execute_pending_action(session, cart, bot_id=bot.id)
+                        response_to_user = await _execute_pending_action(session, cart, bot=bot)
                     else: # NEGATE
                         clear_pending(cart)
                         response_to_user = "Beleza, cancelei aquela opção. O que gostaria de fazer agora?"
@@ -396,39 +505,50 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                 cart.last_suggestions = None
                 response_to_user = "🛒 Carrinho esvaziado."
             elif intent == "SHOW_CART":
-                response_to_user = _build_cart_summary_message(cart)
+                response_to_user = _build_cart_summary_message(cart, bot)
                 
             elif intent == "FINISH_ORDER":
-                # Garante que o contato associado ao carrinho seja carregado para checar o nome
+                # Garante que temos os dados mais recentes do carrinho e contato
                 await session.refresh(cart, attribute_names=["items", "contact"])
                 
                 if not cart.items:
                     response_to_user = "Seu carrinho está vazio. O que você gostaria de pedir?"
+                
+                # NOVO PASSO: Se o método de entrega ainda não foi escolhido, esta é a primeira pergunta.
+                elif cart.delivery_method is None:
+                    cart.state = "AWAITING_DELIVERY_METHOD"
+                    
+                    # 1. Define a linha de "Entrega", sempre mostrando o valor
+                    entrega_line = f"1️⃣  *Entrega* 🛵 (R$ {bot.delivery_fee:.2f})"
 
-                # CASO 1: Já temos um endereço COMPLETO E CONFIRMADO?
+                    # 2. Define a linha de "Retirada", sempre mostrando R$ 0.00
+                    retirada_line = "2️⃣  *Retirada no local* 🛍️ (R$ 0.00)"
+
+                    # 3. Monta a mensagem completa
+                    response_to_user = (
+                        "Entendido. Para finalizar, seu pedido será para:\n\n"
+                        f"{entrega_line}\n"
+                        f"{retirada_line}\n\n"
+                        "Por favor, responda com o número ou a palavra."
+                    )
+                
+                # Se o método de entrega já foi definido, o fluxo inteligente anterior continua
+                elif cart.customer_address and cart.contact and cart.contact.name:
+                    print(f"✅ Endereço e nome já salvos. Pulando para pagamento.")
+                    cart.state = "AWAITING_PAYMENT_METHOD"
+                    response_to_user = (
+                        f"Notei que já temos seu endereço salvo:\n\n"
+                        f"🏠 *{cart.customer_address}*\n\n"
+                        f"E o pedido está no nome de *{cart.contact.name}*.\n\n"
+                        f"Qual será a forma de pagamento? (PIX ou Cartão)"
+                    )
                 elif cart.customer_address:
-                    
-                    # CASO 1.1: E TAMBÉM já temos o nome do cliente salvo? Ótimo! Vamos para o pagamento.
-                    if cart.contact and cart.contact.name:
-                        print(f"✅ Endereço e nome já salvos. Pulando para pagamento.")
-                        cart.state = "AWAITING_PAYMENT_METHOD"
-                        response_to_user = (
-                            f"Notei que já temos seu endereço salvo:\n\n"
-                            f"🏠 *{cart.customer_address}*\n\n"
-                            f"E o pedido está no nome de *{cart.contact.name}*.\n\n"
-                            f"Qual será a forma de pagamento? (PIX ou Cartão)"
-                        )
-                    
-                    # CASO 1.2: MAS AINDA NÃO temos o nome? Então pedimos o nome.
-                    else:
-                        print(f"✅ Endereço salvo, mas nome não encontrado. Solicitando nome.")
-                        cart.state = "AWAITING_CUSTOMER_NAME"
-                        response_to_user = (
-                            "Ok, vamos continuar. Já tenho seu endereço. "
-                            "Agora, por favor, me informe o nome completo para a entrega."
-                        )
-
-                # CASO 2: Não temos endereço completo, mas temos um PENDENTE de confirmação?
+                    print(f"✅ Endereço salvo, mas nome não encontrado. Solicitando nome.")
+                    cart.state = "AWAITING_CUSTOMER_NAME"
+                    response_to_user = (
+                        "Ok, vamos continuar. Já tenho seu endereço. "
+                        "Agora, por favor, me informe o nome completo para a entrega."
+                    )
                 elif cart.pending_address:
                     print(f"▶️ Retomando fluxo: Aguardando confirmação do endereço.")
                     cart.state = "AWAITING_ADDRESS_CONFIRMATION"
@@ -437,8 +557,6 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                         f"🏠 *{cart.pending_address}*\n\n"
                         f"Posso confirmar? (Sim / Não)"
                     )
-                
-                # CASO 3: Não temos endereço pendente, mas temos um PARCIAL (do CEP)?
                 elif cart.partial_address:
                     address_data = cart.partial_address
                     print(f"▶️ Retomando fluxo: Aguardando número/complemento para o CEP.")
@@ -449,11 +567,10 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                         f"{address_data['city']} - {address_data['state']}\n\n"
                         f"Por favor, me informe o *número* e o *complemento* (se houver)."
                     )
-
-                # CASO 4: Se não temos NADA, aí sim começamos do CEP.
                 else:
+                    # Este 'else' agora só é atingido se o método de entrega for DELIVERY, mas nenhum endereço foi coletado
                     cart.state = "AWAITING_CEP"
-                    response_to_user = "Entendido. Para finalizar, por favor, me informe o seu CEP."
+                    response_to_user = "Ótimo, faremos a entrega! Para começar, por favor, me informe o seu CEP."
                     
             else:  # Lógica principal para ADD, REMOVE, MODIFY, REQUEST_SUGGESTION
                 # Preparação comum para todos os intents deste bloco
@@ -551,7 +668,7 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                                     # SUCESSO: O carrinho foi alterado, então mostramos o resumo.
                                     product_ids = [i.get("product_id") for i in items_arg if isinstance(i, dict) and i.get("product_id") is not None]
                                     if not any(pid in (cart.last_suggestions or []) for pid in product_ids): cart.last_suggestions = None
-                                    response_to_user = _build_cart_summary_message(cart, "✅") + "\n\nAlgo mais?"
+                                    response_to_user = _build_cart_summary_message(cart, bot, "✅") + "\n\nAlgo mais?"
                                 else:
                                     # FALHA SILENCIOSA: A operação não alterou o carrinho, então informamos que o item não foi encontrado.
                                     extracted_items_for_msg = await extract_potential_items(text_body)
@@ -578,7 +695,7 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                                     for pid in targets:
                                         await crud.modify_item_quantity_in_db_cart(session, cart.id, pid, 0)
                                     await session.refresh(cart, attribute_names=['items'])
-                                    response_to_user = _build_cart_summary_message(cart, "❌") + "\n\nAlgo mais?"
+                                    response_to_user = _build_cart_summary_message(cart, bot, "❌") + "\n\nAlgo mais?"
 
                             elif tool_name == "modify_item_quantity":
                                 try:
@@ -591,7 +708,7 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                                 else:
                                     await crud.modify_item_quantity_in_db_cart(session, cart.id, pid, newq)
                                     await session.refresh(cart, attribute_names=['items'])
-                                    response_to_user = _build_cart_summary_message(cart, "✏️") + "\n\nAlgo mais?"
+                                    response_to_user = _build_cart_summary_message(cart, bot, "✏️") + "\n\nAlgo mais?"
 
                             else:  # bulk_modify_quantities
                                 updates_raw = tool_args.get("updates", []) or []
@@ -608,7 +725,7 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                                     for upd in updates:
                                         await crud.modify_item_quantity_in_db_cart(session, cart.id, upd["product_id"], upd["new_quantity"])
                                     await session.refresh(cart, attribute_names=['items'])
-                                    response_to_user = _build_cart_summary_message(cart, "✏️") + "\n\nAlgo mais?"
+                                    response_to_user = _build_cart_summary_message(cart, bot, "✏️") + "\n\nAlgo mais?"
 
                         elif tool_name == "propose_and_confirm_action":
                             question = tool_args.get("confirmation_question")
@@ -684,15 +801,30 @@ async def process_whatsapp_message(data: Dict[str, Any]):
             await send_whatsapp_message(contact_number, "Desculpe, ocorreu um erro inesperado.")
 
 
-def _build_cart_summary_message(cart: ShoppingCart, emoji: str = "🛒") -> str:
+def _build_cart_summary_message(cart: ShoppingCart, bot: Bot, emoji: str = "🛒") -> str:
     if not cart.items:
         return "🗑️ *Seu carrinho agora está vazio.*"
-    cart_summary_lines, total_amount = [], 0.0
+        
+    cart_summary_lines = []
+    subtotal = 0.0
     for item in cart.items:
         line_total = item.product.price * item.quantity
-        total_amount += line_total
+        subtotal += line_total
         cart_summary_lines.append(f"- {item.quantity}x {item.product.name} (R$ {line_total:.2f})")
-    return f"{emoji} *Seu Pedido Atual:*\n" + "\n".join(cart_summary_lines) + f"\n\nTotal: *R$ {total_amount:.2f}*"
+
+    summary_text = f"{emoji} *Seu Pedido Atual:*\n" + "\n".join(cart_summary_lines)
+    
+    total_amount = subtotal
+    
+    # ▼▼▼ LÓGICA CORRIGIDA E ADICIONADA ▼▼▼
+    # Verifica se o método é entrega E se a taxa é maior que zero
+    if cart.delivery_method == DeliveryMethod.DELIVERY and bot.delivery_fee > 0:
+        total_amount += bot.delivery_fee
+        summary_text += f"\n\nTaxa de Entrega: R$ {bot.delivery_fee:.2f}"
+    # ▲▲▲ FIM DA CORREÇÃO ▲▲▲
+
+    summary_text += f"\n\nTotal: *R$ {total_amount:.2f}*"
+    return summary_text
 
 @router.get("/webhook")
 async def verify_webhook(request: Request):
@@ -725,49 +857,67 @@ async def mark_message_as_read(message_id: str):
         except httpx.HTTPStatusError as e:
             print(f"Erro ao marcar mensagem como lida: {e.response.text}")
 
-async def _execute_pending_action(session: AsyncSession, cart: ShoppingCart, bot_id: int) -> str:
+async def _execute_pending_action(session: AsyncSession, cart: ShoppingCart, bot: Bot) -> str:
     tool = cart.pending_action_tool
     args = cart.pending_action_args or {}
     if isinstance(args, str):
-        try: args = json.loads(args)
-        except json.JSONDecodeError: args = {}
+        try:
+            args = json.loads(args)
+        except json.JSONDecodeError:
+            args = {}
+            
     print(f"EXECUTANDO AÇÃO PENDENTE -> Ferramenta: {tool}, Argumentos: {args}")
+
+    # Obtém o bot_id a partir do objeto bot para usar na lógica existente
+    bot_id = bot.id
+    
     if not tool:
         clear_pending(cart)
         return "Não encontrei nenhuma ação para confirmar. Quer continuar seu pedido?"
+
     if tool == "add_items_to_cart":
         items_to_add = args.get("items", [])
         if not items_to_add:
             rebuilt = await _items_from_confirmation_question(session, bot_id, cart.pending_action_question)
-            if rebuilt: items_to_add = rebuilt
+            if rebuilt:
+                items_to_add = rebuilt
         if not items_to_add:
             clear_pending(cart)
             return "A proposta para adicionar itens estava incompleta. Pode repetir o que deseja?"
+            
         item_ids = [item.get("product_id") for item in items_to_add if isinstance(item, dict) and item.get("product_id") is not None]
         if not item_ids:
             clear_pending(cart)
             return "Não consegui identificar os produtos na proposta. Poderia me dizer novamente?"
+            
         res = await session.execute(select(Product.id).where(Product.bot_id == bot_id, Product.id.in_(item_ids)))
         valid_product_ids = set(res.scalars().all())
         valid_items = [item for item in items_to_add if isinstance(item, dict) and item.get("product_id") in valid_product_ids]
+        
         if not valid_items:
             clear_pending(cart)
             return "Os itens propostos não foram encontrados em nosso cardápio. Quer ver outras opções?"
+            
         await crud.add_items_to_db_cart(session, cart.id, valid_items)
         await session.flush()
         await session.refresh(cart, attribute_names=['items'])
         clear_pending(cart)
-        return _build_cart_summary_message(cart, "✅") + "\n\nAlgo mais?"
+        # --- CORREÇÃO APLICADA ---
+        return _build_cart_summary_message(cart, bot, "✅") + "\n\nAlgo mais?"
+
     if tool == "modify_item_quantity":
         pid, newq = args.get("product_id"), args.get("new_quantity")
         if pid is None or newq is None:
             clear_pending(cart)
             return "A proposta para modificar o item estava incompleta. Pode repetir?"
+            
         await crud.modify_item_quantity_in_db_cart(session, cart.id, int(pid), int(newq))
         await session.flush()
         await session.refresh(cart, attribute_names=['items'])
         clear_pending(cart)
-        return _build_cart_summary_message(cart, "✏️") + "\n\nAlgo mais?"
+        # --- CORREÇÃO APLICADA ---
+        return _build_cart_summary_message(cart, bot, "✏️") + "\n\nAlgo mais?"
+
     if tool == "remove_items_from_cart":
         ids = args.get("product_ids", [])
         for pid in ids:
@@ -775,16 +925,20 @@ async def _execute_pending_action(session: AsyncSession, cart: ShoppingCart, bot
         await session.flush()
         await session.refresh(cart, attribute_names=['items'])
         clear_pending(cart)
-        return _build_cart_summary_message(cart, "❌") + "\n\nAlgo mais?"
+        # --- CORREÇÃO APLICADA ---
+        return _build_cart_summary_message(cart, bot, "❌") + "\n\nAlgo mais?"
+
     if tool == "answer_with_found_products":
         names = args.get("product_names", [])
         text = "Essas são algumas sugestões para você:\n" + "\n".join(f"{i+1}. {n}" for i, n in enumerate(names)) if names else "Posso sugerir algumas opções, se quiser."
         if names:
             res = await session.execute(select(Product).where(Product.bot_id == bot_id, Product.name.in_(names)))
             prods = res.scalars().all()
-            if prods: cart.last_suggestions = [p.id for p in prods]
+            if prods:
+                cart.last_suggestions = [p.id for p in prods]
         clear_pending(cart)
         return text
+
     clear_pending(cart)
     return "A proposta não pôde ser executada. Pode me dizer de novo o que deseja?"
 
@@ -867,3 +1021,108 @@ def is_likely_shopping_intent(text: str) -> bool:
     text_lower = text.lower()
     # Usamos \b para garantir que estamos pegando a palavra inteira (evita "quero" em "qualquer")
     return any(re.search(r'\b' + keyword + r'\b', text_lower) for keyword in shopping_keywords)
+
+@router.post("/webhooks/payment-confirm")
+async def handle_payment_notification(request: Request):
+    """
+    Este é o endpoint que o Mercado Pago (MP) chamará.
+    
+    FLUXO CORRIGIDO:
+    1. Recebe a notificação (ping) do MP com o ID do pagamento.
+    2. Usa o SDK para buscar os dados completos desse pagamento.
+    3. Processa os dados completos (status, external_reference, etc.).
+    """
+    async with async_session() as session:
+        data = await request.json()
+        print(f"🔔 Notificação de Pagamento Recebida: {data}")
+
+        try:
+            # 1. Analisa a NOTIFICAÇÃO (o "ping" inicial)
+            notification_type = data.get("type")
+            payment_id_str = data.get("data", {}).get("id")
+
+            if notification_type != "payment" or not payment_id_str:
+                print(f"Notificação ignorada (tipo: {notification_type}, ID: {payment_id_str}).")
+                return JSONResponse(content={"status": "notification_ignored"}, status_code=200)
+
+            # 2. Busca os dados completos do pagamento no Mercado Pago
+            print(f"Buscando detalhes do pagamento ID: {payment_id_str}...")
+            payment_data = None
+            try:
+                payment_info_response = mercadopago_sdk.payment().get(payment_id_str)
+                
+                if payment_info_response["status"] == 200:
+                    payment_data = payment_info_response["response"]
+                    print(f"✅ Detalhes do pagamento obtidos: {payment_data.get('status')}")
+                else:
+                    print(f"❌ Erro ao buscar dados do MP: {payment_info_response}")
+                    return JSONResponse(content={"status": "mp_get_failed"}, status_code=200)
+                    
+            except Exception as e:
+                print(f"❌ Erro CRÍTICO ao chamar SDK do MP: {e}")
+                return JSONResponse(content={"status": "internal_error_sdk"}, status_code=200)
+
+            # 3. Processa os DADOS COMPLETOS (LÓGICA REORDENADA)
+            
+            payment_status = payment_data.get("status")
+
+            # ▼▼▼ INÍCIO DA CORREÇÃO DE LÓGICA ▼▼▼
+            # 3.1. Primeiro, mapeamos o status para o nosso status do DB
+            db_status_to_update = None
+            if payment_status == "approved":
+                db_status_to_update = OrderStatus.PAID
+            elif payment_status in ("rejected", "cancelled", "failed"):
+                db_status_to_update = OrderStatus.FAILED
+            elif payment_status == "expired":
+                db_status_to_update = OrderStatus.EXPIRED
+            
+            # 3.2. Se o status não for final (ex: "pending", "in_process"),
+            #      paramos a execução. Não há nada a fazer ainda.
+            if not db_status_to_update:
+                print(f"Status de pagamento '{payment_status}' (pendente) ignorado. Nenhuma ação necessária.")
+                return JSONResponse(content={"status": "status_ignored_pending"}, status_code=200)
+            
+            # 3.3. SÓ SE o status for final (approved, failed, etc.),
+            #      continuamos para validar o resto dos dados.
+            order_id_str = payment_data.get("external_reference")
+            psp_charge_id = payment_data.get("id") # ID do pagamento no MP
+            payer_email = payment_data.get("payer", {}).get("email")
+
+            if not order_id_str or not psp_charge_id or not payer_email:
+                print(f"❌ Pagamento ID {payment_id_str} com status '{payment_status}' sem dados essenciais (external_reference, id, payer.email)")
+                return JSONResponse(content={"status": "missing_data_but_ok"}, status_code=200)
+            # ▲▲▲ FIM DA CORREÇÃO DE LÓGICA ▲▲▲
+            
+            order_id = int(order_id_str)
+            phone_number = payer_email.split('@')[0] #
+
+            # 4. Atualiza o banco e notifica o cliente (como antes)
+            order = await crud.update_order_status_by_id(
+                session, 
+                order_id, 
+                db_status_to_update, 
+                str(psp_charge_id)
+            )
+
+            if order and order.status == OrderStatus.PAID:
+                restaurant_name = order.bot.restaurant_name or "o restaurante"
+                message = (
+                    f"Pagamento APROVADO! ✅\n\n"
+                    f"Seu pedido #{order.id} no {restaurant_name} foi confirmado e já está sendo preparado. Obrigado!"
+                )
+                await send_whatsapp_message(phone_number, message) # (Ignorando erros do simulador)
+            
+            elif order and (order.status == OrderStatus.FAILED or order.status == OrderStatus.EXPIRED):
+                message = (
+                    f"Opa! O pagamento do seu pedido #{order.id} falhou ou expirou. 😕\n\n"
+                    f"Por favor, fale conosco novamente para refazer o pedido."
+                )
+                await send_whatsapp_message(phone_number, message) # (Ignorando erros do simulador)
+
+            return JSONResponse(content={"status": "received"}, status_code=200)
+
+        except Exception as e:
+            print(f"❌ Erro crítico ao processar webhook de pagamento: {e}")
+            if session.is_active:
+                await session.rollback()
+            return JSONResponse(content={"status": "internal_error_but_ok"}, status_code=200)

@@ -5,6 +5,12 @@ from datetime import datetime, timedelta, timezone
 import enum
 from sqlmodel import JSON as SA_JSON
 from sqlalchemy import Column, TIMESTAMP, text, JSON, DateTime
+import enum
+
+# ▼▼▼ 1. ADICIONE ESTE ENUM NO TOPO DO ARQUIVO ▼▼▼
+class DeliveryMethod(str, enum.Enum):
+    DELIVERY = "delivery"
+    PICKUP = "pickup"
 
 # Define forward references for type hinting
 class Bot(SQLModel): pass
@@ -28,6 +34,9 @@ class Bot(SQLModel, table=True):
     whatsapp_number: str = Field(unique=True, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     pix_key: Optional[str] = Field(default=None, index=True)
+
+    # Permite que cada restaurante defina sua taxa de entrega
+    delivery_fee: float = Field(default=0.0)
     
     user_id: int = Field(foreign_key="user.id")
     user: "User" = Relationship(back_populates="bots")
@@ -99,6 +108,9 @@ class ShoppingCart(SQLModel, table=True):
     customer_address: Optional[str] = Field(default=None)
 
     proposed_action: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(SA_JSON))
+
+    # Armazena a escolha do cliente para a sessão atual
+    delivery_method: Optional[DeliveryMethod] = Field(default=None)
 
     # ▼▼▼ NOVO CAMPO ▼▼▼
     # Este campo controlará se o bot está ativo ou não para este carrinho/cliente.

@@ -49,6 +49,7 @@ class BotUpdate(BaseModel):
     restaurant_name: Optional[str] = None
     whatsapp_number: Optional[str] = None
     pix_key: Optional[str] = None
+    delivery_fee: Optional[float] = None
 
 class BotResponse(BaseModel):
     """

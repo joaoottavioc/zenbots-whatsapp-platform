@@ -64,12 +64,14 @@ async def update_user_bot(
     if db_bot.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Acesso negado.")
 
-    # 3. Chama a função genérica do CRUD para aplicar as atualizações
+    # ▼▼▼ CORREÇÃO APLICADA AQUI ▼▼▼
+    # 3. Chama a função do CRUD passando 'bot_id' em vez de 'db_bot'
     updated_bot = await crud.update_bot(
-        session=session, 
-        db_bot=db_bot, 
+        session=session,
+        bot_id=bot_id,  # Passa o ID que a função espera
         update_data=bot_update_data
     )
+    # ▲▲▲ FIM DA CORREÇÃO ▲▲▲
 
     return updated_bot
 
@@ -184,63 +186,86 @@ async def list_products_for_bot(
     products = await crud.get_products_by_bot_id(session, bot_id=bot_id)
     return products
 
-@router.put("/products/{product_id}", response_model=schemas.ProductResponse)
+@router.put("/bots/{bot_id}/products/{product_id}", response_model=schemas.ProductResponse)
 async def update_product_endpoint(
+    bot_id: int,
     product_id: int,
     product_data: schemas.ProductUpdate,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    """Atualiza um produto, verificando a propriedade através do bot."""
+    """Atualiza um produto, verificando a propriedade do bot e do produto."""
+    
+    # 1. Verifica se o bot pertence ao usuário
+    db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
+    if not db_bot or db_bot.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Acesso negado ao bot.")
+
+    # 2. Busca o produto
     db_product = await crud.get_product_by_id(session, product_id=product_id)
     
+    # 3. Verifica se o produto existe e se pertence ao bot da URL
     if not db_product:
         raise HTTPException(status_code=404, detail="Produto não encontrado.")
-        
-    # Verificação de segurança: o bot deste produto pertence ao usuário logado?
-    if db_product.bot.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Acesso negado.")
+    if db_product.bot_id != bot_id:
+        raise HTTPException(status_code=403, detail="Produto não pertence a este bot.")
 
+    # 4. Chama a função CRUD (agora corrigida)
     return await crud.update_product(session, db_product=db_product, update_data=product_data)
 
 # No seu arquivo de rotas (ex: app/bot_routes.py)
 
-@router.delete("/products/{product_id}", status_code=204)
+@router.delete("/bots/{bot_id}/products/{product_id}", status_code=204)
 async def delete_product_endpoint(
+    bot_id: int,
     product_id: int,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    """Exclui um produto, verificando a propriedade."""
+    """Exclui um produto, verificando a propriedade do bot e do produto."""
+    
+    # 1. Verifica se o bot pertence ao usuário
+    db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
+    if not db_bot or db_bot.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Acesso negado ao bot.")
+
+    # 2. Busca o produto
     db_product = await crud.get_product_by_id(session, product_id=product_id)
     
+    # 3. Verifica se o produto existe e se pertence ao bot da URL
     if not db_product:
         raise HTTPException(status_code=404, detail="Produto não encontrado.")
-        
-    if db_product.bot.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Acesso negado.")
+    if db_product.bot_id != bot_id:
+        raise HTTPException(status_code=403, detail="Produto não pertence a este bot.")
 
     await crud.delete_product(session, db_product=db_product)
-    # Respostas 204 (No Content) não devem ter corpo
     return
 
 # No seu arquivo de rotas (ex: app/bot_routes.py)
 
-@router.post("/products/bulk-delete")
+@router.post("/bots/{bot_id}/products/bulk-delete")
 async def bulk_delete_products_endpoint(
+    bot_id: int, # <-- 1. Adiciona o bot_id
     delete_data: schemas.ProductBulkDeleteRequest,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    """Exclui uma lista de produtos em uma única operação."""
+    """Exclui uma lista de produtos de um bot específico em uma única operação."""
+
+    # 2. Adiciona a verificação de posse do bot ( crucial para segurança)
+    db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
+    if not db_bot or db_bot.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Acesso negado ao bot.")
     
+    # 3. Chama a nova função CRUD simplificada
     deleted_count = await crud.bulk_delete_products(
         session=session,
-        user_id=current_user.id,
+        bot_id=bot_id, # <-- Passa o bot_id validado
         product_ids=delete_data.product_ids
     )
 
     if deleted_count == 0 and len(delete_data.product_ids) > 0:
-        raise HTTPException(status_code=403, detail="Nenhum produto foi deletado. Verifique as permissões ou os IDs.")
+        # A mensagem de erro agora é mais específica
+        raise HTTPException(status_code=403, detail="Nenhum produto foi deletado. Verifique se os IDs pertencem a este bot.")
 
     return {"message": f"{deleted_count} produtos foram excluídos com sucesso."}

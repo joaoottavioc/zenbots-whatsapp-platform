@@ -6,7 +6,7 @@ from typing import List, Optional, Dict
 from datetime import datetime
 from app.utils import normalize_phone
 from sqlalchemy import text
-from app.models import Contact, ShoppingCart 
+from app.models import Contact, ShoppingCart, Order, OrderStatus
 
 # 1. Imports unificados e limpos
 from app.models import (
@@ -76,6 +76,10 @@ async def add_items_to_db_cart(session: AsyncSession, cart_id: int, items_to_add
     for item_data in items_to_add:
         product_id = item_data.get("product_id")
         quantity_to_add = item_data.get("quantity", 1)
+
+        if not isinstance(quantity_to_add, int) or quantity_to_add <= 0:
+            continue
+
         existing_item = next((item for item in cart.items if item.product_id == product_id), None)
         
         if existing_item:
@@ -125,6 +129,7 @@ async def clear_db_cart(session: AsyncSession, cart_id: int) -> Optional[Shoppin
     cart.pending_action_args = None
     cart.pending_action_question = None
     cart.pending_action_expires_at = None
+    cart.delivery_method = None
 
     # se você usa last_suggestions, pode limpar também:
     cart.last_suggestions = None
@@ -316,9 +321,11 @@ async def update_bot(session: AsyncSession, bot_id: int, update_data: BotUpdate)
     # Chave da correção: Retorna o bot com as relações carregadas para o FastAPI.
     return await get_bot_by_id(session, bot_id=db_bot.id)
 
-async def delete_bot(session: AsyncSession, bot_id: int) -> bool:
-    """CORREÇÃO: Recebe bot_id e busca o bot para deletar."""
-    db_bot = await session.get(Bot, bot_id)
+async def delete_bot(session: AsyncSession, db_bot: Bot) -> bool:
+    """
+    Deleta um objeto Bot que já foi buscado e verificado pela rota.
+    (Recebe o objeto Bot, não o bot_id)
+    """
     if not db_bot:
         return False
         
@@ -345,8 +352,11 @@ async def create_product(session: AsyncSession, bot_id: int, name: str, descript
     await session.refresh(new_product)
     return new_product
 
-async def update_product(session: AsyncSession, product_id: int, update_data: ProductUpdate) -> Optional[Product]:
-    db_product = await session.get(Product, product_id)
+async def update_product(session: AsyncSession, db_product: Product, update_data: ProductUpdate) -> Optional[Product]:
+    """
+    Atualiza um objeto Product que já foi buscado e verificado pela rota.
+    (Recebe o objeto Product, não o product_id)
+    """
     if not db_product:
         return None
 
@@ -357,6 +367,20 @@ async def update_product(session: AsyncSession, product_id: int, update_data: Pr
         # ▼▼▼ Verifica se um campo relevante para o embedding mudou ▼▼▼
         if key in ["name", "description", "keywords"]:
             needs_re_embedding = True
+    
+    # ▼▼▼ LÓGICA DE RE-EMBEDDING CORRIGIDA ▼▼▼
+    if needs_re_embedding:
+        text_to_embed = (
+            f"PRODUTO PRINCIPAL: {db_product.name}. "
+            f"DESCRIÇÃO E INGREDIENTES: {db_product.description or 'N/A'}. "
+            f"CATEGORIAS E TAGS: {db_product.keywords or 'N/A'}."
+        )
+        db_product.embedding = generate_embedding(text_to_embed)
+        
+    session.add(db_product)
+    await session.commit()
+    await session.refresh(db_product)
+    return db_product
     
     # ▼▼▼ LÓGICA DE RE-EMBEDDING CORRIGIDA ▼▼▼
     if needs_re_embedding:
@@ -392,15 +416,25 @@ async def bulk_create_products(session: AsyncSession, bot_id: int, products_data
         
     return len(products_to_add)
 
+async def get_products_by_bot_id(session: AsyncSession, bot_id: int) -> List[Product]:
+    """Busca todos os produtos associados a um bot_id específico."""
+    query = select(Product).where(Product.bot_id == bot_id)
+    result = await session.execute(query)
+    return result.scalars().all()
+
 async def get_product_by_id(session: AsyncSession, product_id: int) -> Optional[Product]:
     query = select(Product).where(Product.id == product_id).options(selectinload(Product.bot))
     result = await session.execute(query)
     return result.scalars().first()
 
-async def bulk_delete_products(session: AsyncSession, user_id: int, product_ids: List[int]) -> int:
-    # Esta função já estava correta, pois opera com IDs.
-    subquery = select(Bot.id).where(Bot.user_id == user_id)
-    query = select(Product.id).where(Product.bot_id.in_(subquery)).where(Product.id.in_(product_ids))
+async def bulk_delete_products(session: AsyncSession, bot_id: int, product_ids: List[int]) -> int:
+    """Deleta produtos em lote, garantindo que eles pertençam ao bot_id especificado."""
+    
+    # A consulta fica muito mais simples, pois já validamos o dono do bot na rota
+    query = select(Product.id).where(
+        Product.bot_id == bot_id, 
+        Product.id.in_(product_ids)
+    )
     result = await session.execute(query)
     ids_to_delete = result.scalars().all()
     
@@ -412,9 +446,11 @@ async def bulk_delete_products(session: AsyncSession, user_id: int, product_ids:
     await session.commit()
     return len(ids_to_delete)
 
-async def delete_product(session: AsyncSession, product_id: int) -> bool:
-    """CORREÇÃO: Recebe product_id e busca o produto para deletar."""
-    db_product = await session.get(Product, product_id)
+async def delete_product(session: AsyncSession, db_product: Product) -> bool:
+    """
+    Deleta um objeto Product que já foi buscado e verificado pela rota.
+    (Recebe o objeto Product, não o product_id)
+    """
     if not db_product:
         return False
         
@@ -426,56 +462,47 @@ async def create_order(
     session: AsyncSession,
     bot_id: int,
     items: List[Dict],
-    customer_address: str | None = None,
-) -> Optional[Order]:
+    total_amount: float,  # <-- 1. ADICIONA O PARÂMETRO FALTANTE
+    customer_address: str | None = None
+) -> Order | None:
     """
-    Registra um novo pedido e seus itens.
-
-    Args:
-        session: sessão assíncrona do SQLAlchemy.
-        bot_id: identificador do bot/restaurante.
-        items: lista de dicts no formato {"product_id": int, "quantity": int}.
-        customer_address: endereço do cliente, se disponível.
-
-    Returns:
-        Instância de Order recém-criada ou None em caso de erro.
+    Registra um novo pedido e seus itens, recebendo o valor total já calculado.
     """
     try:
-        total_amount = 0.0
         order_items_to_create: list[OrderItem] = []
 
+        # A lógica para criar os itens do pedido continua a mesma
         for item_data in items:
             product = await session.get(Product, item_data["product_id"])
-            if product is None:
-                raise ValueError(f"Product with id {item_data['product_id']} not found.")
-
-            quantity = item_data["quantity"]
-            price = product.price
-            total_amount += price * quantity
+            if not product:
+                raise ValueError(f"Produto com id {item_data['product_id']} não encontrado.")
 
             order_items_to_create.append(
                 OrderItem(
                     product_id=product.id,
-                    quantity=quantity,
-                    price_at_time_of_order=price,
+                    quantity=item_data["quantity"],
+                    price_at_time_of_order=product.price,
                 )
             )
 
+        # 2. REMOVE o cálculo antigo de 'total_amount' de dentro desta função
+        
+        # 3. USA o 'total_amount' recebido como parâmetro
         new_order = Order(
             bot_id=bot_id,
-            total_amount=round(total_amount, 2),
+            total_amount=round(total_amount, 2), # <-- Usa o valor final correto
             customer_address=customer_address,
             items=order_items_to_create,
         )
 
         session.add(new_order)
         await session.commit()
-        await session.refresh(new_order, attribute_names=["items"])  # garante lazy-load resolvido
+        await session.refresh(new_order, attribute_names=["items"])
         return new_order
 
-    except (SQLAlchemyError, ValueError) as exc:
+    except (ValueError) as exc: # Removido SQLAlchemyError para um tratamento mais simples
         await session.rollback()
-        # opcional: faça um logger.error("Erro ao criar pedido", exc_info=True)
+        print(f"Erro ao criar pedido: {exc}")
         return None
 
 # app/crud.py
@@ -539,3 +566,56 @@ async def set_human_takeover_by_phone(session: AsyncSession, bot_id: int, phone_
     status = "ATIVADO" if active else "DESATIVADO"
     print(f"✅ Atendimento humano {status} para o número {phone_number}.")
     return True
+
+async def delete_order(session: AsyncSession, order_id: int) -> bool:
+    """
+    Encontra e deleta um pedido pelo seu ID.
+    Útil para reverter a criação de um pedido se o pagamento falhar.
+    """
+    order_to_delete = await session.get(Order, order_id)
+    
+    if not order_to_delete:
+        print(f"Pedido com ID {order_id} não encontrado para deleção.")
+        return False
+        
+    await session.delete(order_to_delete)
+    await session.commit()
+    print(f"Pedido {order_id} deletado com sucesso.")
+    return True
+
+async def update_order_status_by_id(session: AsyncSession, order_id: int, new_status: OrderStatus, psp_charge_id: Optional[str] = None) -> Optional[Order]:
+    """
+    Encontra um pedido pelo ID, atualiza seu status e o psp_charge_id.
+    Retorna o objeto Order com o 'contact' e 'bot' carregados se for bem-sucedido
+    e o status tiver sido realmente alterado.
+    """
+    # Usamos selectinload para já carregar os dados do contato e do bot
+    query = (
+        select(Order)
+        .where(Order.id == order_id)
+        .options(selectinload(Order.contact), selectinload(Order.bot))
+    )
+    result = await session.execute(query)
+    order = result.scalars().first()
+    
+    if not order:
+        print(f"Pedido {order_id} não encontrado para atualização de status.")
+        return None
+    
+    # IMPORTANTE: Proteção de idempotência
+    # Se o status já for o final, não fazemos nada e não retornamos o pedido.
+    # Isso evita enviar 5 confirmações para o cliente se o MP enviar 5 webhooks.
+    if order.status == new_status or order.status in [OrderStatus.PAID, OrderStatus.FAILED]:
+        print(f"Pedido {order_id} já está em estado final ({order.status}). Ignorando atualização.")
+        return None
+    
+    order.status = new_status
+    if psp_charge_id:
+        order.psp_charge_id = psp_charge_id
+    
+    session.add(order)
+    await session.commit()
+    await session.refresh(order, attribute_names=["contact", "bot"]) # Garante que os dados carregados estão frescos
+    
+    print(f"✅ Pedido {order_id} atualizado para {new_status}.")
+    return order   
