@@ -4,6 +4,8 @@ from typing import List, Dict
 from dotenv import load_dotenv
 from openai import OpenAI
 import json
+import base64
+from app.tools_definition import tools_schema, tools_extraction
 
 # Carrega as variáveis de ambiente do arquivo .env
 load_dotenv()
@@ -410,3 +412,60 @@ async def classify_user_intent(user_query: str, cart_items: List[Dict]) -> str:
     except Exception as e:
         print(f"Erro ao classificar intenção: {e}")
         return "GREETING_OR_QUESTION"
+
+# Função auxiliar para codificar imagem
+def encode_image(image_file):
+    return base64.b64encode(image_file).decode('utf-8')
+
+async def extract_products_from_image(image_bytes: bytes, media_type: str) -> list[dict]:
+    """
+    Envia uma imagem (cardápio) para o GPT-4o e extrai os produtos estruturados.
+    (Versão corrigida com asyncio.to_thread)
+    """
+    base64_image = encode_image(image_bytes)
+    
+    prompt = """
+    Você é um assistente especializado em digitalizar cardápios de restaurantes a partir de imagens.
+    Analise esta imagem de cardápio. Extraia todos os itens de comida e bebida visíveis.
+    Para cada item, identifique: nome, descrição (ingredientes) e preço.
+    Ignore cabeçalhos, rodapés ou textos que não sejam produtos.
+    Se houver variações de tamanho, tente criar itens separados ou use o preço do tamanho padrão.
+    """
+
+    # 1. Definimos a chamada síncrona dentro de uma função interna
+    def sync_call():
+        return client_openai_api.chat.completions.create(
+            model="gpt-4o", 
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{media_type};base64,{base64_image}"
+                            },
+                        },
+                    ],
+                }
+            ],
+            # Usa a variável que importamos do tools_definition.py
+            tools=tools_extraction, 
+            tool_choice={"type": "function", "function": {"name": "save_extracted_products"}},
+            temperature=0.2,
+        )
+
+    try:
+        # 2. Executamos a função síncrona em uma thread para não travar o FastAPI
+        response = await asyncio.to_thread(sync_call)
+
+        tool_calls = response.choices[0].message.tool_calls
+        if tool_calls:
+            args = json.loads(tool_calls[0].function.arguments)
+            return args.get("products", [])
+        return []
+
+    except Exception as e:
+        print(f"Erro na IA de Visão: {e}")
+        return []

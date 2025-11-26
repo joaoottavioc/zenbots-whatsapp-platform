@@ -9,6 +9,10 @@ from app.models import User
 from app.auth import get_current_user
 import re
 
+from fastapi import UploadFile, File, Form
+from app.openai_client import extract_products_from_image
+import fitz  # PyMuPDF (Necessário para ler PDFs)
+
 router = APIRouter()
 
 # --- Rotas para Gerenciamento de Bots ---
@@ -269,3 +273,150 @@ async def bulk_delete_products_endpoint(
         raise HTTPException(status_code=403, detail="Nenhum produto foi deletado. Verifique se os IDs pertencem a este bot.")
 
     return {"message": f"{deleted_count} produtos foram excluídos com sucesso."}
+
+@router.post("/bots/{bot_id}/catalog/upload-from-file", status_code=201)
+async def upload_catalog_from_file_endpoint(
+    bot_id: int,
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """
+    Recebe Imagem ou PDF (multipágina), processa com Visão e cadastra produtos.
+    """
+    
+    # 1. Validação de Segurança
+    db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
+    if not db_bot or db_bot.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Acesso negado.")
+
+    valid_types = ["image/jpeg", "image/png", "image/webp", "application/pdf"]
+    if file.content_type not in valid_types:
+        raise HTTPException(status_code=400, detail="Apenas Imagens ou PDF são suportados.")
+
+    try:
+        print(f"📸 Lendo arquivo: {file.filename} ({file.content_type})")
+        contents = await file.read()
+        
+        # Lista final que vai acumular produtos de todas as páginas/imagens
+        all_extracted_products = []
+
+        # ▼▼▼ LÓGICA DE MULTIPÁGINAS ▼▼▼
+        if file.content_type == "application/pdf":
+            print("📄 PDF detectado. Processando páginas...")
+            try:
+                # Abre o PDF
+                doc = fitz.open(stream=contents, filetype="pdf")
+                
+                # Limite de segurança: processar no máximo 5 páginas para não estourar tempo/custo
+                # (Você pode ajustar isso conforme sua política de negócio)
+                max_pages = 5
+                pages_to_process = min(len(doc), max_pages)
+
+                for i in range(pages_to_process):
+                    print(f"   -> Processando página {i+1}/{len(doc)}...")
+                    page = doc.load_page(i)
+                    
+                    # 150 DPI é um bom equilíbrio entre qualidade para leitura e tamanho de arquivo
+                    pix = page.get_pixmap(dpi=150) 
+                    page_bytes = pix.tobytes("png")
+                    
+                    # Chama a IA para ESTA página específica
+                    products_on_page = await extract_products_from_image(page_bytes, "image/png")
+                    
+                    if products_on_page:
+                        all_extracted_products.extend(products_on_page)
+                        print(f"      Encontrados {len(products_on_page)} itens na página {i+1}.")
+                
+                doc.close()
+
+            except Exception as e:
+                print(f"Erro ao processar PDF: {e}")
+                raise HTTPException(status_code=400, detail="Erro ao ler o arquivo PDF.")
+        
+        else:
+            # Lógica para Imagem Única (JPG/PNG)
+            all_extracted_products = await extract_products_from_image(contents, file.content_type)
+        # ▲▲▲ FIM DA LÓGICA ▲▲▲
+
+        
+        if not all_extracted_products:
+            raise HTTPException(status_code=400, detail="A IA não conseguiu identificar produtos.")
+
+        # 4. Enriquecimento e Salvamento (Batch único no final)
+        enriched_products = []
+        for product in all_extracted_products:
+            name_words = product.get("name", "").lower()
+            desc_words = product.get("description", "").lower()
+            full_text = name_words + " " + desc_words
+            words = set(re.findall(r'\b\w+\b', full_text))
+            
+            product["keywords"] = list(words)
+            product["is_available"] = True 
+            enriched_products.append(product)
+
+        count = await crud.bulk_create_products(
+            session=session,
+            bot_id=bot_id,
+            products_data=enriched_products
+        )
+            
+        return {"message": f"Sucesso! {count} produtos processados do arquivo."}
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Erro no upload: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao processar arquivo.")
+
+# --- Rotas de Pedidos (KDS) ---
+
+@router.get("/bots/{bot_id}/orders", response_model=List[schemas.OrderResponse])
+async def list_bot_orders(
+    bot_id: int,
+    status: str | None = None, # Ex: ?status=paid
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Lista os pedidos do bot. Útil para o painel da cozinha."""
+    # 1. Validação de segurança (Obrigatória em SaaS multi-tenant)
+    db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
+    if not db_bot or db_bot.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Acesso negado.")
+
+    # 2. Busca os pedidos usando a função otimizada do CRUD
+    orders = await crud.list_orders_by_bot(session, bot_id=bot_id, status_filter=status)
+    return orders
+
+@router.patch("/bots/{bot_id}/orders/{order_id}", response_model=schemas.OrderResponse)
+async def update_order_status(
+    bot_id: int,
+    order_id: int,
+    status_data: schemas.OrderStatusUpdate,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Atualiza o status do pedido (ex: de 'paid' para 'completed')."""
+    # 1. Segurança
+    db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
+    if not db_bot or db_bot.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Acesso negado.")
+    
+    # 2. Atualização
+    updated_order = await crud.update_order_status_by_id(
+        session, 
+        order_id=order_id, 
+        new_status=status_data.status
+    )
+    
+    if not updated_order:
+        raise HTTPException(status_code=404, detail="Pedido não encontrado.")
+
+    order_dict = updated_order.model_dump()
+        
+    order_dict["display_items"] = [
+        {"quantity": item.quantity, "product_name": item.product.name} 
+        for item in updated_order.items
+    ]
+    
+    return order_dict

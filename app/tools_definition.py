@@ -222,3 +222,41 @@ tools_schema = [
         }
     },
 ]
+
+# Ferramenta específica para a IA de Visão (Extração de Cardápio)
+tools_extraction = [
+    {
+        "type": "function",
+        "function": {
+            "name": "save_extracted_products",
+            "description": "Salva os produtos extraídos do cardápio",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "products": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {
+                                    "type": "string",
+                                    "description": "Nome do prato ou bebida"
+                                },
+                                "description": {
+                                    "type": "string",
+                                    "description": "Descrição dos ingredientes ou detalhes"
+                                },
+                                "price": {
+                                    "type": "number",
+                                    "description": "Preço numérico (ex: 25.50)"
+                                }
+                            },
+                            "required": ["name", "price"]
+                        }
+                    }
+                },
+                "required": ["products"]
+            }
+        }
+    }
+]

@@ -2,7 +2,7 @@
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select, delete
 from sqlalchemy.orm import selectinload
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 from app.utils import normalize_phone
 from sqlalchemy import text
@@ -462,36 +462,23 @@ async def create_order(
     session: AsyncSession,
     bot_id: int,
     items: List[Dict],
-    total_amount: float,  # <-- 1. ADICIONA O PARÂMETRO FALTANTE
-    customer_address: str | None = None
+    total_amount: float,
+    customer_address: str | None = None,
+    contact_id: int | None = None # <-- 1. Novo parâmetro
 ) -> Order | None:
-    """
-    Registra um novo pedido e seus itens, recebendo o valor total já calculado.
-    """
     try:
         order_items_to_create: list[OrderItem] = []
-
-        # A lógica para criar os itens do pedido continua a mesma
         for item_data in items:
             product = await session.get(Product, item_data["product_id"])
             if not product:
-                raise ValueError(f"Produto com id {item_data['product_id']} não encontrado.")
+                raise ValueError(f"Produto {item_data['product_id']} não encontrado.")
+            order_items_to_create.append(OrderItem(product_id=product.id, quantity=item_data["quantity"], price_at_time_of_order=product.price))
 
-            order_items_to_create.append(
-                OrderItem(
-                    product_id=product.id,
-                    quantity=item_data["quantity"],
-                    price_at_time_of_order=product.price,
-                )
-            )
-
-        # 2. REMOVE o cálculo antigo de 'total_amount' de dentro desta função
-        
-        # 3. USA o 'total_amount' recebido como parâmetro
         new_order = Order(
             bot_id=bot_id,
-            total_amount=round(total_amount, 2), # <-- Usa o valor final correto
+            total_amount=round(total_amount, 2),
             customer_address=customer_address,
+            contact_id=contact_id, # <-- 2. Salva o contato
             items=order_items_to_create,
         )
 
@@ -500,7 +487,7 @@ async def create_order(
         await session.refresh(new_order, attribute_names=["items"])
         return new_order
 
-    except (ValueError) as exc: # Removido SQLAlchemyError para um tratamento mais simples
+    except ValueError as exc:
         await session.rollback()
         print(f"Erro ao criar pedido: {exc}")
         return None
@@ -593,7 +580,7 @@ async def update_order_status_by_id(session: AsyncSession, order_id: int, new_st
     query = (
         select(Order)
         .where(Order.id == order_id)
-        .options(selectinload(Order.contact), selectinload(Order.bot))
+        .options(selectinload(Order.bot), selectinload(Order.items).selectinload(OrderItem.product))
     )
     result = await session.execute(query)
     order = result.scalars().first()
@@ -615,7 +602,85 @@ async def update_order_status_by_id(session: AsyncSession, order_id: int, new_st
     
     session.add(order)
     await session.commit()
-    await session.refresh(order, attribute_names=["contact", "bot"]) # Garante que os dados carregados estão frescos
+    await session.refresh(order, attribute_names=["bot", "items"]) # Garante que os dados carregados estão frescos
     
     print(f"✅ Pedido {order_id} atualizado para {new_status}.")
-    return order   
+    return order
+
+async def list_orders_by_bot_old(session: AsyncSession, bot_id: int, status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Busca pedidos de um bot.
+    Retorna uma lista de DICIONÁRIOS para incluir o campo calculado 'display_items'.
+    """
+    query = (
+        select(Order)
+        .where(Order.bot_id == bot_id)
+        .options(selectinload(Order.items).selectinload(OrderItem.product))
+        .order_by(Order.created_at.desc())
+    )
+    
+    if status_filter:
+        query = query.where(Order.status == status_filter)
+        
+    result = await session.execute(query)
+    orders = result.scalars().all()
+    
+    # ▼▼▼ A CORREÇÃO ESTÁ AQUI ▼▼▼
+    # Em vez de modificar o objeto 'order', criamos dicionários
+    formatted_orders = []
+    for order in orders:
+        # 1. Converte o objeto do banco para um dicionário Python simples
+        order_dict = order.model_dump()
+        
+        # 2. Agora podemos adicionar campos extras sem erro
+        order_dict["display_items"] = [
+            {"quantity": item.quantity, "product_name": item.product.name} 
+            for item in order.items
+        ]
+        formatted_orders.append(order_dict)
+        
+    return formatted_orders
+
+async def list_orders_by_bot(session: AsyncSession, bot_id: int, status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+    query = (
+        select(Order)
+        .where(Order.bot_id == bot_id)
+        # Agora podemos carregar o contato, pois o relacionamento existe!
+        .options(
+            selectinload(Order.items).selectinload(OrderItem.product),
+            selectinload(Order.contact).selectinload(Contact.cart) 
+        )
+        .order_by(Order.created_at.desc())
+    )
+    
+    if status_filter:
+        query = query.where(Order.status == status_filter)
+        
+    result = await session.execute(query)
+    orders = result.scalars().all()
+    
+    formatted_orders = []
+    for order in orders:
+        order_dict = order.model_dump()
+        
+        order_dict["display_items"] = [
+            {"quantity": item.quantity, "product_name": item.product.name} 
+            for item in order.items
+        ]
+        
+        # ▼▼▼ LÓGICA CORRIGIDA ▼▼▼
+        if order.contact:
+            order_dict["customer_phone"] = order.contact.phone_number
+            # Verifica se o human takeover está ativo para este contato
+            if order.contact.cart:
+                order_dict["human_takeover_active"] = order.contact.cart.human_takeover_active
+            else:
+                order_dict["human_takeover_active"] = False
+        else:
+             order_dict["customer_phone"] = "Desconhecido"
+             order_dict["human_takeover_active"] = False
+        # ▲▲▲ FIM DA LÓGICA ▲▲▲
+        
+        formatted_orders.append(order_dict)
+        
+    return formatted_orders   

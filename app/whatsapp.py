@@ -366,7 +366,8 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                         bot_id=bot_id,
                         items=items_for_order,
                         customer_address=cart.customer_address,
-                        total_amount=total_amount # Passa o total já calculado
+                        total_amount=total_amount,
+                        contact_id=contact.id                        # Passa o total já calculado
                     )
                 else:
                     order = None

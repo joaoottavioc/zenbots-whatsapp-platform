@@ -89,3 +89,24 @@ class Token(BaseModel):
 class CatalogUploadRequest(BaseModel):
     """Schema para o endpoint que recebe o texto bruto do cardápio."""
     catalog_text: str
+
+class OrderItemResponse(BaseModel):
+    quantity: int
+    product_name: str  
+    model_config = ConfigDict(from_attributes=True)
+
+class OrderResponse(BaseModel):
+    id: int
+    total_amount: float
+    status: str 
+    customer_address: Optional[str] = None
+    created_at: datetime
+    display_items: List[OrderItemResponse] = []
+
+    customer_phone: Optional[str] = None
+    human_takeover_active: bool = False
+     
+    model_config = ConfigDict(from_attributes=True)
+
+class OrderStatusUpdate(BaseModel):
+    status: str

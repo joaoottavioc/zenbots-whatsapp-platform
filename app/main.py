@@ -15,6 +15,9 @@ app = FastAPI()
 origins = [
     # Permite todas as origens. Para desenvolvimento, é o mais simples.
     # Em produção, você pode restringir para domínios específicos.
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
     "*"
 ]
 

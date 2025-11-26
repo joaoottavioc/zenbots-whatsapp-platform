@@ -94,6 +94,9 @@ class OrderStatus(str, enum.Enum):
     PAID = "paid"
     FAILED = "failed"
     EXPIRED = "expired"
+    PREPARING = "preparing"
+    READY = "ready"
+    COMPLETED = "completed"
 
 class ShoppingCart(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -157,6 +160,10 @@ class Order(SQLModel, table=True):
 
     bot_id: int = Field(foreign_key="bot.id")
     bot: "Bot" = Relationship(back_populates="orders")
+
+    # ▼▼▼ NOVOS CAMPOS ▼▼▼
+    contact_id: Optional[int] = Field(default=None, foreign_key="contact.id")
+    contact: Optional["Contact"] = Relationship()
 
     items: List["OrderItem"] = Relationship(back_populates="order", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
 
