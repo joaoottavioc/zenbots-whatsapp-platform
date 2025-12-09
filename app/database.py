@@ -24,5 +24,7 @@ async def create_db_and_tables():
         # AVISO: A linha abaixo APAGA TODOS os dados. Use apenas para desenvolvimento.
         #DONT--await conn.run_syncDONT(SQLModel.metadata.drop_all)DONT--
 
+
+
         # Esta linha recria tudo a partir dos seus modelos mais recentes.
         await conn.run_sync(SQLModel.metadata.create_all)

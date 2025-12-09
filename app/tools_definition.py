@@ -225,7 +225,7 @@ tools_schema = [
 
 # Ferramenta específica para a IA de Visão (Extração de Cardápio)
 tools_extraction = [
-    {
+   {
         "type": "function",
         "function": {
             "name": "save_extracted_products",
@@ -238,20 +238,17 @@ tools_extraction = [
                         "items": {
                             "type": "object",
                             "properties": {
-                                "name": {
+                                "name": {"type": "string"},
+                                "description": {"type": "string"},
+                                "price": {"type": "number"},
+                                # ▼▼▼ NOVO CAMPO PARA A IA PREENCHER ▼▼▼
+                                "category": {
                                     "type": "string",
-                                    "description": "Nome do prato ou bebida"
-                                },
-                                "description": {
-                                    "type": "string",
-                                    "description": "Descrição dos ingredientes ou detalhes"
-                                },
-                                "price": {
-                                    "type": "number",
-                                    "description": "Preço numérico (ex: 25.50)"
+                                    "description": "Categoria curta e lógica do item. Ex: 'Bebidas', 'Lanches', 'Pizzas', 'Sobremesas', 'Porções'."
                                 }
+                                # ▲▲▲ FIM DA ADIÇÃO ▲▲▲
                             },
-                            "required": ["name", "price"]
+                            "required": ["name", "price", "category"] # Tornamos obrigatório
                         }
                     }
                 },

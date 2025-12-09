@@ -66,7 +66,7 @@ async def get_or_create_cart(session: AsyncSession, contact_id: int) -> Shopping
         await session.refresh(cart)
     return cart
 
-async def add_items_to_db_cart(session: AsyncSession, cart_id: int, items_to_add: List[Dict]) -> Optional[ShoppingCart]:
+async def add_items_to_db_cart_old(session: AsyncSession, cart_id: int, items_to_add: List[Dict]) -> Optional[ShoppingCart]:
     """Adiciona ou atualiza itens no carrinho. O commit é feito no final do fluxo."""
     # CORREÇÃO: Busca o carrinho pelo ID dentro da sessão atual
     cart = await session.get(ShoppingCart, cart_id, options=[selectinload(ShoppingCart.items)])
@@ -89,6 +89,39 @@ async def add_items_to_db_cart(session: AsyncSession, cart_id: int, items_to_add
             if product:
                 new_item = CartItem(product_id=product_id, quantity=quantity_to_add, cart_id=cart.id)
                 session.add(new_item)
+    await session.flush()
+    return cart
+
+async def add_items_to_db_cart(session: AsyncSession, cart_id: int, items_to_add: List[Dict]) -> Optional[ShoppingCart]:
+    """Adiciona itens ao carrinho, ignorando produtos indisponíveis."""
+    # Carrega o carrinho e seus itens
+    cart = await session.get(ShoppingCart, cart_id, options=[selectinload(ShoppingCart.items)])
+    if not cart:
+        return None
+
+    for item_data in items_to_add:
+        product_id = item_data.get("product_id")
+        quantity_to_add = item_data.get("quantity", 1)
+
+        if not isinstance(quantity_to_add, int) or quantity_to_add <= 0:
+            continue
+
+        # 1. Carrega o produto para verificar disponibilidade
+        product = await session.get(Product, product_id)
+        
+        # 2. SE O PRODUTO NÃO EXISTIR OU ESTIVER INDISPONÍVEL, PULA
+        if not product or not product.is_available:
+            print(f"🚫 Tentativa de adicionar produto indisponível: {product_id}")
+            continue
+
+        existing_item = next((item for item in cart.items if item.product_id == product_id), None)
+        
+        if existing_item:
+            existing_item.quantity += quantity_to_add
+        else:
+            new_item = CartItem(product_id=product_id, quantity=quantity_to_add, cart_id=cart.id)
+            session.add(new_item)
+            
     await session.flush()
     return cart
 
@@ -231,6 +264,7 @@ async def find_relevant_products_old(
         # 🔹 1. Busca por nome
         name_query = select(Product).where(
             Product.bot_id == bot_id,
+            Product.is_available == True,
             Product.name.ilike(f"%{item_name}%")
         ).limit(limit_per_item)
         for p in (await session.execute(name_query)).scalars().all():
@@ -239,6 +273,7 @@ async def find_relevant_products_old(
         # 🔹 2. Busca por keywords
         keywords_query = select(Product).where(
             Product.bot_id == bot_id,
+            Product.is_available == True,
             Product.keywords.ilike(f"%{item_name}%")
         ).limit(limit_per_item)
         for p in (await session.execute(keywords_query)).scalars().all():
@@ -247,6 +282,7 @@ async def find_relevant_products_old(
         # 🔹 3. Busca por descrição
         desc_query = select(Product).where(
             Product.bot_id == bot_id,
+            Product.is_available == True,
             Product.description.is_not(None),
             Product.description.ilike(f"%{item_name}%")
         ).limit(limit_per_item)
@@ -263,7 +299,8 @@ async def find_relevant_products_old(
 
         embedding_query = (
             select(Product, similarity_score)
-            .where(Product.bot_id == bot_id)
+            .where(Product.bot_id == bot_id,
+                   Product.is_available == True)
             .filter(similarity_score > min_similarity) # <-- FILTRA PELA QUALIDADE MÍNIMA
             .order_by(text("similarity DESC")) # <-- Ordena pela maior similaridade
             .limit(limit_per_item)
@@ -282,17 +319,46 @@ async def get_user_by_email(session: AsyncSession, email: str) -> Optional[User]
     result = await session.execute(select(User).where(User.email == email))
     return result.scalars().first()
 
-async def create_bot(session: AsyncSession, user_id: int, whatsapp_number: str, restaurant_name: Optional[str], pix_key: Optional[str]) -> Optional[Bot]:
+async def create_bot(
+    session: AsyncSession, 
+    user_id: int, 
+    whatsapp_number: str, 
+    restaurant_name: Optional[str], 
+    pix_key: Optional[str],
+    # ▼▼▼ NEW ARGUMENTS ▼▼▼
+    whatsapp_token: str = "", 
+    phone_number_id: str = "",
+    delivery_fee: float = 0.0,
+    is_open: bool = True,
+    closing_message: Optional[str] = None,
+    schedule: Optional[Dict[str, Any]] = None
+    # ▲▲▲ END NEW ARGUMENTS ▲▲▲
+) -> Optional[Bot]:
+    
+    # Check if a bot with this number already exists
     existing_bot_result = await session.execute(select(Bot).where(Bot.whatsapp_number == whatsapp_number))
     if existing_bot_result.scalars().first(): 
         return None
     
-    new_bot = Bot(user_id=user_id, whatsapp_number=whatsapp_number, restaurant_name=restaurant_name, pix_key=pix_key)
+    # Create the new Bot object with all fields
+    new_bot = Bot(
+        user_id=user_id, 
+        whatsapp_number=whatsapp_number, 
+        restaurant_name=restaurant_name, 
+        pix_key=pix_key,
+        # ▼▼▼ ASSIGN NEW FIELDS ▼▼▼
+        whatsapp_token=whatsapp_token,
+        phone_number_id=phone_number_id,
+        delivery_fee=delivery_fee,
+        is_open=is_open,
+        closing_message=closing_message or "Olá! No momento estamos fechados.",
+        schedule=schedule or {}
+    )
+    
     session.add(new_bot)
     await session.commit()
-    # A linha abaixo é a chave da correção.
-    # Em vez de apenas dar refresh, nós re-buscamos o bot usando a função
-    # que já faz o 'selectinload' das relações 'products' e 'history'.
+    
+    # Re-fetch to ensure relationships are loaded (consistent with previous logic)
     return await get_bot_by_id(session, bot_id=new_bot.id)
 
 async def get_bot_by_id(session: AsyncSession, bot_id: int) -> Optional[Bot]:
@@ -301,7 +367,7 @@ async def get_bot_by_id(session: AsyncSession, bot_id: int) -> Optional[Bot]:
     return result.scalars().first()
 
 async def list_user_bots(session: AsyncSession, user_id: int) -> List[Bot]:
-    query = select(Bot).where(Bot.user_id == user_id).options(selectinload(Bot.history), selectinload(Bot.products))
+    query = select(Bot).where(Bot.user_id == user_id).options(selectinload(Bot.history), selectinload(Bot.products)).order_by(Bot.id.asc())
     result = await session.execute(query)
     return result.scalars().all()
 
@@ -333,19 +399,33 @@ async def delete_bot(session: AsyncSession, db_bot: Bot) -> bool:
     await session.commit()
     return True
 
-async def create_product(session: AsyncSession, bot_id: int, name: str, description: Optional[str], price: float, keywords: Optional[str] = None) -> Product:
-    # ▼▼▼ LÓGICA DE EMBEDDING CORRIGIDA ▼▼▼
+async def create_product(
+    session: AsyncSession, 
+    bot_id: int, 
+    name: str, 
+    description: Optional[str], 
+    price: float, 
+    keywords: Optional[str] = None,
+    category: str = "Geral" # <--- Novo parâmetro com valor padrão
+) -> Product:
+    # Incluímos a CATEGORIA no texto do embedding para ajudar na busca semântica
     text_to_embed = (
+        f"CATEGORIA: {category}. "
         f"PRODUTO PRINCIPAL: {name}. "
         f"DESCRIÇÃO E INGREDIENTES: {description or 'N/A'}. "
         f"CATEGORIAS E TAGS: {keywords or 'N/A'}."
     )
     embedding_vector = generate_embedding(text_to_embed)
     
-    # ▼▼▼ Adiciona keywords ao criar o produto ▼▼▼
     new_product = Product(
-        bot_id=bot_id, name=name, description=description, 
-        price=price, embedding=embedding_vector, keywords=keywords
+        bot_id=bot_id, 
+        name=name, 
+        description=description, 
+        price=price, 
+        embedding=embedding_vector, 
+        keywords=keywords,
+        category=category,      # <--- Salva no banco
+        is_available=True
     )
     session.add(new_product)
     await session.commit()
@@ -354,37 +434,26 @@ async def create_product(session: AsyncSession, bot_id: int, name: str, descript
 
 async def update_product(session: AsyncSession, db_product: Product, update_data: ProductUpdate) -> Optional[Product]:
     """
-    Atualiza um objeto Product que já foi buscado e verificado pela rota.
-    (Recebe o objeto Product, não o product_id)
+    Atualiza um objeto Product. Se nome, descrição, keywords OU CATEGORIA mudarem,
+    o embedding é recalculado.
     """
     if not db_product:
         return None
 
     update_data_dict = update_data.model_dump(exclude_unset=True)
     needs_re_embedding = False
+    
     for key, value in update_data_dict.items():
         setattr(db_product, key, value)
-        # ▼▼▼ Verifica se um campo relevante para o embedding mudou ▼▼▼
-        if key in ["name", "description", "keywords"]:
+        # Verifica se um campo relevante para o significado do produto mudou
+        # Adicionamos "category" a esta lista
+        if key in ["name", "description", "keywords", "category"]:
             needs_re_embedding = True
     
-    # ▼▼▼ LÓGICA DE RE-EMBEDDING CORRIGIDA ▼▼▼
     if needs_re_embedding:
+        # Recalcula o embedding com os dados novos (incluindo a categoria atualizada)
         text_to_embed = (
-            f"PRODUTO PRINCIPAL: {db_product.name}. "
-            f"DESCRIÇÃO E INGREDIENTES: {db_product.description or 'N/A'}. "
-            f"CATEGORIAS E TAGS: {db_product.keywords or 'N/A'}."
-        )
-        db_product.embedding = generate_embedding(text_to_embed)
-        
-    session.add(db_product)
-    await session.commit()
-    await session.refresh(db_product)
-    return db_product
-    
-    # ▼▼▼ LÓGICA DE RE-EMBEDDING CORRIGIDA ▼▼▼
-    if needs_re_embedding:
-        text_to_embed = (
+            f"CATEGORIA: {db_product.category or 'Geral'}. "
             f"PRODUTO PRINCIPAL: {db_product.name}. "
             f"DESCRIÇÃO E INGREDIENTES: {db_product.description or 'N/A'}. "
             f"CATEGORIAS E TAGS: {db_product.keywords or 'N/A'}."
@@ -397,16 +466,67 @@ async def update_product(session: AsyncSession, db_product: Product, update_data
     return db_product
 
 async def bulk_create_products(session: AsyncSession, bot_id: int, products_data: List[Dict]) -> int:
+    """
+    Substitui o catálogo antigo pelo novo (Delete All -> Create New).
+    Limpa os itens dos carrinhos ativos para evitar erro de chave estrangeira.
+    """
+    
+    # --- 1. LIMPEZA PRÉVIA (DELETE ALL) ---
+    
+    # Busca todos os IDs de produtos que já existem para este bot
+    existing_result = await session.execute(select(Product.id).where(Product.bot_id == bot_id))
+    existing_ids = existing_result.scalars().all()
+
+    if existing_ids:
+        # A. Remove esses produtos de quaisquer carrinhos ativos (CartItem)
+        # Isso é CRUCIAL para não dar erro de integridade (Foreign Key)
+        await session.execute(
+            delete(CartItem).where(CartItem.product_id.in_(existing_ids))
+        )
+        
+        # B. Deleta os produtos em si
+        # Nota: Produtos em PEDIDOS fechados (Order) não serão afetados se o delete estiver
+        # configurado corretamente, ou podem impedir a deleção. 
+        # Se o banco bloquear por causa de pedidos passados, o ideal seria apenas marcar como 
+        # is_available=False, mas para um "reset" de cardápio, o delete físico é o esperado.
+        # Se der erro aqui, é porque o produto está num Pedido.
+        try:
+            await session.execute(
+                delete(Product).where(Product.id.in_(existing_ids))
+            )
+        except Exception as e:
+            print(f"⚠️ Aviso: Não foi possível deletar alguns produtos antigos (provavelmente vendidos): {e}")
+            # Se não der para deletar (ex: histórico de vendas), podemos optar por 
+            # apenas arquivá-los ou ignorar o erro e criar os novos assim mesmo.
+            # Por segurança neste MVP, vamos seguir criando os novos.
+
+    # --- 2. CRIAÇÃO DOS NOVOS PRODUTOS (Lógica Original) ---
+    
     products_to_add = []
     for item in products_data:
         if item.get("name") and item.get("price") is not None:
             keywords_list = item.get("keywords", [])
             keywords_str = ", ".join(keywords_list) if keywords_list else None
-            text_to_embed = f"PRODUTO PRINCIPAL: {item.get('name')}. DESCRIÇÃO E INGREDIENTES: {item.get('description', 'N/A')}. PALAVRAS-CHAVE: {keywords_str or 'N/A'}."
+            
+            category = item.get("category", "Geral")
+
+            text_to_embed = (
+                f"CATEGORIA: {category}. "
+                f"PRODUTO PRINCIPAL: {item.get('name')}. "
+                f"DESCRIÇÃO E INGREDIENTES: {item.get('description', 'N/A')}. "
+                f"PALAVRAS-CHAVE: {keywords_str or 'N/A'}."
+            )
             embedding_vector = generate_embedding(text_to_embed)
+            
             new_product = Product(
-                bot_id=bot_id, name=item.get("name"), description=item.get("description"),
-                price=float(item.get("price")), embedding=embedding_vector, keywords=keywords_str
+                bot_id=bot_id, 
+                name=item.get("name"), 
+                description=item.get("description"),
+                price=float(item.get("price")), 
+                embedding=embedding_vector, 
+                keywords=keywords_str,
+                category=category,
+                is_available=True
             )
             products_to_add.append(new_product)
             
@@ -592,7 +712,7 @@ async def update_order_status_by_id(session: AsyncSession, order_id: int, new_st
     # IMPORTANTE: Proteção de idempotência
     # Se o status já for o final, não fazemos nada e não retornamos o pedido.
     # Isso evita enviar 5 confirmações para o cliente se o MP enviar 5 webhooks.
-    if order.status == new_status or order.status in [OrderStatus.PAID, OrderStatus.FAILED]:
+    if order.status == new_status or order.status in [OrderStatus.FAILED, OrderStatus.EXPIRED]:
         print(f"Pedido {order_id} já está em estado final ({order.status}). Ignorando atualização.")
         return None
     

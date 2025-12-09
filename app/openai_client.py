@@ -425,11 +425,14 @@ async def extract_products_from_image(image_bytes: bytes, media_type: str) -> li
     base64_image = encode_image(image_bytes)
     
     prompt = """
-    Você é um assistente especializado em digitalizar cardápios de restaurantes a partir de imagens.
-    Analise esta imagem de cardápio. Extraia todos os itens de comida e bebida visíveis.
-    Para cada item, identifique: nome, descrição (ingredientes) e preço.
-    Ignore cabeçalhos, rodapés ou textos que não sejam produtos.
-    Se houver variações de tamanho, tente criar itens separados ou use o preço do tamanho padrão.
+    Você é um assistente especializado em digitalizar cardápios.
+    Analise esta imagem. Extraia todos os itens de comida e bebida.
+    Para cada item, identifique: nome, descrição, preço e CATEGORIA.
+    
+    Regras de Categoria:
+    - Agrupe itens similares (ex: Coca, Água, Suco -> "Bebidas").
+    - Use nomes curtos e em Português.
+    - Ex: "Entradas", "Pratos Principais", "Sobremesas", "Pizzas Tradicionais", "Hot Dogs", "Lanches", "Porções".
     """
 
     # 1. Definimos a chamada síncrona dentro de uma função interna

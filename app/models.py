@@ -33,6 +33,11 @@ class Bot(SQLModel, table=True):
     restaurant_name: Optional[str] = Field(default=None)
     whatsapp_number: str = Field(unique=True, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    # ▼▼▼ CREDENCIAIS DA META (NOVOS CAMPOS) ▼▼▼
+    whatsapp_token: str = Field(default="") # O Token de acesso (EAA...)
+    phone_number_id: str = Field(default="", index=True) # O ID numérico (8812...)
+    
     pix_key: Optional[str] = Field(default=None, index=True)
 
     # Permite que cada restaurante defina sua taxa de entrega
@@ -46,6 +51,12 @@ class Bot(SQLModel, table=True):
     history: List["ConversationHistory"] = Relationship(back_populates="bot", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
     orders: List["Order"] = Relationship(back_populates="bot", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
     contacts: List["Contact"] = Relationship(back_populates="bot", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
+
+    is_open: bool = Field(default=True) # Por padrão, a loja nasce aberta
+    closing_message: str = Field(default="Olá! No momento estamos fechados. Nosso horário é das 18h às 23h. 🕒")
+
+    timezone: str = Field(default="America/Sao_Paulo")
+    schedule: Dict[str, Any] = Field(default={}, sa_column=Column(SA_JSON))
 
 class Contact(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -67,6 +78,9 @@ class Product(SQLModel, table=True):
     price: float
     embedding: List[float] = Field(sa_column=Column(Vector(384)))
     keywords: Optional[str] = Field(default=None, description="Palavras-chave separadas por vírgula para melhorar a busca.")
+
+    category: str = Field(default="Geral", index=True)
+    is_available: bool = Field(default=True)
     
     bot_id: int = Field(foreign_key="bot.id")
     bot: "Bot" = Relationship(back_populates="products")

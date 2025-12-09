@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 
 # --- Schemas de Produto ---
 # Usados para criar e retornar itens do cardápio
@@ -9,19 +9,29 @@ class ProductBase(BaseModel):
     name: str
     description: Optional[str] = None
     price: float
+    category: str
 
 class ProductCreate(ProductBase):
+    category: str
     pass
 
 class ProductResponse(ProductBase):
     id: int
     bot_id: int
+    is_available: bool
     model_config = ConfigDict(from_attributes=True)
+    category: str
 
 class ProductUpdate(BaseModel):
+    """
+    Schema para atualização. Todos os campos devem ser opcionais 
+    para permitir atualizações parciais (ex: mudar só o preço ou só a disponibilidade).
+    """
     name: Optional[str] = None
     description: Optional[str] = None
     price: Optional[float] = None
+    category: Optional[str] = None  # <--- MUDANÇA CRÍTICA: De 'str' para 'Optional[str] = None'
+    is_available: Optional[bool] = None
 
 class ProductBulkDeleteRequest(BaseModel):
     product_ids: List[int]
@@ -43,6 +53,8 @@ class BotCreate(BaseModel):
     restaurant_name: str
     whatsapp_number: str
     pix_key: Optional[str] = None
+    whatsapp_token: str
+    phone_number_id: str
 
 class BotUpdate(BaseModel):
     """Schema para atualizar os dados de um bot."""
@@ -50,6 +62,12 @@ class BotUpdate(BaseModel):
     whatsapp_number: Optional[str] = None
     pix_key: Optional[str] = None
     delivery_fee: Optional[float] = None
+    is_open: Optional[bool] = None
+    closing_message: Optional[str] = None
+    timezone: Optional[str] = None
+    schedule: Optional[Dict[str, Any]] = None
+    whatsapp_token: Optional[str] = None
+    phone_number_id: Optional[str] = None
 
 class BotResponse(BaseModel):
     """
@@ -68,6 +86,14 @@ class BotResponse(BaseModel):
     history: List[ConversationHistoryResponse] = []
     
     model_config = ConfigDict(from_attributes=True)
+
+    is_open: bool
+    closing_message: str
+
+    schedule: Dict[str, Any]
+    model_config = ConfigDict(from_attributes=True)
+    whatsapp_token: str
+    phone_number_id: str
 
 # --- Schemas de Autenticação e Usuário ---
 

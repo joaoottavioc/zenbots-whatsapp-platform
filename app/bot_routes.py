@@ -30,7 +30,9 @@ async def create_new_bot(
         user_id=current_user.id, 
         whatsapp_number=bot_data.whatsapp_number, 
         restaurant_name=bot_data.restaurant_name,
-        pix_key=bot_data.pix_key # 👈 CORREÇÃO: Passa a chave pix para o CRUD
+        pix_key=bot_data.pix_key, # 👈 CORREÇÃO: Passa a chave pix para o CRUD
+        whatsapp_token=bot_data.whatsapp_token,     # <--- Ensure this is passed
+        phone_number_id=bot_data.phone_number_id
     )
     
     if not bot_created:
@@ -98,7 +100,9 @@ async def create_product_for_bot(
         bot_id=bot_id,
         name=product_data.name,
         description=product_data.description,
-        price=product_data.price
+        price=product_data.price,
+        # ▼▼▼ CORREÇÃO: ADICIONE ESTA LINHA ▼▼▼
+        category=product_data.category # Agora passamos a categoria recebida!
     )
     
     return new_product

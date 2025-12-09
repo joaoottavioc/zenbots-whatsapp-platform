@@ -26,12 +26,12 @@ import httpx #SIMULADOR
 from app.pending_action import save_pending, clear_pending, has_valid_pending, expire_if_needed
 # Função padronizada para obter o tempo atual em UTC
 from app.time import utcnow
+import pytz
 
 
 load_dotenv()
 router = APIRouter()
-WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
-PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
+
 
 # Extrai "QTD + NOME" da pergunta de confirmação (ex.: "1 Gnocchis de la Mémé Forte, 2 X, ...")
 _ITEM_FROM_Q_RE = re.compile(
@@ -51,30 +51,57 @@ async def whatsapp_webhook(request: Request):
 
 async def process_whatsapp_message(data: Dict[str, Any]):
     async with async_session() as session:
-        contact_number = data["entry"][0]["changes"][0]["value"]["messages"][0]["from"]
         try:
-            print("📥 Mensagem recebida do WhatsApp")
+            # 1. Extração dos dados brutos
             value = data["entry"][0]["changes"][0]["value"]
-            message_data, text_body, bot_number = (
-                value["messages"][0],
-                value["messages"][0]["text"]["body"],
-                value["metadata"]["display_phone_number"],
-            )
+            message_data = value["messages"][0]
+            contact_number = message_data["from"]
+            text_body = message_data["text"]["body"]
             message_id = message_data["id"]
+            
+            # NOVOS CAMPOS: Pegamos o ID do metadata para saber qual bot foi chamado
+            incoming_phone_id = value["metadata"]["phone_number_id"]
+            bot_display_phone = value["metadata"]["display_phone_number"]
 
-            print(f"📨 Mensagem ID: {message_id}")
-            print(f"📱 Bot: {bot_number} | Usuário: {contact_number}")
-            print(f"💬 Conteúdo: {text_body}")
+            print(f"📥 Mensagem recebida. De: {contact_number} | Para ID: {incoming_phone_id}")
 
-            await mark_message_as_read(message_id)
+            # 2. BUSCA O BOT NO BANCO (Pelo ID do telefone ou fallback pelo número)
+            # Tenta pelo ID exato da Meta (Mais seguro)
+            result = await session.execute(select(Bot).where(Bot.phone_number_id == incoming_phone_id))
+            bot = result.scalars().first()
+
+            if not bot:
+                # Fallback: Tenta pelo número visual se o ID não bater
+                print(f"⚠️ Bot não achado por ID {incoming_phone_id}. Tentando número {bot_display_phone}...")
+                bot = await crud.get_bot_by_number(session, bot_display_phone)
+            
+            if not bot:
+                print("❌ Bot não encontrado para esta mensagem. Ignorando.")
+                return
+
+            # 3. Marcar como lida e processar duplicação (AGORA TEMOS AS CREDENCIAIS DO BOT)
+            await mark_message_as_read(message_id, bot.whatsapp_token, bot.phone_number_id)
+            
             if await crud.is_message_processed(session, message_id):
                 print("⏩ Mensagem já processada anteriormente. Ignorando.")
                 return
             await crud.add_processed_message(session, message_id)
 
-            bot = await crud.get_bot_by_number(session, bot_number)
-            if not bot:
-                print("❌ Bot não encontrado para o número informado.")
+            if not is_store_open(bot):
+                print(f"🔒 Loja fechada. Enviando mensagem automática para {contact_number}.")
+
+                try:
+                    async with httpx.AsyncClient() as client:
+                        await client.post("http://host.docker.internal:9000/broadcast", json={"text": bot.closing_message})
+                except httpx.RequestError as e:
+                    print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
+                
+                # Envia a mensagem de fechado
+                await send_whatsapp_message(contact_number, bot.closing_message, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
+                
+                # Opcional: Salvar no histórico para o dono ver que o cliente chamou
+                await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, bot.closing_message)
+                
                 return
 
             contact = await crud.get_or_create_contact(session, bot.id, contact_number)
@@ -122,7 +149,7 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                 except httpx.RequestError as e:
                     print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
                 
-                await send_whatsapp_message(contact_number, response_to_user)
+                await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
                 cart.last_activity_at = utcnow()
                 session.add(cart)
@@ -197,7 +224,7 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                 except httpx.RequestError as e:
                     print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
 
-                await send_whatsapp_message(contact_number, response_to_user)
+                await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
                 await session.commit()
                 return
@@ -227,7 +254,7 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                 except httpx.RequestError as e:
                     print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
                 
-                await send_whatsapp_message(contact_number, response_to_user)
+                await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
                 await session.commit()
                 return
@@ -265,7 +292,7 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                 except httpx.RequestError as e:
                     print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
                 
-                await send_whatsapp_message(contact_number, response_to_user)
+                await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
                 await session.commit()
                 return
@@ -300,7 +327,7 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                 except httpx.RequestError as e:
                     print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
                 
-                await send_whatsapp_message(contact_number, response_to_user)
+                await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
                 await session.commit()
                 return
@@ -337,7 +364,7 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                 except httpx.RequestError as e:
                     print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
             
-                await send_whatsapp_message(contact_number, response_to_user)
+                await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
                 await session.commit()
                 return
@@ -437,7 +464,7 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                             await client.post("http://host.docker.internal:9000/broadcast", json={"text": pix_code_to_send})
                     except httpx.RequestError as e:
                         print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
-                    await send_whatsapp_message(contact_number, pix_code_to_send)
+                    await send_whatsapp_message(contact_number, pix_code_to_send, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
                 
                 try:
                     async with httpx.AsyncClient() as client:
@@ -445,7 +472,7 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                 except httpx.RequestError as e:
                     print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
                 
-                await send_whatsapp_message(contact_number, response_to_user)
+                await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
                 await session.commit()
                 return
@@ -493,7 +520,7 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                 except httpx.RequestError as e:
                     print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
                 
-                await send_whatsapp_message(contact_number, response_to_user)
+                await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
                 await session.commit()
                 return
@@ -756,7 +783,7 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                             except httpx.RequestError as e:
                                 print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
                             
-                            await send_whatsapp_message(contact_number, response_to_user)
+                            await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
                             await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
                             cart.last_activity_at = utcnow()
                             session.add(cart)
@@ -791,7 +818,7 @@ async def process_whatsapp_message(data: Dict[str, Any]):
             except httpx.RequestError as e:
                 print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
             
-            await send_whatsapp_message(contact_number, response_to_user)
+            await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
             await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
             await session.commit()
             print("✅ Mensagem processada e resposta enviada.")
@@ -799,7 +826,7 @@ async def process_whatsapp_message(data: Dict[str, Any]):
         except Exception as e:
             print(f"❌ Erro crítico: {e}")
             if 'session' in locals() and session.is_active: await session.rollback()
-            await send_whatsapp_message(contact_number, "Desculpe, ocorreu um erro inesperado.")
+            await send_whatsapp_message(contact_number, "Desculpe, ocorreu um erro inesperado.", token=bot.whatsapp_token, phone_id=bot.phone_number_id)
 
 
 def _build_cart_summary_message(cart: ShoppingCart, bot: Bot, emoji: str = "🛒") -> str:
@@ -834,21 +861,22 @@ async def verify_webhook(request: Request):
         return PlainTextResponse(content=params.get("hub.challenge"))
     return PlainTextResponse(content="Invalid verification", status_code=403)
 
-async def send_whatsapp_message(to: str, message: str):
-    url = f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages"
-    headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
+# Adicione token e phone_id nos argumentos
+async def send_whatsapp_message(to: str, message: str, token: str, phone_id: str):
+    url = f"https://graph.facebook.com/v20.0/{phone_id}/messages" # Usa argumento
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     data = {"messaging_product": "whatsapp", "to": to, "text": {"body": message}}
+    
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(url, headers=headers, json=data)
             response.raise_for_status()
-            print(f"Mensagem enviada para {to}: {response.json()}")
         except httpx.HTTPStatusError as e:
-            print(f"Erro ao enviar mensagem para a API do WhatsApp: {e.response.text}")
+            print(f"❌ Erro ao enviar mensagem: {e.response.text}")
 
-async def mark_message_as_read(message_id: str):
-    url = f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages"
-    headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
+async def mark_message_as_read(message_id: str, token: str, phone_id: str):
+    url = f"https://graph.facebook.com/v20.0/{phone_id}/messages"
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     data = {"messaging_product": "whatsapp", "status": "read", "message_id": message_id}
     async with httpx.AsyncClient() as client:
         try:
@@ -1111,14 +1139,14 @@ async def handle_payment_notification(request: Request):
                     f"Pagamento APROVADO! ✅\n\n"
                     f"Seu pedido #{order.id} no {restaurant_name} foi confirmado e já está sendo preparado. Obrigado!"
                 )
-                await send_whatsapp_message(phone_number, message) # (Ignorando erros do simulador)
+                await send_whatsapp_message(phone_number, message, token=bot.whatsapp_token, phone_id=bot.phone_number_id) # (Ignorando erros do simulador)
             
             elif order and (order.status == OrderStatus.FAILED or order.status == OrderStatus.EXPIRED):
                 message = (
                     f"Opa! O pagamento do seu pedido #{order.id} falhou ou expirou. 😕\n\n"
                     f"Por favor, fale conosco novamente para refazer o pedido."
                 )
-                await send_whatsapp_message(phone_number, message) # (Ignorando erros do simulador)
+                await send_whatsapp_message(phone_number, message, token=bot.whatsapp_token, phone_id=bot.phone_number_id) # (Ignorando erros do simulador)
 
             return JSONResponse(content={"status": "received"}, status_code=200)
 
@@ -1127,3 +1155,51 @@ async def handle_payment_notification(request: Request):
             if session.is_active:
                 await session.rollback()
             return JSONResponse(content={"status": "internal_error_but_ok"}, status_code=200)
+
+def is_store_open(bot: Bot) -> bool:
+    """
+    Verifica se a loja está aberta baseada na configuração manual E no horário.
+    Prioridade:
+    1. Se o botão manual (is_open) for False -> FECHADO (Férias/Emergência).
+    2. Se manual for True -> Verifica o horário agendado (schedule).
+    """
+    # 1. Bloqueio Manual (O "Disjuntor")
+    if not bot.is_open:
+        return False
+
+    # Se não tiver horário configurado, assumimos que segue apenas o botão manual (Aberto)
+    if not bot.schedule:
+        return True
+
+    try:
+        # 2. Obtém a hora atual no fuso do restaurante
+        tz = pytz.timezone(bot.timezone)
+        now = datetime.now(tz)
+        
+        # Mapeia dia da semana (0=Segunda, 6=Domingo) para nossas chaves
+        weekdays = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+        today_key = weekdays[now.weekday()]
+        
+        day_config = bot.schedule.get(today_key)
+
+        # Se não tem config para hoje ou o dia está inativo
+        if not day_config or not day_config.get("active", False):
+            return False # Fechado neste dia
+
+        start_time = day_config.get("start", "00:00")
+        end_time = day_config.get("end", "23:59")
+
+        # Converte strings "HH:MM" para objetos comparáveis
+        current_time_str = now.strftime("%H:%M")
+        
+        # Lógica simples de comparação de strings (funciona bem para formato 24h)
+        # Se passar da meia-noite (ex: 18:00 as 02:00), a lógica precisaria ser mais complexa.
+        # Para o MVP, assumimos que abre e fecha no mesmo dia operacional.
+        if start_time <= current_time_str <= end_time:
+            return True
+        else:
+            return False
+
+    except Exception as e:
+        print(f"Erro ao calcular horário: {e}. Assumindo aberto.")
+        return True
