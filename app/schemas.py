@@ -53,6 +53,8 @@ class BotCreate(BaseModel):
     restaurant_name: str
     whatsapp_number: str
     pix_key: Optional[str] = None
+    delivery_fee: Optional[float] = 0.0
+    min_order_value: Optional[float] = 0.0
     whatsapp_token: str
     phone_number_id: str
 
@@ -62,6 +64,7 @@ class BotUpdate(BaseModel):
     whatsapp_number: Optional[str] = None
     pix_key: Optional[str] = None
     delivery_fee: Optional[float] = None
+    min_order_value: Optional[float] = 0.0
     is_open: Optional[bool] = None
     closing_message: Optional[str] = None
     timezone: Optional[str] = None
@@ -80,6 +83,9 @@ class BotResponse(BaseModel):
     whatsapp_number: str
     created_at: datetime
     pix_key: Optional[str] = None
+
+    delivery_fee: Optional[float] = 0.0
+    min_order_value: Optional[float] = 0.0
     
     # O bot agora retorna a lista de produtos e de histórico associados a ele
     products: List[ProductResponse] = []
@@ -128,6 +134,8 @@ class OrderResponse(BaseModel):
     customer_address: Optional[str] = None
     created_at: datetime
     display_items: List[OrderItemResponse] = []
+
+    customer_name: Optional[str] = None
 
     customer_phone: Optional[str] = None
     human_takeover_active: bool = False

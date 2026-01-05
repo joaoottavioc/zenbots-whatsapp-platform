@@ -30,8 +30,10 @@ async def create_new_bot(
         user_id=current_user.id, 
         whatsapp_number=bot_data.whatsapp_number, 
         restaurant_name=bot_data.restaurant_name,
-        pix_key=bot_data.pix_key, # 👈 CORREÇÃO: Passa a chave pix para o CRUD
-        whatsapp_token=bot_data.whatsapp_token,     # <--- Ensure this is passed
+        pix_key=bot_data.pix_key,
+        delivery_fee=bot_data.delivery_fee,
+        min_order_value=bot_data.min_order_value,        
+        whatsapp_token=bot_data.whatsapp_token,
         phone_number_id=bot_data.phone_number_id
     )
     
@@ -39,7 +41,6 @@ async def create_new_bot(
         raise HTTPException(status_code=400, detail="Um bot com este número de WhatsApp já existe.")
         
     return bot_created
-
 
 @router.get("/bots", response_model=List[schemas.BotResponse])
 async def get_user_bots(
@@ -424,3 +425,17 @@ async def update_order_status(
     ]
     
     return order_dict
+
+@router.get("/bots/{bot_id}/analytics/best-sellers")
+async def get_best_sellers(bot_id: int, session: AsyncSession = Depends(get_session)):
+    results = await crud.get_top_selling_products(session, bot_id)
+    
+    # Formata para JSON amigável
+    return [
+        {
+            "name": row[0],
+            "quantity": row[1],
+            "revenue": row[2]
+        } 
+        for row in results
+    ]

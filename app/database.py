@@ -8,7 +8,14 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Criando o engine assíncrono
-engine = create_async_engine(DATABASE_URL, echo=True, future=True)
+engine = create_async_engine(
+    DATABASE_URL,
+    echo=False,
+    # 🟢 ADICIONE/MODIFIQUE ESTAS 3 LINHAS:
+    pool_size=20,       # Aumenta conexões fixas de 5 para 20
+    max_overflow=10,    # Permite criar mais 10 extras temporariamente
+    pool_timeout=30,    # Espera 30s se o banco estiver cheio antes de dar erro
+)
 
 # Criando a factory de sessão assíncrona
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)

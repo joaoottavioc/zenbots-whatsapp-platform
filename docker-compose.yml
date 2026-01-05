@@ -14,6 +14,19 @@ services:
       - ./init.sql:/docker-entrypoint-initdb.d/init-vector.sql
     restart: unless-stopped
 
+  # ▼▼▼ NOVO SERVIÇO: REDIS ▼▼▼
+  redis:
+    image: redis:alpine
+    container_name: zenbots_redis
+    ports:
+      - "6379:6379"
+    # Garante persistência (não perde dados se reiniciar o container)
+    command: redis-server --appendonly yes 
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+  # ▲▲▲ FIM DO NOVO SERVIÇO ▲▲▲
+
   ollama:
     image: ollama/ollama
     deploy:
@@ -41,10 +54,15 @@ services:
     depends_on:
       - db
       - ollama
+      - redis # <--- Adicionado para garantir a ordem de boot
     env_file:
       - .env
+    environment:
+      # URL interna do Docker para o Redis
+      - REDIS_URL=redis://redis:6379/0 
     restart: unless-stopped
 
 volumes:
   db_data:
   ollama_data:
+  redis_data: # <--- Novo volume para persistência do Redis

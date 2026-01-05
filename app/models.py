@@ -42,6 +42,9 @@ class Bot(SQLModel, table=True):
 
     # Permite que cada restaurante defina sua taxa de entrega
     delivery_fee: float = Field(default=0.0)
+
+    # Permite que cada restaurante defina um valor mínimo para pedidos
+    min_order_value: float = Field(default=0.0)
     
     user_id: int = Field(foreign_key="user.id")
     user: "User" = Relationship(back_populates="bots")

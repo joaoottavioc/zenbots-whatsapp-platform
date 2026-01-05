@@ -4,6 +4,7 @@ from typing import List, Iterable
 import unicodedata, difflib, math, asyncio
 import regex as re
 from sentence_transformers import SentenceTransformer
+import threading  # <--- ADICIONADO PARA PROTEÇÃO
 
 # ========= Config dos modelos (384d em ambos) =========
 # Catálogo (mantém o que você já tem)
@@ -16,16 +17,30 @@ _ROUTER_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
 _model_products: SentenceTransformer | None = None
 _model_router: SentenceTransformer | None = None
 
+# ▼▼▼ CADEADOS DE SEGURANÇA (LOCKS) ▼▼▼
+# Isso impede que 10 requisições carreguem o modelo ao mesmo tempo
+_products_lock = threading.Lock()
+_router_lock = threading.Lock()
+
 def _get_products_model() -> SentenceTransformer:
     global _model_products
+    # Primeira verificação (rápida, sem bloqueio)
     if _model_products is None:
-        _model_products = SentenceTransformer(_PRODUCTS_MODEL_NAME)
+        # Bloqueia a thread para carregar com segurança
+        with _products_lock:
+            # Segunda verificação (garante que ninguém carregou enquanto esperávamos)
+            if _model_products is None:
+                print(f"🧠 Carregando modelo de PRODUTOS (Thread-Safe)...")
+                _model_products = SentenceTransformer(_PRODUCTS_MODEL_NAME)
     return _model_products
 
 def _get_router_model() -> SentenceTransformer:
     global _model_router
     if _model_router is None:
-        _model_router = SentenceTransformer(_ROUTER_MODEL_NAME)
+        with _router_lock:
+            if _model_router is None:
+                print(f"🧠 Carregando modelo de ROUTER (Thread-Safe)...")
+                _model_router = SentenceTransformer(_ROUTER_MODEL_NAME)
     return _model_router
 
 # ========= Normalização focada em PT (para robustez a typos) =========
@@ -104,6 +119,7 @@ async def embed_async(texts: Iterable[str], space: str = "router", normalize: bo
 
 def generate_embedding(text: str) -> List[float]:
     """Compat: embedding individual para catálogo (products)."""
+    # MANTÉM SÍNCRONO POR COMPATIBILIDADE, MAS EVITE USAR EM ROTAS ASYNC
     return embed_sync([text], space="products", normalize=False)[0]
 
 def generate_embeddings(texts: List[str]) -> List[List[float]]:

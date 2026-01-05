@@ -13,7 +13,7 @@ from app.models import ProcessedMessage, Product, ShoppingCart, DeliveryMethod, 
 from app.openai_client import classify_user_intent, get_ai_decision, extract_potential_items
 from app.prompt_central import create_central_prompt
 from app.tools_definition import tools_schema
-from datetime import timedelta, timezone
+from datetime import datetime, timedelta, timezone
 import regex as re
 from sqlmodel import select
 from app.semantic_router import semantic_intent, THRESHOLDS
@@ -27,6 +27,7 @@ from app.pending_action import save_pending, clear_pending, has_valid_pending, e
 # Função padronizada para obter o tempo atual em UTC
 from app.time import utcnow
 import pytz
+from app.rate_limiter import is_spamming
 
 
 load_dotenv()
@@ -58,6 +59,11 @@ async def process_whatsapp_message(data: Dict[str, Any]):
             contact_number = message_data["from"]
             text_body = message_data["text"]["body"]
             message_id = message_data["id"]
+
+            if is_spamming(contact_number, limit=20, window_seconds=60):
+                print(f"🚫 RATE LIMIT: Bloqueando {contact_number} por excesso de mensagens.")
+                # Retorna SILENCIOSAMENTE. Não responda ao spammer.
+                return
             
             # NOVOS CAMPOS: Pegamos o ID do metadata para saber qual bot foi chamado
             incoming_phone_id = value["metadata"]["phone_number_id"]
@@ -78,6 +84,9 @@ async def process_whatsapp_message(data: Dict[str, Any]):
             if not bot:
                 print("❌ Bot não encontrado para esta mensagem. Ignorando.")
                 return
+                
+            current_token = bot.whatsapp_token
+            current_phone_id = bot.phone_number_id
 
             # 3. Marcar como lida e processar duplicação (AGORA TEMOS AS CREDENCIAIS DO BOT)
             await mark_message_as_read(message_id, bot.whatsapp_token, bot.phone_number_id)
@@ -88,21 +97,49 @@ async def process_whatsapp_message(data: Dict[str, Any]):
             await crud.add_processed_message(session, message_id)
 
             if not is_store_open(bot):
-                print(f"🔒 Loja fechada. Enviando mensagem automática para {contact_number}.")
+                print(f"🔒 Loja fechada. Enviando mensagem enriquecida para {contact_number}.")
 
+                # 1. Calcula quando volta
+                next_opening = get_next_opening_text(bot)
+                
+                # 2. URL do Cardápio (Mesma lógica do Greeting)
+                menu_url = "https://images.unsplash.com/photo-1513104890138-7c749659a591?q=80&w=1000&auto=format&fit=crop"
+
+                # 3. Monta uma mensagem amigável
+                # Usa a mensagem configurada no banco OU um padrão, + a info dinâmica
+                base_msg = bot.closing_message or "No momento não estamos atendendo. 🌙"
+                
+                rich_closing_msg = (
+                    f"{base_msg}\n\n"
+                    f"⏰ *Voltamos {next_opening}*\n"
+                    "---------------------------------\n"
+                    "Enquanto isso, *confira nosso cardápio na imagem acima* e já vá escolhendo seu pedido. Será um prazer atendê-lo assim que possível! 👆😋"
+                )
+
+                # 4. Simulador (Broadcast)
                 try:
+                    # Mostra no simulador com o link da imagem para debug
+                    sim_msg = f"🔒 [FECHADO - IMG: {menu_url}]\n\n{rich_closing_msg}"
                     async with httpx.AsyncClient() as client:
-                        await client.post("http://host.docker.internal:9000/broadcast", json={"text": bot.closing_message})
-                except httpx.RequestError as e:
-                    print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
+                        await client.post("http://host.docker.internal:9000/broadcast", json={"text": sim_msg})
+                except httpx.RequestError:
+                    pass
                 
-                # Envia a mensagem de fechado
-                await send_whatsapp_message(contact_number, bot.closing_message, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
+                # 5. Envia IMAGEM + TEXTO (Caption)
+                # Assim o cliente não fica de mãos vazias
+                await send_whatsapp_message(
+                    to=contact_number, 
+                    message=rich_closing_msg, 
+                    token=bot.whatsapp_token, 
+                    phone_id=bot.phone_number_id,
+                    media_url=menu_url,
+                    media_type="image"
+                )
                 
-                # Opcional: Salvar no histórico para o dono ver que o cliente chamou
-                await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, bot.closing_message)
+                # 6. Salva no histórico
+                await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, rich_closing_msg)
                 
-                return
+                return # Encerra o processamento
 
             contact = await crud.get_or_create_contact(session, bot.id, contact_number)
             cart = await crud.get_or_create_cart(session, contact.id)
@@ -169,6 +206,46 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                 cart_items_for_intent = [{"id": item.product_id, "name": item.product.name} for item in cart.items]
                 intent = await resolve_intent(text_body, cart, cart_items_for_intent)
                 print(f"[INTENT DEBUG] Texto: {text_body!r} → Intent escolhida: {intent}")
+                
+            # INTERCEPTADOR DE BOAS-VINDAS COM IMAGEM
+            if intent == "GREETING_OR_QUESTION" and cart.state == "GREETING":
+                
+                # 1. Mensagem de Legenda (Caption)
+                response_to_user = (
+                    f"Olá! Bem-vindo ao *{bot.restaurant_name or 'nosso restaurante'}*! 🍕\n\n"
+                    "👆 *Dê uma olhada no nosso cardápio na imagem acima!* 👆\n\n"
+                    "Eu sou seu assistente virtual. Pode me dizer o que deseja pedir (escrevendo ou por áudio) que eu monto seu pedido!\n\n"
+                    "Ex: _'Quero uma pizza de calabresa e uma coca'_"
+                )
+                
+                # 2. URL da Imagem do Cardápio
+                # DICA: Troque esta URL pela imagem real do cardápio do seu cliente assim que tiver
+                menu_url = "https://images.unsplash.com/photo-1513104890138-7c749659a591?q=80&w=1000&auto=format&fit=crop" 
+                
+                
+                try:
+                    async with httpx.AsyncClient() as client:
+                        await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
+                except httpx.RequestError as e:
+                    print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
+
+                
+                # 3. Envia IMAGEM + TEXTO juntos
+                await send_whatsapp_message(
+                    to=contact_number, 
+                    message=response_to_user, 
+                    token=bot.whatsapp_token, 
+                    phone_id=bot.phone_number_id,
+                    media_url=menu_url,
+                    media_type="image"
+                )
+                
+                # 4. Salva no histórico e encerra
+                await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, "Enviou Cardápio (Imagem)")
+                cart.state = "SHOPPING" 
+                session.add(cart)
+                await session.commit()
+                return  # <--- IMPORTANTE: Pára a execução aqui para não gastar tokens da OpenAI
 
             # A lógica de reset de estado continua a mesma, mas agora só será
             # acionada por intenções de compra genuínas.
@@ -541,6 +618,30 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                 
                 if not cart.items:
                     response_to_user = "Seu carrinho está vazio. O que você gostaria de pedir?"
+                    
+                # ▼▼▼ 2. VALIDAÇÃO DE PEDIDO MÍNIMO (NOVA) ▼▼▼
+                current_total = sum(item.product.price * item.quantity for item in cart.items)
+                
+                # Verifica se existe valor mínimo configurado (> 0) e se o total é menor que ele
+                if bot.min_order_value and bot.min_order_value > 0 and current_total < bot.min_order_value:
+                    missing = bot.min_order_value - current_total
+                    response_to_user = (
+                        f"⚠️ *Pedido Mínimo não atingido*\n\n"
+                        f"O valor mínimo para pedidos é *R$ {bot.min_order_value:.2f}*.\n"
+                        f"Seu carrinho está em R$ {current_total:.2f}.\n\n"
+                        f"Faltam apenas *R$ {missing:.2f}*! Que tal adicionar uma bebida ou sobremesa? 🥤🍫"
+                    )
+                    
+                    # Envia, salva histórico e para a execução
+                    try:
+                         async with httpx.AsyncClient() as client:
+                            await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
+                    except: pass
+
+                    await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
+                    await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
+                    await session.commit()
+                    return
                 
                 # NOVO PASSO: Se o método de entrega ainda não foi escolhido, esta é a primeira pergunta.
                 elif cart.delivery_method is None:
@@ -825,8 +926,28 @@ async def process_whatsapp_message(data: Dict[str, Any]):
 
         except Exception as e:
             print(f"❌ Erro crítico: {e}")
-            if 'session' in locals() and session.is_active: await session.rollback()
-            await send_whatsapp_message(contact_number, "Desculpe, ocorreu um erro inesperado.", token=bot.whatsapp_token, phone_id=bot.phone_number_id)
+            
+            # Tenta reverter o banco para não deixar travado
+            if 'session' in locals() and session.is_active:
+                try:
+                    await session.rollback()
+                except: pass
+            
+            # ▼▼▼ LÓGICA SEGURA DE ENVIO DE ERRO ▼▼▼
+            # Verifica se:
+            # 1. Temos o número do cliente ('contact_number' existe)
+            # 2. Temos o token salvo na memória ('current_token' existe)
+            if 'contact_number' in locals() and 'current_token' in locals() and current_token:
+                 try:
+                     await send_whatsapp_message(
+                         to=contact_number, 
+                         message="Desculpe, tive um erro técnico momentâneo. Tente novamente em instantes. 🔧", 
+                         token=current_token,      # Usa a variável local (segura)
+                         phone_id=current_phone_id # Usa a variável local (segura)
+                     )
+                 except Exception as send_err:
+                     # Se falhar aqui (ex: erro de rede), apenas loga e não quebra o app
+                     print(f"Não foi possível enviar mensagem de erro ao usuário: {send_err}")
 
 
 def _build_cart_summary_message(cart: ShoppingCart, bot: Bot, emoji: str = "🛒") -> str:
@@ -861,11 +982,40 @@ async def verify_webhook(request: Request):
         return PlainTextResponse(content=params.get("hub.challenge"))
     return PlainTextResponse(content="Invalid verification", status_code=403)
 
-# Adicione token e phone_id nos argumentos
-async def send_whatsapp_message(to: str, message: str, token: str, phone_id: str):
-    url = f"https://graph.facebook.com/v20.0/{phone_id}/messages" # Usa argumento
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    data = {"messaging_product": "whatsapp", "to": to, "text": {"body": message}}
+async def send_whatsapp_message(
+    to: str, 
+    message: str, 
+    token: str, 
+    phone_id: str, 
+    media_url: str = None, 
+    media_type: str = "image"  # Pode ser "image" ou "document" (para PDF)
+):
+    url = f"https://graph.facebook.com/v20.0/{phone_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {token}", 
+        "Content-Type": "application/json"
+    }
+    
+    # Lógica para decidir se manda Texto Puro ou Mídia
+    if media_url:
+        data = {
+            "messaging_product": "whatsapp",
+            "to": to,
+            "type": media_type,
+            media_type: {
+                "link": media_url,
+                "caption": message  # O texto vai junto com a imagem
+            }
+        }
+        # Se for documento, podemos adicionar um nome de arquivo bonito
+        if media_type == "document":
+            data["document"]["filename"] = "Cardapio_Restaurante.pdf"
+    else:
+        data = {
+            "messaging_product": "whatsapp",
+            "to": to,
+            "text": {"body": message}
+        }
     
     async with httpx.AsyncClient() as client:
         try:
@@ -1203,3 +1353,42 @@ def is_store_open(bot: Bot) -> bool:
     except Exception as e:
         print(f"Erro ao calcular horário: {e}. Assumindo aberto.")
         return True
+
+def get_next_opening_text(bot: Bot) -> str:
+    """
+    Calcula o próximo horário de abertura baseado no schedule do bot.
+    Retorna algo como: "Amanhã às 18:00" ou "Segunda às 10:00".
+    """
+    if not bot.schedule:
+        return "em breve"
+
+    try:
+        tz = pytz.timezone(bot.timezone)
+        now = datetime.now(tz)
+        weekdays_map = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+        weekdays_pt = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+        
+        current_day_idx = now.weekday()
+        
+        # Procura nos próximos 7 dias
+        for i in range(1, 8):
+            next_day_idx = (current_day_idx + i) % 7
+            day_key = weekdays_map[next_day_idx]
+            
+            day_config = bot.schedule.get(day_key)
+            
+            if day_config and day_config.get("active"):
+                start_time = day_config.get("start", "00:00")
+                
+                # Se for amanhã
+                if i == 1:
+                    return f"Amanhã às {start_time}"
+                # Se for hoje (caso raro de janelas multiplas, mas simplificamos aqui)
+                elif i == 0: 
+                    return f"Hoje às {start_time}"
+                else:
+                    return f"{weekdays_pt[next_day_idx]} às {start_time}"
+                    
+        return "em breve"
+    except Exception:
+        return "em breve"

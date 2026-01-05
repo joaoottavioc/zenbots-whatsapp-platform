@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from app.utils import normalize_phone
-from sqlalchemy import text
+from sqlalchemy import text, func, desc
 from app.models import Contact, ShoppingCart, Order, OrderStatus
 
 # 1. Imports unificados e limpos
@@ -14,7 +14,7 @@ from app.models import (
     Contact, ShoppingCart, CartItem
 )
 from app.schemas import BotUpdate, ProductUpdate
-from app.embedding_service import generate_embedding
+from app.embedding_service import generate_embedding, embed_async
 
 # --- Funções do Webhook (NÃO DEVEM FAZER COMMIT) ---
 
@@ -232,7 +232,9 @@ async def find_relevant_products(session: AsyncSession, bot_id: int, extracted_i
             if p.id not in all_results_map: all_results_map[p.id] = p
             
         # 🔹 4. Fallback: busca semântica (RAG)
-        query_embedding = generate_embedding(f"PRODUTO PRINCIPAL: {item_name}") #
+        text_to_embed = f"PRODUTO PRINCIPAL: {item_name}"
+        embeddings = await embed_async([text_to_embed], space="products", normalize=False)
+        query_embedding = embeddings[0]
         embedding_query = select(Product).where(Product.bot_id == bot_id).order_by(
             Product.embedding.cosine_distance(query_embedding) #
         ).limit(limit_per_item) #
@@ -329,6 +331,7 @@ async def create_bot(
     whatsapp_token: str = "", 
     phone_number_id: str = "",
     delivery_fee: float = 0.0,
+    min_order_value: float = 0.0,
     is_open: bool = True,
     closing_message: Optional[str] = None,
     schedule: Optional[Dict[str, Any]] = None
@@ -350,6 +353,7 @@ async def create_bot(
         whatsapp_token=whatsapp_token,
         phone_number_id=phone_number_id,
         delivery_fee=delivery_fee,
+        min_order_value=min_order_value,
         is_open=is_open,
         closing_message=closing_message or "Olá! No momento estamos fechados.",
         schedule=schedule or {}
@@ -367,9 +371,32 @@ async def get_bot_by_id(session: AsyncSession, bot_id: int) -> Optional[Bot]:
     return result.scalars().first()
 
 async def list_user_bots(session: AsyncSession, user_id: int) -> List[Bot]:
-    query = select(Bot).where(Bot.user_id == user_id).options(selectinload(Bot.history), selectinload(Bot.products)).order_by(Bot.id.asc())
+    """
+    Lista os bots do usuário ordenados por ÚLTIMA ATIVIDADE.
+    O bot que teve o pedido mais recente (created_at) aparece no topo.
+    Em caso de empate (sem pedidos), mostra os bots criados recentemente primeiro.
+    """
+    query = (
+        select(Bot)
+        .outerjoin(Order, Bot.id == Order.bot_id) # Junta com pedidos para poder checar datas
+        .where(Bot.user_id == user_id)
+        .options(
+            selectinload(Bot.history), 
+            selectinload(Bot.products)
+        )
+        .group_by(Bot.id) # Agrupa para calcular o MAX(date)
+        .order_by(
+            # 1º Critério: Data do pedido mais recente (os NULLs ficam por último automaticamente)
+            desc(func.max(Order.created_at)), 
+            # 2º Critério: Desempate pelo ID do bot (bots mais novos primeiro)
+            desc(Bot.id)
+        )
+    )
+    
     result = await session.execute(query)
-    return result.scalars().all()
+    # .unique() é boa prática quando se usa joins que poderiam duplicar linhas, 
+    # embora o group_by já trate isso na maioria dos casos.
+    return result.unique().scalars().all()
 
 async def update_bot(session: AsyncSession, bot_id: int, update_data: BotUpdate) -> Optional[Bot]:
     """CORREÇÃO: A assinatura já estava recebendo bot_id, o que é ótimo."""
@@ -415,7 +442,8 @@ async def create_product(
         f"DESCRIÇÃO E INGREDIENTES: {description or 'N/A'}. "
         f"CATEGORIAS E TAGS: {keywords or 'N/A'}."
     )
-    embedding_vector = generate_embedding(text_to_embed)
+    embeddings = await embed_async([text_to_embed], space="products", normalize=False)
+    embedding_vector = embeddings[0]
     
     new_product = Product(
         bot_id=bot_id, 
@@ -458,7 +486,8 @@ async def update_product(session: AsyncSession, db_product: Product, update_data
             f"DESCRIÇÃO E INGREDIENTES: {db_product.description or 'N/A'}. "
             f"CATEGORIAS E TAGS: {db_product.keywords or 'N/A'}."
         )
-        db_product.embedding = generate_embedding(text_to_embed)
+        embeddings = await embed_async([text_to_embed], space="products", normalize=False)
+        db_product.embedding = embeddings[0]
         
     session.add(db_product)
     await session.commit()
@@ -516,7 +545,8 @@ async def bulk_create_products(session: AsyncSession, bot_id: int, products_data
                 f"DESCRIÇÃO E INGREDIENTES: {item.get('description', 'N/A')}. "
                 f"PALAVRAS-CHAVE: {keywords_str or 'N/A'}."
             )
-            embedding_vector = generate_embedding(text_to_embed)
+            embeddings = await embed_async([text_to_embed], space="products", normalize=False)
+            embedding_vector = embeddings[0]
             
             new_product = Product(
                 bot_id=bot_id, 
@@ -538,7 +568,14 @@ async def bulk_create_products(session: AsyncSession, bot_id: int, products_data
 
 async def get_products_by_bot_id(session: AsyncSession, bot_id: int) -> List[Product]:
     """Busca todos os produtos associados a um bot_id específico."""
-    query = select(Product).where(Product.bot_id == bot_id)
+    # ANTES: query = select(Product).where(Product.bot_id == bot_id)
+    
+    # DEPOIS (Correção): Adicionamos order_by(Product.name.asc())
+    query = (
+        select(Product)
+        .where(Product.bot_id == bot_id)
+        .order_by(Product.name.asc())  # <--- AQUI ESTÁ A MÁGICA
+    )
     result = await session.execute(query)
     return result.scalars().all()
 
@@ -788,19 +825,53 @@ async def list_orders_by_bot(session: AsyncSession, bot_id: int, status_filter: 
             for item in order.items
         ]
         
-        # ▼▼▼ LÓGICA CORRIGIDA ▼▼▼
+        # ▼▼▼ CORREÇÃO AQUI ▼▼▼
         if order.contact:
             order_dict["customer_phone"] = order.contact.phone_number
-            # Verifica se o human takeover está ativo para este contato
+            # Adicionamos explicitamente o nome aqui:
+            order_dict["customer_name"] = order.contact.name 
+            
             if order.contact.cart:
                 order_dict["human_takeover_active"] = order.contact.cart.human_takeover_active
             else:
                 order_dict["human_takeover_active"] = False
         else:
              order_dict["customer_phone"] = "Desconhecido"
+             order_dict["customer_name"] = None # Garante que a chave exista
              order_dict["human_takeover_active"] = False
-        # ▲▲▲ FIM DA LÓGICA ▲▲▲
+        # ▲▲▲ FIM DA CORREÇÃO ▲▲▲
         
         formatted_orders.append(order_dict)
         
-    return formatted_orders   
+    return formatted_orders
+
+async def get_top_selling_products(session: AsyncSession, bot_id: int, limit: int = 5):
+    # --- DEBUG: Adicione isto ---
+    print(f"🔍 DEBUG ANALYTICS: Buscando dados para o Bot ID: {bot_id}")
+    
+    # Verifica se existem pedidos para este bot, independente dos produtos
+    check_query = select(func.count(Order.id)).where(Order.bot_id == bot_id)
+    total_orders = (await session.execute(check_query)).scalar()
+    print(f"📊 DEBUG ANALYTICS: O Bot {bot_id} tem um total de {total_orders} pedidos no banco.")
+    # -----------------------------
+
+    query = (
+        select(
+            Product.name, 
+            func.sum(OrderItem.quantity).label("total_sold"),
+            func.sum(OrderItem.quantity * OrderItem.price_at_time_of_order).label("total_revenue")
+        )
+        .join(OrderItem, Product.id == OrderItem.product_id)
+        .join(Order, OrderItem.order_id == Order.id)
+        .where(Order.bot_id == bot_id) 
+        # .where(Order.status == 'COMPLETED') 
+        .group_by(Product.id, Product.name)
+        .order_by(desc("total_sold"))
+        .limit(limit)
+    )
+    
+    result = await session.execute(query)
+    final_list = result.all()
+    print(f"📈 DEBUG ANALYTICS: Resultado final da query: {len(final_list)} produtos encontrados.")
+    
+    return final_list
