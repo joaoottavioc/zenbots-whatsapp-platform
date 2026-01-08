@@ -24,6 +24,10 @@ tools_schema = [
                                     "type": "integer",
                                     "description": "O ID do produto.",
                                 },
+                                "notes": {
+                                    "type": "string", 
+                                    "description": "Observações do cliente para este item. Ex: 'Sem cebola', 'Ponto da carne'."
+                                },
                                 "quantity": {
                                     "type": "integer",
                                     "description": "A quantidade.",
@@ -218,6 +222,21 @@ tools_schema = [
                     }
                 },
                 "required": ["search_concept"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_item_observation",
+            "description": "Atualiza ou adiciona uma observação a um item que JÁ está no carrinho. Use quando o cliente corrigir ou adicionar um detalhe depois.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "product_id": {"type": "integer", "description": "ID do produto para adicionar a nota"},
+                    "notes": {"type": "string", "description": "A nova observação completa. Ex: 'Sem maionese'"}
+                },
+                "required": ["product_id", "notes"]
             }
         }
     },

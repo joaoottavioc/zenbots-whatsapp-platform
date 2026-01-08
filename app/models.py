@@ -161,6 +161,8 @@ class CartItem(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     quantity: int
 
+    notes: Optional[str] = Field(default=None, description="Observações do item (ex: Sem cebola)")
+
     product_id: int = Field(foreign_key="product.id")
     product: "Product" = Relationship()
 
@@ -188,6 +190,8 @@ class OrderItem(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     quantity: int
     price_at_time_of_order: float
+
+    notes: Optional[str] = Field(default=None)
 
     order_id: int = Field(foreign_key="order.id")
     order: "Order" = Relationship(back_populates="items")

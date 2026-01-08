@@ -66,31 +66,6 @@ async def get_or_create_cart(session: AsyncSession, contact_id: int) -> Shopping
         await session.refresh(cart)
     return cart
 
-async def add_items_to_db_cart_old(session: AsyncSession, cart_id: int, items_to_add: List[Dict]) -> Optional[ShoppingCart]:
-    """Adiciona ou atualiza itens no carrinho. O commit é feito no final do fluxo."""
-    # CORREÇÃO: Busca o carrinho pelo ID dentro da sessão atual
-    cart = await session.get(ShoppingCart, cart_id, options=[selectinload(ShoppingCart.items)])
-    if not cart:
-        return None
-
-    for item_data in items_to_add:
-        product_id = item_data.get("product_id")
-        quantity_to_add = item_data.get("quantity", 1)
-
-        if not isinstance(quantity_to_add, int) or quantity_to_add <= 0:
-            continue
-
-        existing_item = next((item for item in cart.items if item.product_id == product_id), None)
-        
-        if existing_item:
-            existing_item.quantity += quantity_to_add
-        else:
-            product = await session.get(Product, product_id)
-            if product:
-                new_item = CartItem(product_id=product_id, quantity=quantity_to_add, cart_id=cart.id)
-                session.add(new_item)
-    await session.flush()
-    return cart
 
 async def add_items_to_db_cart(session: AsyncSession, cart_id: int, items_to_add: List[Dict]) -> Optional[ShoppingCart]:
     """Adiciona itens ao carrinho, ignorando produtos indisponíveis."""
@@ -102,6 +77,7 @@ async def add_items_to_db_cart(session: AsyncSession, cart_id: int, items_to_add
     for item_data in items_to_add:
         product_id = item_data.get("product_id")
         quantity_to_add = item_data.get("quantity", 1)
+        notes_to_add = item_data.get("notes")
 
         if not isinstance(quantity_to_add, int) or quantity_to_add <= 0:
             continue
@@ -118,8 +94,15 @@ async def add_items_to_db_cart(session: AsyncSession, cart_id: int, items_to_add
         
         if existing_item:
             existing_item.quantity += quantity_to_add
+            if notes_to_add:
+                existing_item.notes = notes_to_add
         else:
-            new_item = CartItem(product_id=product_id, quantity=quantity_to_add, cart_id=cart.id)
+            new_item = CartItem(
+                product_id=product_id, 
+                quantity=quantity_to_add, 
+                cart_id=cart.id,
+                notes=notes_to_add 
+            )
             session.add(new_item)
             
     await session.flush()
@@ -629,7 +612,12 @@ async def create_order(
             product = await session.get(Product, item_data["product_id"])
             if not product:
                 raise ValueError(f"Produto {item_data['product_id']} não encontrado.")
-            order_items_to_create.append(OrderItem(product_id=product.id, quantity=item_data["quantity"], price_at_time_of_order=product.price))
+            order_items_to_create.append(OrderItem(
+                product_id=product.id, 
+                quantity=item_data["quantity"], 
+                price_at_time_of_order=product.price,
+                notes=item_data.get("notes") # Pega do dicionário passado
+            ))
 
         new_order = Order(
             bot_id=bot_id,
@@ -764,40 +752,6 @@ async def update_order_status_by_id(session: AsyncSession, order_id: int, new_st
     print(f"✅ Pedido {order_id} atualizado para {new_status}.")
     return order
 
-async def list_orders_by_bot_old(session: AsyncSession, bot_id: int, status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
-    """
-    Busca pedidos de um bot.
-    Retorna uma lista de DICIONÁRIOS para incluir o campo calculado 'display_items'.
-    """
-    query = (
-        select(Order)
-        .where(Order.bot_id == bot_id)
-        .options(selectinload(Order.items).selectinload(OrderItem.product))
-        .order_by(Order.created_at.desc())
-    )
-    
-    if status_filter:
-        query = query.where(Order.status == status_filter)
-        
-    result = await session.execute(query)
-    orders = result.scalars().all()
-    
-    # ▼▼▼ A CORREÇÃO ESTÁ AQUI ▼▼▼
-    # Em vez de modificar o objeto 'order', criamos dicionários
-    formatted_orders = []
-    for order in orders:
-        # 1. Converte o objeto do banco para um dicionário Python simples
-        order_dict = order.model_dump()
-        
-        # 2. Agora podemos adicionar campos extras sem erro
-        order_dict["display_items"] = [
-            {"quantity": item.quantity, "product_name": item.product.name} 
-            for item in order.items
-        ]
-        formatted_orders.append(order_dict)
-        
-    return formatted_orders
-
 async def list_orders_by_bot(session: AsyncSession, bot_id: int, status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
     query = (
         select(Order)
@@ -821,7 +775,7 @@ async def list_orders_by_bot(session: AsyncSession, bot_id: int, status_filter: 
         order_dict = order.model_dump()
         
         order_dict["display_items"] = [
-            {"quantity": item.quantity, "product_name": item.product.name} 
+            {"quantity": item.quantity, "product_name": item.product.name, "notes": item.notes} 
             for item in order.items
         ]
         
@@ -875,3 +829,19 @@ async def get_top_selling_products(session: AsyncSession, bot_id: int, limit: in
     print(f"📈 DEBUG ANALYTICS: Resultado final da query: {len(final_list)} produtos encontrados.")
     
     return final_list
+
+async def update_item_notes(session: AsyncSession, cart_id: int, product_id: int, notes: str) -> Optional[ShoppingCart]:
+    """Atualiza apenas a observação de um item no carrinho."""
+    cart = await session.get(ShoppingCart, cart_id, options=[selectinload(ShoppingCart.items).selectinload(CartItem.product)])
+    if not cart:
+        return None
+        
+    item_to_modify = next((item for item in cart.items if item.product_id == product_id), None)
+    
+    if item_to_modify:
+        item_to_modify.notes = notes
+        session.add(item_to_modify)
+        await session.flush()
+        return cart
+    
+    return None

@@ -124,6 +124,7 @@ class CatalogUploadRequest(BaseModel):
 
 class OrderItemResponse(BaseModel):
     quantity: int
+    notes: Optional[str] = None
     product_name: str  
     model_config = ConfigDict(from_attributes=True)
 

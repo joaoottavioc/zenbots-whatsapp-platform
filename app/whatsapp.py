@@ -464,7 +464,7 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
                         raise Exception(f"Carrinho {cart.id} não possui um contato associado.")
 
                     bot_id = cart.contact.bot_id
-                    items_for_order = [{"product_id": item.product_id, "quantity": item.quantity} for item in cart.items]
+                    items_for_order = [{"product_id": item.product_id, "quantity": item.quantity, "notes": item.notes} for item in cart.items]
                     
                     # Inclui a taxa de entrega no total do pedido ANTES de salvar
                     total_amount = sum(item.product.price * item.quantity for item in cart.items)
@@ -825,7 +825,12 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
                                     # SUCESSO: O carrinho foi alterado, então mostramos o resumo.
                                     product_ids = [i.get("product_id") for i in items_arg if isinstance(i, dict) and i.get("product_id") is not None]
                                     if not any(pid in (cart.last_suggestions or []) for pid in product_ids): cart.last_suggestions = None
-                                    response_to_user = _build_cart_summary_message(cart, bot, "✅") + "\n\nAlgo mais?"
+                                    
+                                    # ▼▼▼ MUDANÇA AQUI ▼▼▼
+                                    response_to_user = (
+                                        _build_cart_summary_message(cart, bot, "✅") + 
+                                        "\n\nAdicionado! Se quiser incluir alguma observação (ex: 'sem salada'), é só falar agora. Ou deseja algo mais?"
+                                    )
                                 else:
                                     # FALHA SILENCIOSA: A operação não alterou o carrinho, então informamos que o item não foi encontrado.
                                     extracted_items_for_msg = await extract_potential_items(text_body)
@@ -866,23 +871,36 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
                                     await crud.modify_item_quantity_in_db_cart(session, cart.id, pid, newq)
                                     await session.refresh(cart, attribute_names=['items'])
                                     response_to_user = _build_cart_summary_message(cart, bot, "✏️") + "\n\nAlgo mais?"
-
-                            else:  # bulk_modify_quantities
-                                updates_raw = tool_args.get("updates", []) or []
-                                updates = []
-                                for upd in updates_raw:
-                                    try:
-                                        pid, newq = int(upd.get("product_id")), int(upd.get("new_quantity"))
-                                    except Exception: continue
-                                    if pid in current_ids: updates.append({"product_id": pid, "new_quantity": newq})
-
-                                if not updates:
-                                    response_to_user = "Não encontrei esses itens no seu carrinho. Posso sugerir opções para adicionar?"
-                                else:
-                                    for upd in updates:
-                                        await crud.modify_item_quantity_in_db_cart(session, cart.id, upd["product_id"], upd["new_quantity"])
+                            
+                            elif tool_name == "update_item_observation":
+                                pid = tool_args.get("product_id")
+                                notes = tool_args.get("notes")
+                            
+                                if pid and notes:
+                                    # Chama a nova função do CRUD
+                                    await crud.update_item_notes(session, cart.id, int(pid), str(notes))
                                     await session.refresh(cart, attribute_names=['items'])
-                                    response_to_user = _build_cart_summary_message(cart, bot, "✏️") + "\n\nAlgo mais?"
+                                    response_to_user = _build_cart_summary_message(cart, bot, "✏️") + "\n\nObservação anotada! Mais alguma coisa?"
+                                else:
+                                    response_to_user = "Não entendi qual item você quer alterar. Pode repetir?"
+
+                            else:  
+                                    # bulk_modify_quantities
+                                    updates_raw = tool_args.get("updates", []) or []
+                                    updates = []
+                                    for upd in updates_raw:
+                                        try:
+                                            pid, newq = int(upd.get("product_id")), int(upd.get("new_quantity"))
+                                        except Exception: continue
+                                        if pid in current_ids: updates.append({"product_id": pid, "new_quantity": newq})
+
+                                    if not updates:
+                                        response_to_user = "Não encontrei esses itens no seu carrinho. Posso sugerir opções para adicionar?"
+                                    else:
+                                        for upd in updates:
+                                            await crud.modify_item_quantity_in_db_cart(session, cart.id, upd["product_id"], upd["new_quantity"])
+                                        await session.refresh(cart, attribute_names=['items'])
+                                        response_to_user = _build_cart_summary_message(cart, bot, "✏️") + "\n\nAlgo mais?"    
 
                         elif tool_name == "propose_and_confirm_action":
                             question = tool_args.get("confirmation_question")
@@ -987,18 +1005,25 @@ def _build_cart_summary_message(cart: ShoppingCart, bot: Bot, emoji: str = "🛒
     for item in cart.items:
         line_total = item.product.price * item.quantity
         subtotal += line_total
-        cart_summary_lines.append(f"- {item.quantity}x {item.product.name} (R$ {line_total:.2f})")
+
+        # Formata a linha do item
+        item_line = f"- {item.quantity}x {item.product.name} (R$ {line_total:.2f})"
+        
+        # Se tiver observação, adiciona na linha de baixo
+        if item.notes:
+            item_line += f"\n  _Obs: {item.notes}_"
+            
+        # Adiciona à lista APENAS UMA VEZ
+        cart_summary_lines.append(item_line)
 
     summary_text = f"{emoji} *Seu Pedido Atual:*\n" + "\n".join(cart_summary_lines)
     
     total_amount = subtotal
     
-    # ▼▼▼ LÓGICA CORRIGIDA E ADICIONADA ▼▼▼
     # Verifica se o método é entrega E se a taxa é maior que zero
     if cart.delivery_method == DeliveryMethod.DELIVERY and bot.delivery_fee > 0:
         total_amount += bot.delivery_fee
         summary_text += f"\n\nTaxa de Entrega: R$ {bot.delivery_fee:.2f}"
-    # ▲▲▲ FIM DA CORREÇÃO ▲▲▲
 
     summary_text += f"\n\nTotal: *R$ {total_amount:.2f}*"
     return summary_text

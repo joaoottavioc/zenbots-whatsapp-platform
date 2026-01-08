@@ -58,8 +58,12 @@ Prioridade:
    - Se for alteração de quantidade de APENAS UM item já no carrinho → use `modify_item_quantity`.
    - Se for alteração de quantidade de MAIS DE UM item já no carrinho → use `bulk_modify_quantities` com `updates` contendo todos os pares product_id/new_quantity.
    - Se os itens AINDA NÃO estiverem no carrinho → use SEMPRE `add_items_to_cart`.
-   - Se os itens AINDA NÃO estiverem no carrinho → use SEMPRE `add_items_to_cart` (NUNCA `bulk_modify_quantities` nem `modify_item_quantity`).
    - Se for alteração de quantidade de itens que JÁ ESTÃO no carrinho → use `modify_item_quantity` (um item) ou `bulk_modify_quantities` (vários).
+
+--- REGRAS PARA PEDIDOS E OBSERVAÇÕES (IMPORTANTE) ---
+1. Quando o cliente pedir uma alteração (ex: "sem cebola", "com gelo", "bem passado"), NUNCA inclua isso no nome do produto na busca.
+2. Use o campo 'notes' da ferramenta 'add_items_to_cart' para essas modificações.
+3. Se o cliente pedir algo que não está explícito no cardápio (ex: "X-Bacon sem bacon"), aceite e anote a observação.
 
 Regra de estoque:
 - NUNCA avalie estoque, disponibilidade ou capacidade. NUNCA escreva “não temos X unidades”.
@@ -424,6 +428,69 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
         "content": "Busca por 'sobremesa' realizada.",
     }
 
+    # ▼▼▼ NOVOS EXEMPLOS PARA OBSERVAÇÕES (NOTES) ▼▼▼
+
+    # Exemplo 1: Adicionar com observação simples
+    ex_notes_simple_user = {"role": "user", "content": "Quero um X-Salada sem tomate"}
+    ex_notes_simple_assistant = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [{
+            "id": "call-ex-notes-simple",
+            "type": "function",
+            "function": {
+                "name": "add_items_to_cart",
+                "arguments": json.dumps({
+                    "items": [
+                        # Assumindo ID 12 para X-Salada
+                        {"product_id": 12, "quantity": 1, "notes": "sem tomate"} 
+                    ]
+                })
+            }
+        }]
+    }
+    ex_notes_simple_tool = {"role": "tool", "tool_call_id": "call-ex-notes-simple", "content": "Item adicionado com nota."}
+
+    # Exemplo 2: Adicionar com observação complexa
+    ex_notes_complex_user = {"role": "user", "content": "Me vê um Hot Dog Mexicano mas tira a salsicha e coloca purê extra"}
+    ex_notes_complex_assistant = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [{
+            "id": "call-ex-notes-complex",
+            "type": "function",
+            "function": {
+                "name": "add_items_to_cart",
+                "arguments": json.dumps({
+                    "items": [
+                        # Assumindo ID 55 para Hot Dog Mexicano
+                        {"product_id": 55, "quantity": 1, "notes": "sem salsicha, com purê extra"}
+                    ]
+                })
+            }
+        }]
+    }
+    ex_notes_complex_tool = {"role": "tool", "tool_call_id": "call-ex-notes-complex", "content": "Item adicionado com nota."}
+
+    # Exemplo 3: Atualizar observação de item existente
+    ex_notes_update_user = {"role": "user", "content": "Ah, o refrigerante é sem gelo, tá?"}
+    ex_notes_update_assistant = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [{
+            "id": "call-ex-notes-update",
+            "type": "function",
+            "function": {
+                "name": "update_item_observation",
+                "arguments": json.dumps({
+                    # Assumindo ID 89 para o Refrigerante que já está no carrinho
+                    "product_id": 89,
+                    "notes": "sem gelo"
+                })
+            }
+        }]
+    }
+    ex_notes_update_tool = {"role": "tool", "tool_call_id": "call-ex-notes-update", "content": "Observação atualizada."}
 
 
     # --- MONTAGEM FINAL ---
@@ -464,6 +531,17 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
             ex_suggestion_user,
             ex_suggestion_assistant,
             ex_suggestion_tool,
+            # Inserindo os novos exemplos de observações aqui
+            ex_notes_simple_user,
+            ex_notes_simple_assistant,
+            ex_notes_simple_tool,
+            ex_notes_complex_user,
+            ex_notes_complex_assistant,
+            ex_notes_complex_tool,
+            ex_notes_update_user,
+            ex_notes_update_assistant,
+            ex_notes_update_tool,
+            
             {"role": "user", "content": user_query},
         ]
     )
