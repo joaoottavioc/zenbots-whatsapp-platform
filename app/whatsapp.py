@@ -20,6 +20,7 @@ from app.semantic_router import semantic_intent, THRESHOLDS
 from app.address_service import get_address_from_cep
 from app.payment_service import create_pix_payment, sdk as mercadopago_sdk
 import httpx #SIMULADOR
+from arq import ArqRedis
 
 # --- Imports Atualizados ---
 # Helper para gerenciar o estado de "ação pendente"
@@ -28,6 +29,7 @@ from app.pending_action import save_pending, clear_pending, has_valid_pending, e
 from app.time import utcnow
 import pytz
 from app.rate_limiter import is_spamming
+from app.broadcast import broadcast_order_update
 
 
 load_dotenv()
@@ -40,17 +42,35 @@ _ITEM_FROM_Q_RE = re.compile(
     re.IGNORECASE
 )
 
-
 @router.post("/webhook")
 async def whatsapp_webhook(request: Request):
     data = await request.json()
+    
+    # Validação básica do payload
     if data.get("object") == "whatsapp_business_account" and data.get("entry"):
-        if data["entry"][0].get("changes")[0].get("value").get("messages"):
-            asyncio.create_task(process_whatsapp_message(data))
+        changes = data["entry"][0].get("changes", [])
+        if changes and changes[0].get("value").get("messages"):
+            
+            # ▼▼▼ MUDANÇA AQUI: ENFILEIRAMENTO ▼▼▼
+            
+            # Pega a conexão do Redis que criamos no main.py
+            redis_queue: ArqRedis = request.app.state.arq_redis
+            
+            # Enfileira a tarefa. 
+            # O nome da função deve ser EXATAMENTE igual ao definido no WorkerSettings
+            await redis_queue.enqueue_job('process_whatsapp_message', data)
+            
+            print("📨 Mensagem enfileirada para processamento.")
+            
+            # ▲▲▲ FIM DA MUDANÇA ▲▲▲
+            
+            # NOTA: Removemos o asyncio.create_task(process_whatsapp_message(data))
+            # pois agora o worker quem vai rodar isso.
+
     return JSONResponse(content={"status": "received"})
 
 
-async def process_whatsapp_message(data: Dict[str, Any]):
+async def process_whatsapp_message(ctx, data: Dict[str, Any]):
     async with async_session() as session:
         try:
             # 1. Extração dos dados brutos
@@ -209,43 +229,29 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                 
             # INTERCEPTADOR DE BOAS-VINDAS COM IMAGEM
             if intent == "GREETING_OR_QUESTION" and cart.state == "GREETING":
-                
-                # 1. Mensagem de Legenda (Caption)
                 response_to_user = (
                     f"Olá! Bem-vindo ao *{bot.restaurant_name or 'nosso restaurante'}*! 🍕\n\n"
                     "👆 *Dê uma olhada no nosso cardápio na imagem acima!* 👆\n\n"
                     "Eu sou seu assistente virtual. Pode me dizer o que deseja pedir (escrevendo ou por áudio) que eu monto seu pedido!\n\n"
                     "Ex: _'Quero uma pizza de calabresa e uma coca'_"
                 )
-                
-                # 2. URL da Imagem do Cardápio
-                # DICA: Troque esta URL pela imagem real do cardápio do seu cliente assim que tiver
                 menu_url = "https://images.unsplash.com/photo-1513104890138-7c749659a591?q=80&w=1000&auto=format&fit=crop" 
-                
                 
                 try:
                     async with httpx.AsyncClient() as client:
                         await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
-                except httpx.RequestError as e:
-                    print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
+                except httpx.RequestError: pass
 
-                
-                # 3. Envia IMAGEM + TEXTO juntos
-                await send_whatsapp_message(
-                    to=contact_number, 
-                    message=response_to_user, 
-                    token=bot.whatsapp_token, 
-                    phone_id=bot.phone_number_id,
-                    media_url=menu_url,
-                    media_type="image"
-                )
-                
-                # 4. Salva no histórico e encerra
+                await send_whatsapp_message(to=contact_number, message=response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id, media_url=menu_url, media_type="image")
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, "Enviou Cardápio (Imagem)")
-                cart.state = "SHOPPING" 
+                
+                # ▼▼▼ CORREÇÃO 2: Atualização robusta do estado e tempo ▼▼▼
+                cart.state = "SHOPPING"
+                cart.last_activity_at = utcnow() # Atualiza o tempo para não expirar logo em seguida
                 session.add(cart)
                 await session.commit()
-                return  # <--- IMPORTANTE: Pára a execução aqui para não gastar tokens da OpenAI
+                print(f"✅ [GREETING] Estado do carrinho {cart.id} atualizado para SHOPPING.")
+                return
 
             # A lógica de reset de estado continua a mesma, mas agora só será
             # acionada por intenções de compra genuínas.
@@ -529,6 +535,28 @@ async def process_whatsapp_message(data: Dict[str, Any]):
                 # Limpa o carrinho APENAS se o pedido foi criado e o pagamento iniciado com sucesso
                 if order_created:
                     await crud.clear_db_cart(session, cart.id)
+                    
+                    # ▼▼▼ INÍCIO DA ADIÇÃO (BROADCAST) ▼▼▼
+                    # Avisa o Dashboard que tem pedido novo na área!
+                    try:
+                        # Monta um payload resumido e útil para o front
+                        display_items = [
+                            f"{item.quantity}x {item.product.name}" 
+                            for item in cart.items
+                        ]
+                        
+                        await broadcast_order_update("new_order", {
+                            "order_id": order.id,
+                            "customer_name": cart.contact.name,
+                            "customer_phone": contact_number,
+                            "total": order.total_amount,
+                            "status": "PENDING", # ou o status inicial do seu modelo
+                            "items": display_items,
+                            "created_at": str(utcnow())
+                        })
+                    except Exception as e:
+                        print(f"Erro ao enviar broadcast: {e}")
+                    # ▲▲▲ FIM DA ADIÇÃO ▲▲▲
 
                 cart.last_activity_at = utcnow()
                 session.add(cart)

@@ -1,40 +1,155 @@
-from fastapi import FastAPI
-from app import whatsapp, auth
-from app.database import create_db_and_tables
-from app import bot_routes
-from dotenv import load_dotenv
+import os
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from app import bot_routes, auth, takeover_routes
+from dotenv import load_dotenv
+from arq import create_pool
+from arq.connections import RedisSettings
+
+# Importações dos seus módulos locais
+from app.database import create_db_and_tables
+from app import whatsapp, auth, bot_routes, takeover_routes
+from fastapi.responses import StreamingResponse
+import redis.asyncio as redis
+import asyncio
+import json
+import ast
 
 load_dotenv()
 
-app = FastAPI()
+# Configurações do Redis para a Fila
+REDIS_HOST = os.getenv("REDIS_HOST", "redis")
+REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+REDIS_DATABASE = 1  # Mesmo banco definido no worker.py
 
-# ▼▼▼ ADICIONE ESTE BLOCO INTEIRO ▼▼▼
-# Configuração do CORS
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # --- INICIALIZAÇÃO (STARTUP) ---
+    print("🚀 Inicializando aplicação...")
+    
+    # 1. Cria as tabelas do Banco de Dados
+    await create_db_and_tables()
+    print("✅ Banco de dados verificado.")
+
+    # 2. Cria o pool de conexão com o Redis da Fila (ARQ)
+    print("🔌 Conectando ao Redis Queue...")
+    try:
+        app.state.arq_redis = await create_pool(
+            RedisSettings(host=REDIS_HOST, port=REDIS_PORT, database=REDIS_DATABASE)
+        )
+        print("✅ Conexão com Redis Queue estabelecida!")
+    except Exception as e:
+        print(f"❌ Falha ao conectar no Redis: {e}")
+    
+    yield  # O servidor roda aqui e atende as requisições
+    
+    # --- ENCERRAMENTO (SHUTDOWN) ---
+    print("🔌 Fechando conexão com Redis Queue...")
+    if hasattr(app.state, 'arq_redis'):
+        await app.state.arq_redis.close()
+    print("🛑 Aplicação encerrada.")
+
+# Criação única da aplicação com o ciclo de vida configurado
+app = FastAPI(lifespan=lifespan)
+
+# --- Configuração do CORS ---
 origins = [
-    # Permite todas as origens. Para desenvolvimento, é o mais simples.
-    # Em produção, você pode restringir para domínios específicos.
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:8000",
-    "*"
+    "*"  # Cuidado em produção, mas ok para dev/simulador
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"], # Permite todos os métodos (GET, POST, etc.)
-    allow_headers=["*"], # Permite todos os cabeçalhos
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
-# ▲▲▲ FIM DO BLOCO ▲▲▲
 
-@app.on_event("startup")
-async def on_startup():
-    await create_db_and_tables()
-
+# --- Inclusão das Rotas ---
 app.include_router(whatsapp.router)
 app.include_router(auth.router)
 app.include_router(bot_routes.router)
 app.include_router(takeover_routes.router)
+
+# Rota de verificação de saúde (Health Check)
+@app.get("/")
+async def root():
+    return {"status": "ZenBots API Online 🚀", "queue": "Active"}
+
+@app.get("/stream")
+async def stream_events(request: Request):
+    """
+    Rota SSE Robusta com Heartbeat e Sanitização de JSON.
+    """
+    async def event_generator():
+        # 1. Configuração da Conexão Redis
+        local_redis_url = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DATABASE}"
+        
+        r = redis.from_url(local_redis_url, encoding="utf-8", decode_responses=True)
+        pubsub = r.pubsub()
+        await pubsub.subscribe("dashboard_events")
+        
+        try:
+            print("📡 Cliente conectado ao stream SSE")
+            # Envia o ping inicial já em formato JSON correto
+            yield f"data: {json.dumps({'type': 'ping', 'message': 'connected'})}\n\n"
+            
+            while True:
+                # 2. Verifica desconexão do cliente
+                if await request.is_disconnected():
+                    print("📴 Cliente desconectou do stream")
+                    break
+                
+                # 3. Aguarda mensagem do Redis (Timeout curto p/ manter o loop rodando)
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                
+                if message:
+                    raw_data = message['data']
+                    final_payload = raw_data
+
+                    # --- BLOCO DE CORREÇÃO (Sanitização de JSON) ---
+                    try:
+                        # Tenta ler como JSON padrão. Se falhar, é string Python.
+                        json.loads(raw_data)
+                    except json.JSONDecodeError:
+                        try:
+                            # Converte string Python "{'a': 1}" para Dict, depois para JSON "{\"a\": 1}"
+                            dict_data = ast.literal_eval(raw_data)
+                            final_payload = json.dumps(dict_data)
+                        except Exception as e:
+                            print(f"⚠️ Erro ao converter dados do Redis: {e}")
+                            # Payload de emergência para não quebrar o front
+                            final_payload = json.dumps({"type": "error", "message": "Dados inválidos do Redis"})
+                    
+                    print(f"📤 Enviando evento SSE: {final_payload}")
+                    yield f"data: {final_payload}\n\n"
+                else:
+                    # 4. Heartbeat (Mantém a conexão viva em Load Balancers/Nginx)
+                    yield ": keep-alive\n\n"
+                
+        except asyncio.CancelledError:
+            print("Client disconnected (CancelledError)")
+        except Exception as e:
+            print(f"❌ Erro crítico no Stream: {e}")
+            # Tenta avisar o front se a conexão ainda existir
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        finally:
+            # 5. Limpeza de recursos
+            try:
+                await pubsub.unsubscribe("dashboard_events")
+                await r.aclose()
+            except:
+                pass
+
+    return StreamingResponse(
+        event_generator(), 
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no", # Essencial para Nginx
+        }
+    )

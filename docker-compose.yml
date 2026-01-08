@@ -14,18 +14,17 @@ services:
       - ./init.sql:/docker-entrypoint-initdb.d/init-vector.sql
     restart: unless-stopped
 
-  # ▼▼▼ NOVO SERVIÇO: REDIS ▼▼▼
+  # Serviço de Cache e Fila
   redis:
     image: redis:alpine
     container_name: zenbots_redis
     ports:
       - "6379:6379"
-    # Garante persistência (não perde dados se reiniciar o container)
+    # Garante persistência (AOF) para não perder a fila se reiniciar
     command: redis-server --appendonly yes 
     volumes:
       - redis_data:/data
     restart: unless-stopped
-  # ▲▲▲ FIM DO NOVO SERVIÇO ▲▲▲
 
   ollama:
     image: ollama/ollama
@@ -44,6 +43,7 @@ services:
       - OLLAMA_KEEP_ALIVE=1h
     restart: unless-stopped
 
+  # API (Produtor de mensagens)
   backend:
     build: .
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -53,16 +53,39 @@ services:
       - .:/code
     depends_on:
       - db
+      - redis
       - ollama
-      - redis # <--- Adicionado para garantir a ordem de boot
     env_file:
       - .env
     environment:
-      # URL interna do Docker para o Redis
+      # URL para o Rate Limiter (Banco 0)
       - REDIS_URL=redis://redis:6379/0 
+      # Host para a Fila ARQ (Banco 1 configurado no código python)
+      - REDIS_HOST=redis
     restart: unless-stopped
+
+  # ▼▼▼ NOVO SERVIÇO: WORKER (Consumidor de mensagens) ▼▼▼
+  worker:
+    build: .
+    # Comando para iniciar o processamento da fila
+    # --watch /code faz ele reiniciar se você alterar o código (ótimo para dev)
+    command: arq app.worker.WorkerSettings --watch /code
+    volumes:
+      - .:/code
+    depends_on:
+      - db
+      - redis
+      - ollama
+    env_file:
+      - .env
+    environment:
+      # Precisa das mesmas configs do backend para acessar Banco e Redis
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+    restart: unless-stopped
+  # ▲▲▲ FIM DO NOVO SERVIÇO ▲▲▲
 
 volumes:
   db_data:
   ollama_data:
-  redis_data: # <--- Novo volume para persistência do Redis
+  redis_data:
