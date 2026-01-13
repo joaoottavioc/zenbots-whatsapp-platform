@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from arq import create_pool
 from arq.connections import RedisSettings
+from app.bot_routes import router as bot_router
 
 # Importações dos seus módulos locais
 from app.database import create_db_and_tables
@@ -53,16 +54,11 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 # --- Configuração do CORS ---
-origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:8000",
-    "*"  # Cuidado em produção, mas ok para dev/simulador
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    # Em vez de listar origens fixas, usamos um Regex que aceita tudo que começa com http/https
+    # Isso resolve o problema de URLs do Ngrok mudando toda hora e permite credenciais.
+    allow_origin_regex="https?://.*", 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -73,6 +69,7 @@ app.include_router(whatsapp.router)
 app.include_router(auth.router)
 app.include_router(bot_routes.router)
 app.include_router(takeover_routes.router)
+app.include_router(bot_router, prefix="/api/v1")
 
 # Rota de verificação de saúde (Health Check)
 @app.get("/")

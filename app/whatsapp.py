@@ -42,32 +42,32 @@ _ITEM_FROM_Q_RE = re.compile(
     re.IGNORECASE
 )
 
-@router.post("/webhook")
-async def whatsapp_webhook(request: Request):
-    data = await request.json()
+#@router.post("/webhook")
+#async def whatsapp_webhook(request: Request):
+#    data = await request.json()
     
     # Validação básica do payload
-    if data.get("object") == "whatsapp_business_account" and data.get("entry"):
-        changes = data["entry"][0].get("changes", [])
-        if changes and changes[0].get("value").get("messages"):
+#    if data.get("object") == "whatsapp_business_account" and data.get("entry"):
+#        changes = data["entry"][0].get("changes", [])
+#        if changes and changes[0].get("value").get("messages"):
             
             # ▼▼▼ MUDANÇA AQUI: ENFILEIRAMENTO ▼▼▼
             
             # Pega a conexão do Redis que criamos no main.py
-            redis_queue: ArqRedis = request.app.state.arq_redis
+#            redis_queue: ArqRedis = request.app.state.arq_redis
             
             # Enfileira a tarefa. 
             # O nome da função deve ser EXATAMENTE igual ao definido no WorkerSettings
-            await redis_queue.enqueue_job('process_whatsapp_message', data)
+#            await redis_queue.enqueue_job('process_whatsapp_message', data)
             
-            print("📨 Mensagem enfileirada para processamento.")
+#            print("📨 Mensagem enfileirada para processamento.")
             
             # ▲▲▲ FIM DA MUDANÇA ▲▲▲
             
             # NOTA: Removemos o asyncio.create_task(process_whatsapp_message(data))
             # pois agora o worker quem vai rodar isso.
 
-    return JSONResponse(content={"status": "received"})
+#    return JSONResponse(content={"status": "received"})
 
 
 async def process_whatsapp_message(ctx, data: Dict[str, Any]):

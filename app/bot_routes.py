@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status, Request, Query
+from fastapi.responses import RedirectResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 from typing import List, Dict, Any
 
@@ -7,13 +8,22 @@ from app import crud, schemas, data_extractor
 from app.database import get_session
 from app.models import User
 from app.auth import get_current_user
+from app.schemas import WhatsAppAuthRequest
+from app.auth import get_current_user
 import re
 
 from fastapi import UploadFile, File, Form
 from app.openai_client import extract_products_from_image
 import fitz  # PyMuPDF (Necessário para ler PDFs)
 
+import os
+import httpx
+from pydantic import BaseModel
+from urllib.parse import urlparse
+from arq import ArqRedis
+
 router = APIRouter()
+WEBHOOK_VERIFY_TOKEN = os.getenv("META_VERIFY_TOKEN")
 
 # --- Rotas para Gerenciamento de Bots ---
 
@@ -439,3 +449,107 @@ async def get_best_sellers(bot_id: int, session: AsyncSession = Depends(get_sess
         } 
         for row in results
     ]
+
+@router.post("/bots/whatsapp/auth", status_code=201)
+async def authenticate_whatsapp_bot(
+    auth_data: WhatsAppAuthRequest, 
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    app_id = os.getenv("FB_APP_ID")
+    app_secret = os.getenv("FB_APP_SECRET")
+    
+    # PEGA A URL EXATA QUE VEIO DO FRONT
+    # Como é fluxo manual, essa URL vai ser 'https://.../meus-bots'
+    redirect_url = auth_data.redirect_uri 
+    
+    print(f"\n📥 Auth Manual Iniciada via POST.")
+    print(f"🔗 Usando Redirect URI: {redirect_url}")
+    print(f"📦 Code: {auth_data.code[:10]}...")
+
+    async with httpx.AsyncClient() as client:
+        token_url = "https://graph.facebook.com/v19.0/oauth/access_token"
+        
+        params = {
+            "client_id": app_id,
+            "client_secret": app_secret,
+            "code": auth_data.code,
+            "redirect_uri": redirect_url # Sem truques, direto e reto.
+        }
+        
+        response = await client.get(token_url, params=params)
+        data = response.json()
+        
+        if "error" in data:
+            error_msg = data['error'].get('message')
+            print(f"❌ Erro Meta: {error_msg}")
+            raise HTTPException(status_code=400, detail=f"Erro Facebook: {error_msg}")
+            
+        access_token = data["access_token"]
+        print("✅ Token obtido com sucesso! Buscando WABA...")
+
+        # --- A PARTIR DAQUI, É A SUA LÓGICA DE SALVAR O BOT ---
+        # (Copie e cole a parte do 'me_url', parse do JSON e crud.create_bot que você já tinha)
+        # ...
+        # (Vou colocar o início só pra guiar)
+        me_url = "https://graph.facebook.com/v19.0/me"
+        me_params = {"fields": "name,businesses{client_whatsapp_business_accounts{id,name,phone_numbers{id,display_phone_number}}}", "access_token": access_token}
+        
+        me_resp = await client.get(me_url, params=me_params)
+        me_data = me_resp.json()
+        
+        # ... extração dos dados ...
+        # ... crud.create_bot ...
+        
+        # Placeholder final (substitua pelo seu return real)
+        return {"status": "success", "message": "Bot conectado"}
+
+# 1. ROTA DE VERIFICAÇÃO (GET)
+@router.get("/bots/whatsapp/webhook")
+async def verify_webhook(
+    mode: str = Query(alias="hub.mode"),
+    token: str = Query(alias="hub.verify_token"),
+    challenge: str = Query(alias="hub.challenge")
+):
+    if mode == "subscribe" and token == WEBHOOK_VERIFY_TOKEN:
+        print("✅ Webhook verificado pela Meta!")
+        return int(challenge)
+    raise HTTPException(status_code=403, detail="Token inválido.")
+
+# 2. ROTA DE RECEBIMENTO (POST)
+@router.post("/bots/whatsapp/webhook")
+async def receive_whatsapp_message(request: Request):
+    """
+    Recebe o evento da Meta e joga para o Worker processar em background.
+    """
+    try:
+        payload = await request.json()
+        
+        # Validação básica: é um evento de mensagem de WhatsApp?
+        if payload.get("object") == "whatsapp_business_account" and payload.get("entry"):
+            entry = payload["entry"][0]
+            changes = entry.get("changes", [])
+            
+            if changes and changes[0].get("value"):
+                value = changes[0].get("value")
+                
+                # Se tiver mensagens ou status, enviamos para a fila
+                if "messages" in value or "statuses" in value:
+                    
+                    # 1. Recupera o pool do Redis que foi criado no main.py
+                    redis_queue: ArqRedis = request.app.state.arq_redis
+                    
+                    # 2. Enfileira o job 'process_whatsapp_message'
+                    # O Worker vai pegar isso aqui e rodar a IA
+                    await redis_queue.enqueue_job('process_whatsapp_message', payload)
+                    
+                    # Debug leve (opcional)
+                    waba_id = value.get("metadata", {}).get("phone_number_id", "Unknown")
+                    print(f"📨 Evento WABA {waba_id} enviado para fila Redis.")
+
+    except Exception as e:
+        print(f"⚠️ Erro ao processar webhook: {e}")
+        # Retornamos 200 OK mesmo com erro para a Meta não ficar reenviando infinitamente
+        return {"status": "error_handled"}
+
+    return {"status": "received"}

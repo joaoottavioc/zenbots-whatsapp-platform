@@ -1,0 +1,13 @@
+version: "2"
+authtoken: 2ydqaDyqDqrVOWOzdl7ScmQvkC3_5TVVenZXu5koMtkPzg7PY # Pegue em dashboard.ngrok.com
+
+tunnels:
+  # Túnel para o Frontend (React/Next)
+  frontend:
+    proto: http
+    addr: 3000
+  
+  # Túnel para o Backend (FastAPI)
+  backend:
+    proto: http
+    addr: 8000

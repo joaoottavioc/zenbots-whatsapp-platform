@@ -145,3 +145,7 @@ class OrderResponse(BaseModel):
 
 class OrderStatusUpdate(BaseModel):
     status: str
+
+class WhatsAppAuthRequest(BaseModel):
+    code: str
+    redirect_uri: str
