@@ -147,5 +147,6 @@ class OrderStatusUpdate(BaseModel):
     status: str
 
 class WhatsAppAuthRequest(BaseModel):
-    code: str
-    redirect_uri: str
+    code: str = None  # Agora é opcional
+    redirect_uri: str = None
+    access_token: str = None # Novo campo

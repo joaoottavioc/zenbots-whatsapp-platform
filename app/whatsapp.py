@@ -73,11 +73,24 @@ _ITEM_FROM_Q_RE = re.compile(
 async def process_whatsapp_message(ctx, data: Dict[str, Any]):
     async with async_session() as session:
         try:
-            # 1. Extração dos dados brutos
-            value = data["entry"][0]["changes"][0]["value"]
+            # 1. Extração segura dos dados
+            # Garante que a estrutura básica existe antes de tentar acessar
+            entry = data.get("entry", [])[0]
+            changes = entry.get("changes", [])[0]
+            value = changes.get("value", {})
+
+            # --- CORREÇÃO 1: FILTRO DE MENSAGENS ---
+            # Se não tiver 'messages', provavelmente é um status update. Ignoramos.
+            if "messages" not in value:
+                # Opcional: logar para debug se quiser ver os status
+                # print(f"ℹ️ Status update recebido (ignorado).") 
+                return
+                
             message_data = value["messages"][0]
             contact_number = message_data["from"]
-            text_body = message_data["text"]["body"]
+            
+            # Usa .get() para 'text' pois pode ser mensagem de mídia/botão
+            text_body = message_data.get("text", {}).get("body", "")
             message_id = message_data["id"]
 
             if is_spamming(contact_number, limit=20, window_seconds=60):
@@ -123,7 +136,7 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
                 next_opening = get_next_opening_text(bot)
                 
                 # 2. URL do Cardápio (Mesma lógica do Greeting)
-                menu_url = "https://images.unsplash.com/photo-1513104890138-7c749659a591?q=80&w=1000&auto=format&fit=crop"
+                menu_url = "https://imagebucket1824.s3.us-east-1.amazonaws.com/JohnsHotDog.jpeg"
 
                 # 3. Monta uma mensagem amigável
                 # Usa a mensagem configurada no banco OU um padrão, + a info dinâmica
@@ -136,14 +149,6 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
                     "Enquanto isso, *confira nosso cardápio na imagem acima* e já vá escolhendo seu pedido. Será um prazer atendê-lo assim que possível! 👆😋"
                 )
 
-                # 4. Simulador (Broadcast)
-                try:
-                    # Mostra no simulador com o link da imagem para debug
-                    sim_msg = f"🔒 [FECHADO - IMG: {menu_url}]\n\n{rich_closing_msg}"
-                    async with httpx.AsyncClient() as client:
-                        await client.post("http://host.docker.internal:9000/broadcast", json={"text": sim_msg})
-                except httpx.RequestError:
-                    pass
                 
                 # 5. Envia IMAGEM + TEXTO (Caption)
                 # Assim o cliente não fica de mãos vazias
@@ -200,11 +205,6 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
                     "Mas é só me dizer o que quer pedir e recomeçamos! 😄✅"
                 )
                 
-                try:
-                    async with httpx.AsyncClient() as client:
-                        await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
-                except httpx.RequestError as e:
-                    print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
                 
                 await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
@@ -235,12 +235,8 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
                     "Eu sou seu assistente virtual. Pode me dizer o que deseja pedir (escrevendo ou por áudio) que eu monto seu pedido!\n\n"
                     "Ex: _'Quero uma pizza de calabresa e uma coca'_"
                 )
-                menu_url = "https://images.unsplash.com/photo-1513104890138-7c749659a591?q=80&w=1000&auto=format&fit=crop" 
+                menu_url = "https://imagebucket1824.s3.us-east-1.amazonaws.com/JohnsHotDog.jpeg" 
                 
-                try:
-                    async with httpx.AsyncClient() as client:
-                        await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
-                except httpx.RequestError: pass
 
                 await send_whatsapp_message(to=contact_number, message=response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id, media_url=menu_url, media_type="image")
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, "Enviou Cardápio (Imagem)")
@@ -301,12 +297,6 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
                 cart.last_activity_at = utcnow()
                 session.add(cart)
 
-                try:
-                    async with httpx.AsyncClient() as client:
-                        await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
-                except httpx.RequestError as e:
-                    print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
-
                 await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
                 await session.commit()
@@ -331,11 +321,6 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
                 cart.last_activity_at = utcnow()
                 session.add(cart)
                 
-                try:
-                    async with httpx.AsyncClient() as client:
-                        await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
-                except httpx.RequestError as e:
-                    print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
                 
                 await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
@@ -368,12 +353,7 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
 
                 cart.last_activity_at = utcnow()
                 session.add(cart)
-                
-                try:
-                    async with httpx.AsyncClient() as client:
-                        await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
-                except httpx.RequestError as e:
-                    print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
+               
                 
                 await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
@@ -404,11 +384,6 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
                 cart.last_activity_at = utcnow()
                 session.add(cart)
                 
-                try:
-                    async with httpx.AsyncClient() as client:
-                        await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
-                except httpx.RequestError as e:
-                    print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
                 
                 await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
@@ -441,11 +416,6 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
                 cart.last_activity_at = utcnow()
                 session.add(cart)
             
-                try:
-                    async with httpx.AsyncClient() as client:
-                        await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
-                except httpx.RequestError as e:
-                    print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
             
                 await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
@@ -564,18 +534,8 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
                 
                 # Envia a Mensagem 2 (O CÓDIGO) se ela existir
                 if pix_code_to_send:
-                    try:
-                        async with httpx.AsyncClient() as client:
-                            await client.post("http://host.docker.internal:9000/broadcast", json={"text": pix_code_to_send})
-                    except httpx.RequestError as e:
-                        print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
                     await send_whatsapp_message(contact_number, pix_code_to_send, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
                 
-                try:
-                    async with httpx.AsyncClient() as client:
-                        await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
-                except httpx.RequestError as e:
-                    print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
                 
                 await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
@@ -619,11 +579,6 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
                 cart.last_activity_at = utcnow()
                 session.add(cart)
                 
-                try:
-                    async with httpx.AsyncClient() as client:
-                        await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
-                except httpx.RequestError as e:
-                    print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
                 
                 await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
                 await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
@@ -660,11 +615,6 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
                         f"Faltam apenas *R$ {missing:.2f}*! Que tal adicionar uma bebida ou sobremesa? 🥤🍫"
                     )
                     
-                    # Envia, salva histórico e para a execução
-                    try:
-                         async with httpx.AsyncClient() as client:
-                            await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
-                    except: pass
 
                     await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
                     await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
@@ -924,11 +874,6 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
                             else:
                                 response_to_user = "Não consegui montar a proposta com itens válidos do cardápio. Quer que eu adicione diretamente os itens do seu pedido?"
                             
-                            try:
-                                async with httpx.AsyncClient() as client:
-                                    await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
-                            except httpx.RequestError as e:
-                                print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
                             
                             await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
                             await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
@@ -959,11 +904,6 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
             cart.last_activity_at = utcnow()
             session.add(cart)
             
-            try:
-                async with httpx.AsyncClient() as client:
-                    await client.post("http://host.docker.internal:9000/broadcast", json={"text": response_to_user})
-            except httpx.RequestError as e:
-                print(f"❌ DEBUG: Erro ao conectar com o servidor SSE: {e}")
             
             await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
             await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)

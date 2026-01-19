@@ -1,6 +1,6 @@
 # app/crud.py - VERSÃO CORRIGIDA
 from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlmodel import select, delete
+from sqlmodel import select, delete, update
 from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any
 from datetime import datetime
@@ -549,7 +549,7 @@ async def bulk_create_products(session: AsyncSession, bot_id: int, products_data
         
     return len(products_to_add)
 
-async def get_products_by_bot_id(session: AsyncSession, bot_id: int) -> List[Product]:
+async def get_products_by_bot_id_old(session: AsyncSession, bot_id: int) -> List[Product]:
     """Busca todos os produtos associados a um bot_id específico."""
     # ANTES: query = select(Product).where(Product.bot_id == bot_id)
     
@@ -562,12 +562,20 @@ async def get_products_by_bot_id(session: AsyncSession, bot_id: int) -> List[Pro
     result = await session.execute(query)
     return result.scalars().all()
 
+async def get_products_by_bot_id(session: AsyncSession, bot_id: int) -> List[Product]:
+    statement = select(Product).where(
+        Product.bot_id == bot_id,
+        Product.is_deleted == False  # <--- FILTRO NOVO
+    ).order_by(Product.category, Product.name)
+    result = await session.execute(statement)
+    return result.scalars().all()
+
 async def get_product_by_id(session: AsyncSession, product_id: int) -> Optional[Product]:
     query = select(Product).where(Product.id == product_id).options(selectinload(Product.bot))
     result = await session.execute(query)
     return result.scalars().first()
 
-async def bulk_delete_products(session: AsyncSession, bot_id: int, product_ids: List[int]) -> int:
+async def bulk_delete_products_old(session: AsyncSession, bot_id: int, product_ids: List[int]) -> int:
     """Deleta produtos em lote, garantindo que eles pertençam ao bot_id especificado."""
     
     # A consulta fica muito mais simples, pois já validamos o dono do bot na rota
@@ -586,7 +594,20 @@ async def bulk_delete_products(session: AsyncSession, bot_id: int, product_ids: 
     await session.commit()
     return len(ids_to_delete)
 
-async def delete_product(session: AsyncSession, db_product: Product) -> bool:
+async def bulk_delete_products(session: AsyncSession, bot_id: int, product_ids: List[int]) -> int:
+    # Em vez de delete(), usamos update()
+    statement = (
+        update(Product)
+        .where(Product.bot_id == bot_id)
+        .where(Product.id.in_(product_ids))
+        .values(is_deleted=True) # <--- MARCA COMO DELETADO
+    )
+    
+    result = await session.execute(statement)
+    await session.commit()
+    return result.rowcount
+
+async def delete_product_old(session: AsyncSession, db_product: Product) -> bool:
     """
     Deleta um objeto Product que já foi buscado e verificado pela rota.
     (Recebe o objeto Product, não o product_id)
@@ -597,6 +618,11 @@ async def delete_product(session: AsyncSession, db_product: Product) -> bool:
     await session.delete(db_product)
     await session.commit()
     return True
+
+async def delete_product(session: AsyncSession, db_product: Product):
+    db_product.is_deleted = True # Soft Delete
+    session.add(db_product)
+    await session.commit()
 
 async def create_order(
     session: AsyncSession,

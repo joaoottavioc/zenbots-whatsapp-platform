@@ -79,6 +79,7 @@ services:
     env_file:
       - .env
     environment:
+      - PYTHONUNBUFFERED=1
       # Precisa das mesmas configs do backend para acessar Banco e Redis
       - REDIS_URL=redis://redis:6379/0
       - REDIS_HOST=redis

@@ -87,6 +87,7 @@ class Product(SQLModel, table=True):
     
     bot_id: int = Field(foreign_key="bot.id")
     bot: "Bot" = Relationship(back_populates="products")
+    is_deleted: bool = Field(default=False)
 
 class ConversationHistory(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

@@ -456,53 +456,115 @@ async def authenticate_whatsapp_bot(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
+    """
+    Fluxo Sandbox: Code -> Token -> Discovery (Business -> WABA -> Phone) -> Save
+    """
     app_id = os.getenv("FB_APP_ID")
     app_secret = os.getenv("FB_APP_SECRET")
     
-    # PEGA A URL EXATA QUE VEIO DO FRONT
-    # Como é fluxo manual, essa URL vai ser 'https://.../meus-bots'
-    redirect_url = auth_data.redirect_uri 
-    
-    print(f"\n📥 Auth Manual Iniciada via POST.")
-    print(f"🔗 Usando Redirect URI: {redirect_url}")
-    print(f"📦 Code: {auth_data.code[:10]}...")
+    print(f"\n🚀 [Sandbox] Iniciando Auth para: {current_user.email}")
 
     async with httpx.AsyncClient() as client:
+        # ⚠️ Passo 6: Trocar Code por Access Token
         token_url = "https://graph.facebook.com/v19.0/oauth/access_token"
-        
         params = {
-            "client_id": app_id,
+            "client_id": app_id, 
             "client_secret": app_secret,
-            "code": auth_data.code,
-            "redirect_uri": redirect_url # Sem truques, direto e reto.
+            "code": auth_data.code, 
+            "redirect_uri": auth_data.redirect_uri
         }
         
-        response = await client.get(token_url, params=params)
-        data = response.json()
+        resp = await client.get(token_url, params=params)
+        data = resp.json()
         
         if "error" in data:
-            error_msg = data['error'].get('message')
-            print(f"❌ Erro Meta: {error_msg}")
-            raise HTTPException(status_code=400, detail=f"Erro Facebook: {error_msg}")
+            print(f"❌ Erro OAuth: {data}")
+            raise HTTPException(status_code=400, detail=data['error']['message'])
             
         access_token = data["access_token"]
-        print("✅ Token obtido com sucesso! Buscando WABA...")
+        print("✅ Token obtido.")
 
-        # --- A PARTIR DAQUI, É A SUA LÓGICA DE SALVAR O BOT ---
-        # (Copie e cole a parte do 'me_url', parse do JSON e crud.create_bot que você já tinha)
-        # ...
-        # (Vou colocar o início só pra guiar)
-        me_url = "https://graph.facebook.com/v19.0/me"
-        me_params = {"fields": "name,businesses{client_whatsapp_business_accounts{id,name,phone_numbers{id,display_phone_number}}}", "access_token": access_token}
+        # ⚠️ Passo 7: Descobrir Hierarquia (Business -> WABA -> Phone)
         
-        me_resp = await client.get(me_url, params=me_params)
-        me_data = me_resp.json()
+        # 7a. Descobrir Businesses do usuário
+        biz_url = "https://graph.facebook.com/v19.0/me/businesses"
+        biz_resp = await client.get(biz_url, params={"access_token": access_token})
+        biz_data = biz_resp.json()
         
-        # ... extração dos dados ...
-        # ... crud.create_bot ...
+        if not biz_data.get("data"):
+            print("⚠️ Nenhum business encontrado em /me/businesses.")
+            raise HTTPException(status_code=400, detail="Nenhum Business Account encontrado para este usuário.")
+
+        business_id = biz_data["data"][0]["id"]
+        print(f"🏢 Business encontrado: {business_id}")
+
+        # 7b. Descobrir WABAs do Business
+        waba_url = f"https://graph.facebook.com/v19.0/{business_id}/owned_whatsapp_business_accounts"
+        waba_resp = await client.get(waba_url, params={"access_token": access_token})
+        waba_data = waba_resp.json()
+
+        if not waba_data.get("data"):
+             raise HTTPException(status_code=400, detail="Este Business não possui contas de WhatsApp (WABAs).")
+
+        target_waba = waba_data["data"][0]
+        waba_id = target_waba["id"]
+        waba_name = target_waba.get("name", "Sandbox Bot")
+        print(f"🔹 WABA encontrada: {waba_name} ({waba_id})")
+
+        # 7c. Pegar Números da WABA
+        phone_url = f"https://graph.facebook.com/v19.0/{waba_id}/phone_numbers"
+        phone_resp = await client.get(phone_url, params={"access_token": access_token})
+        phone_data = phone_resp.json()
         
-        # Placeholder final (substitua pelo seu return real)
-        return {"status": "success", "message": "Bot conectado"}
+        phone_number_id = None
+        display_number = None
+        
+        if phone_data.get("data"):
+            # Pega o primeiro número disponível
+            num_obj = phone_data["data"][0]
+            phone_number_id = num_obj["id"]
+            display_number = num_obj["display_phone_number"]
+            print(f"📞 Número Encontrado: {display_number} (ID: {phone_number_id})")
+        else:
+            raise HTTPException(status_code=400, detail="WABA encontrada, mas sem número associado.")
+
+        # ⚠️ Passo 9 (Extra): Inscrever Webhook Automaticamente
+        try:
+            sub_url = f"https://graph.facebook.com/v19.0/{waba_id}/subscribed_apps"
+            await client.post(sub_url, params={"access_token": access_token})
+            print("✅ Webhook inscrito na WABA.")
+        except Exception as e:
+            print(f"⚠️ Erro ao inscrever webhook: {e}")
+
+        # Limpeza e Salvamento no Banco
+        clean_number = re.sub(r'\D', '', display_number)
+
+        existing_bot = await crud.get_bot_by_number(session, clean_number)
+        
+        if existing_bot:
+             if existing_bot.user_id == current_user.id:
+                 existing_bot.whatsapp_token = access_token
+                 existing_bot.phone_number_id = phone_number_id 
+                 session.add(existing_bot)
+                 await session.commit()
+                 return {"status": "success", "number": clean_number, "message": "Token atualizado"}
+             else:
+                 raise HTTPException(status_code=400, detail="Número já em uso.")
+
+        # Cria novo bot
+        await crud.create_bot(
+            session=session, 
+            user_id=current_user.id,
+            whatsapp_number=clean_number, 
+            restaurant_name=waba_name,
+            whatsapp_token=access_token, 
+            phone_number_id=phone_number_id,
+            pix_key=None, 
+            delivery_fee=0, 
+            min_order_value=0
+        )
+        
+        return {"status": "success", "number": clean_number}
 
 # 1. ROTA DE VERIFICAÇÃO (GET)
 @router.get("/bots/whatsapp/webhook")
@@ -553,3 +615,4 @@ async def receive_whatsapp_message(request: Request):
         return {"status": "error_handled"}
 
     return {"status": "received"}
+
