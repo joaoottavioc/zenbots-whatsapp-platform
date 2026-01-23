@@ -1,40 +1,66 @@
 # app/payment_service.py
 import os
 import mercadopago
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 
-MERCADOPAGO_ACCESS_TOKEN = os.getenv("MERCADOPAGO_ACCESS_TOKEN")
-# JÁ NÃO PRECISAMOS DO E-MAIL DE TESTE DO .ENV
-
-sdk = mercadopago.SDK(MERCADOPAGO_ACCESS_TOKEN)
+# NÃO inicializamos mais o SDK globalmente aqui fora.
+# sdk = mercadopago.SDK(...) <- REMOVER ISSO
 
 async def create_pix_payment(
     order_id: int,
     total_amount: float,
-    bot_name: str, # <-- 1. ADICIONA O PARÂMETRO FALTANTE
-    contact_phone: str
-):
+    bot_name: str,
+    contact_phone: str,
+    access_token_cliente: str # <--- OBRIGATÓRIO: O Token do dono do bot
+) -> Optional[Dict[str, Any]]:
     """
-    Cria uma cobrança PIX no Mercado Pago e retorna os dados para pagamento.
+    Cria uma cobrança PIX no Mercado Pago usando o TOKEN DO CLIENTE ESPECÍFICO.
     """
+    
+    if not access_token_cliente:
+        print(f"❌ Erro: Tentativa de criar pagamento sem Access Token para o pedido #{order_id}")
+        return None
+
+    # ▼▼▼ INICIALIZAÇÃO DINÂMICA (A MÁGICA ACONTECE AQUI) ▼▼▼
+    # O SDK é criado instantaneamente apenas para esta transação
+    try:
+        sdk = mercadopago.SDK(access_token_cliente)
+    except Exception as e:
+        print(f"❌ Erro ao inicializar SDK do MP com token fornecido: {e}")
+        return None
+
     expiration_time = datetime.utcnow() + timedelta(minutes=15)
     expiration_date_iso = expiration_time.isoformat("T", "milliseconds") + "Z"
 
+    # URL base para Webhook (Produção ou Ngrok)
+    base_url = os.getenv("BASE_URL")
+    if not base_url:
+        print("⚠️ AVISO: BASE_URL não configurada no .env. Webhook pode falhar.")
+
     payment_data = {
         "transaction_amount": round(total_amount, 2),
-        "description": f"Pedido #{order_id} - {bot_name}", # <-- 2. USA O NOVO PARÂMETRO
+        "description": f"Pedido #{order_id} - {bot_name}", 
         "payment_method_id": "pix",
         "date_of_expiration": expiration_date_iso,
         "payer": {
-            "email": f"{contact_phone}@zenbots.com.br", # Usando um domínio próprio para o email
+            "email": f"{contact_phone}@zenbotz.com.br", # Email fictício para o pagador (MP exige email)
         },
         "external_reference": str(order_id),
-        "notification_url": "https://34e94746f8d5.ngrok-free.app/webhooks/payment-confirm"
+        
+        # O Webhook precisa ser notificado na sua URL global
+        "notification_url": f"{base_url}/webhooks/payment-confirm/{order_id}"
     }
 
     try:
-        result = sdk.payment().create(payment_data)
+        # Chamada real ao Mercado Pago
+        request_options = mercadopago.config.RequestOptions()
+        request_options.custom_headers = {
+            'x-idempotency-key': str(order_id) # Evita cobrança duplicada se tentar gerar 2x
+        }
+
+        result = sdk.payment().create(payment_data, request_options)
+
         if result["status"] == 201:
             pix_data = result["response"]["point_of_interaction"]["transaction_data"]
             return {
@@ -43,9 +69,9 @@ async def create_pix_payment(
                 "pix_copy_paste": pix_data["qr_code"]
             }
         else:
-            # Adicione este print para ver a resposta em caso de falha (status diferente de 201)
-            print("❌ Resposta do Mercado Pago (Falha):", result)
+            print(f"❌ Erro Mercado Pago (Status {result.get('status')}):", result.get("response"))
             return None
+
     except Exception as e:
-        print(f"❌ Erro CRÍTICO ao chamar a API do Mercado Pago: {e}")
+        print(f"❌ Erro CRÍTICO ao chamar API do Mercado Pago: {e}")
         return None

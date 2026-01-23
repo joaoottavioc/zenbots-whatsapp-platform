@@ -479,75 +479,125 @@ async def update_product(session: AsyncSession, db_product: Product, update_data
 
 async def bulk_create_products(session: AsyncSession, bot_id: int, products_data: List[Dict]) -> int:
     """
-    Substitui o catálogo antigo pelo novo (Delete All -> Create New).
-    Limpa os itens dos carrinhos ativos para evitar erro de chave estrangeira.
+    Sincroniza o catálogo com PERFORMANCE MÁXIMA:
+    1. Gera embeddings de todos os produtos em 1 única requisição (Batch).
+    2. Faz Upsert (Atualiza ou Cria) dos dados no banco.
+    3. Faz Soft Delete do que saiu do cardápio.
     """
     
-    # --- 1. LIMPEZA PRÉVIA (DELETE ALL) ---
+    # 1. Busca produtos existentes (para decidir entre Update ou Create)
+    stmt = select(Product).where(Product.bot_id == bot_id)
+    result = await session.execute(stmt)
+    existing_products = result.scalars().all()
     
-    # Busca todos os IDs de produtos que já existem para este bot
-    existing_result = await session.execute(select(Product.id).where(Product.bot_id == bot_id))
-    existing_ids = existing_result.scalars().all()
+    # Mapa para busca rápida: nome_normalizado -> Produto
+    existing_map = {p.name.strip().lower(): p for p in existing_products}
+    
+    # Listas preparatórias para o processamento em lote
+    items_to_process = []
+    texts_to_embed = []
+    
+    processed_names_in_file = set()
 
-    if existing_ids:
-        # A. Remove esses produtos de quaisquer carrinhos ativos (CartItem)
-        # Isso é CRUCIAL para não dar erro de integridade (Foreign Key)
-        await session.execute(
-            delete(CartItem).where(CartItem.product_id.in_(existing_ids))
+    # 2. Pré-processamento: Monta os textos mas NÃO chama a IA ainda
+    for item in products_data:
+        raw_name = item.get("name", "").strip()
+        if not raw_name: 
+            continue
+            
+        name_key = raw_name.lower()
+        
+        # Evita duplicatas no mesmo arquivo
+        if name_key in processed_names_in_file:
+            continue
+        processed_names_in_file.add(name_key)
+
+        # Extração segura dos dados
+        category = item.get("category", "Geral")
+        description = item.get("description", "")
+        keywords = item.get("keywords", [])
+        keywords_str = ", ".join(keywords) if isinstance(keywords, list) else str(keywords)
+        price = float(item.get("price", 0.0))
+
+        # Texto para o Embedding
+        text = (
+            f"CATEGORIA: {category}. "
+            f"PRODUTO PRINCIPAL: {raw_name}. "
+            f"DESCRIÇÃO E INGREDIENTES: {description or 'N/A'}. "
+            f"PALAVRAS-CHAVE: {keywords_str or 'N/A'}."
         )
         
-        # B. Deleta os produtos em si
-        # Nota: Produtos em PEDIDOS fechados (Order) não serão afetados se o delete estiver
-        # configurado corretamente, ou podem impedir a deleção. 
-        # Se o banco bloquear por causa de pedidos passados, o ideal seria apenas marcar como 
-        # is_available=False, mas para um "reset" de cardápio, o delete físico é o esperado.
-        # Se der erro aqui, é porque o produto está num Pedido.
-        try:
-            await session.execute(
-                delete(Product).where(Product.id.in_(existing_ids))
-            )
-        except Exception as e:
-            print(f"⚠️ Aviso: Não foi possível deletar alguns produtos antigos (provavelmente vendidos): {e}")
-            # Se não der para deletar (ex: histórico de vendas), podemos optar por 
-            # apenas arquivá-los ou ignorar o erro e criar os novos assim mesmo.
-            # Por segurança neste MVP, vamos seguir criando os novos.
+        # Guarda os dados limpos e o texto
+        items_to_process.append({
+            "raw_name": raw_name,
+            "name_key": name_key,
+            "description": description,
+            "price": price,
+            "keywords": keywords_str,
+            "category": category
+        })
+        texts_to_embed.append(text)
 
-    # --- 2. CRIAÇÃO DOS NOVOS PRODUTOS (Lógica Original) ---
-    
+    # 🚀 3. A MÁGICA: Gera todos os embeddings de uma vez (1 Request apenas!)
+    if texts_to_embed:
+        # Isso transforma 30 segundos de espera em ~1 segundo
+        embeddings = await embed_async(texts_to_embed, space="products", normalize=False)
+    else:
+        embeddings = []
+
+    # 4. Aplica as alterações no banco (Upsert)
+    processed_db_ids = set()
     products_to_add = []
-    for item in products_data:
-        if item.get("name") and item.get("price") is not None:
-            keywords_list = item.get("keywords", [])
-            keywords_str = ", ".join(keywords_list) if keywords_list else None
-            
-            category = item.get("category", "Geral")
 
-            text_to_embed = (
-                f"CATEGORIA: {category}. "
-                f"PRODUTO PRINCIPAL: {item.get('name')}. "
-                f"DESCRIÇÃO E INGREDIENTES: {item.get('description', 'N/A')}. "
-                f"PALAVRAS-CHAVE: {keywords_str or 'N/A'}."
-            )
-            embeddings = await embed_async([text_to_embed], space="products", normalize=False)
-            embedding_vector = embeddings[0]
+    # Itera sobre os dados e os vetores simultaneamente
+    for item_data, embedding_vector in zip(items_to_process, embeddings):
+        name_key = item_data["name_key"]
+        
+        if name_key in existing_map:
+            # --- ATUALIZAR (UPDATE) ---
+            product = existing_map[name_key]
             
+            product.name = item_data["raw_name"]
+            product.description = item_data["description"]
+            product.price = item_data["price"]
+            product.keywords = item_data["keywords"]
+            product.category = item_data["category"]
+            product.embedding = embedding_vector # Vetor novo
+            
+            product.is_available = True
+            product.is_deleted = False
+            
+            session.add(product)
+            processed_db_ids.add(product.id)
+        else:
+            # --- CRIAR (INSERT) ---
             new_product = Product(
                 bot_id=bot_id, 
-                name=item.get("name"), 
-                description=item.get("description"),
-                price=float(item.get("price")), 
-                embedding=embedding_vector, 
-                keywords=keywords_str,
-                category=category,
-                is_available=True
+                name=item_data["raw_name"], 
+                description=item_data["description"],
+                price=item_data["price"], 
+                embedding=embedding_vector, # Vetor novo
+                keywords=item_data["keywords"],
+                category=item_data["category"],
+                is_available=True,
+                is_deleted=False
             )
             products_to_add.append(new_product)
-            
+
+    # 5. Adiciona novos e Arquiva (Soft Delete) os removidos
     if products_to_add:
         session.add_all(products_to_add)
-        await session.commit()
+
+    for product in existing_products:
+        if product.id not in processed_db_ids:
+            if not product.is_deleted: 
+                product.is_available = False
+                product.is_deleted = True
+                session.add(product)
+
+    await session.commit()
         
-    return len(products_to_add)
+    return len(processed_db_ids) + len(products_to_add)
 
 async def get_products_by_bot_id_old(session: AsyncSession, bot_id: int) -> List[Product]:
     """Busca todos os produtos associados a um bot_id específico."""

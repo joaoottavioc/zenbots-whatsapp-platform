@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr
 from datetime import datetime
 from typing import List, Optional, Any, Dict
 
@@ -150,3 +150,21 @@ class WhatsAppAuthRequest(BaseModel):
     code: str = None  # Agora é opcional
     redirect_uri: str = None
     access_token: str = None # Novo campo
+
+class EmbeddedSignupPayload(BaseModel):
+    bot_id: int
+    redirect_uri: str
+    
+    # IDs são opcionais pois no fluxo de Fallback (Reconexão) o frontend não os tem.
+    # O Backend descobrirá esses valores se eles vierem nulos.
+    business_id: Optional[str] = None
+    waba_id: Optional[str] = None
+    phone_number_id: Optional[str] = None
+    display_phone_number: Optional[str] = None
+    
+    # Auth: Aceitamos Code (Fluxo Ideal) ou Token (Fluxo Fallback)
+    code: Optional[str] = None
+    access_token: Optional[str] = None
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr

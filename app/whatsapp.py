@@ -18,9 +18,11 @@ import regex as re
 from sqlmodel import select
 from app.semantic_router import semantic_intent, THRESHOLDS
 from app.address_service import get_address_from_cep
-from app.payment_service import create_pix_payment, sdk as mercadopago_sdk
+from app.payment_service import create_pix_payment
 import httpx #SIMULADOR
 from arq import ArqRedis
+from sqlalchemy.exc import IntegrityError
+import mercadopago
 
 # --- Imports Atualizados ---
 # Helper para gerenciar o estado de "ação pendente"
@@ -41,33 +43,6 @@ _ITEM_FROM_Q_RE = re.compile(
     r"(\d{1,6})\s+([A-Za-zÀ-ÿ'´`^~\- ]+?)(?:\s+por\s*R\$\s*[\d.,]+|\s*(?:,| e |$))",
     re.IGNORECASE
 )
-
-#@router.post("/webhook")
-#async def whatsapp_webhook(request: Request):
-#    data = await request.json()
-    
-    # Validação básica do payload
-#    if data.get("object") == "whatsapp_business_account" and data.get("entry"):
-#        changes = data["entry"][0].get("changes", [])
-#        if changes and changes[0].get("value").get("messages"):
-            
-            # ▼▼▼ MUDANÇA AQUI: ENFILEIRAMENTO ▼▼▼
-            
-            # Pega a conexão do Redis que criamos no main.py
-#            redis_queue: ArqRedis = request.app.state.arq_redis
-            
-            # Enfileira a tarefa. 
-            # O nome da função deve ser EXATAMENTE igual ao definido no WorkerSettings
-#            await redis_queue.enqueue_job('process_whatsapp_message', data)
-            
-#            print("📨 Mensagem enfileirada para processamento.")
-            
-            # ▲▲▲ FIM DA MUDANÇA ▲▲▲
-            
-            # NOTA: Removemos o asyncio.create_task(process_whatsapp_message(data))
-            # pois agora o worker quem vai rodar isso.
-
-#    return JSONResponse(content={"status": "received"})
 
 
 async def process_whatsapp_message(ctx, data: Dict[str, Any]):
@@ -127,7 +102,14 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
             if await crud.is_message_processed(session, message_id):
                 print("⏩ Mensagem já processada anteriormente. Ignorando.")
                 return
-            await crud.add_processed_message(session, message_id)
+            try:
+                await crud.add_processed_message(session, message_id)
+            except IntegrityError:
+                # Se der erro de chave duplicada, significa que outro worker foi mais rápido.
+                # Apenas ignoramos e abortamos.
+                print("⏩ Mensagem processada concorrentemente (Check 2). Ignorando.")
+                await session.rollback() # Limpa o erro da sessão
+                return
 
             if not is_store_open(bot):
                 print(f"🔒 Loja fechada. Enviando mensagem enriquecida para {contact_number}.")
@@ -455,29 +437,39 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
                 # Agora, com o pedido criado, montamos a resposta específica
                 if "pix" in user_text:
                     if order:
-                        # 1. Chamar o serviço de pagamento para gerar o PIX real
-                        pix_info = await create_pix_payment(
-                            order_id=order.id,
-                            total_amount=order.total_amount,
-                            bot_name=bot.restaurant_name,
-                            contact_phone=contact.phone_number
-                        )
+                        # ▼▼▼ NOVA LÓGICA MULTI-CONTA ▼▼▼
+                        # 1. Garante que temos a configuração de pagamento do bot carregada
+                        await session.refresh(bot, attribute_names=["payment_config"])
+                        
+                        client_token = None
+                        if bot.payment_config and bot.payment_config.is_active:
+                            client_token = bot.payment_config.access_token
 
-                        if pix_info:
-                            # 2. Se o PIX foi gerado, envie o "Copia e Cola"
-                            response_to_user = (
-                                "Seu pedido foi registrado! ✅\n\n"
-                                "Use o PIX Copia e Cola acima para fazer o pagamento em até 15 minutos. Enviaremos uma confirmação assim que for aprovado.\n\n"
-                            )
-                            
-                            # Mensagem 2: O código (texto puro, sem formatação)
-                            pix_code_to_send = pix_info['pix_copy_paste']
-                            
-                            order_created = True
+                        if not client_token:
+                            print(f"❌ Erro: Bot {bot.id} não tem token MP configurado.")
+                            response_to_user = "Desculpe, o pagamento via PIX está temporariamente indisponível neste restaurante. Tente cartão."
+                            await crud.delete_order(session, order.id) # Reverte
                         else:
-                            # 3. Se falhou, avise o usuário e reverta o pedido
-                            response_to_user = "Tivemos um problema ao gerar o PIX. Por favor, tente pagar com Cartão."
-                            await crud.delete_order(session, order.id) # Reverte o pedido
+                            # 2. Chama o serviço passando o token DO CLIENTE
+                            pix_info = await create_pix_payment(
+                                order_id=order.id,
+                                total_amount=order.total_amount,
+                                bot_name=bot.restaurant_name,
+                                contact_phone=contact.phone_number,
+                                access_token_cliente=client_token # <--- Passando o token
+                            )
+
+                            if pix_info:
+                                response_to_user = (
+                                    "Seu pedido foi registrado! ✅\n\n"
+                                    "Use o PIX Copia e Cola acima para fazer o pagamento em até 15 minutos. Enviaremos uma confirmação assim que for aprovado.\n\n"
+                                )
+                                pix_code_to_send = pix_info['pix_copy_paste']
+                                order_created = True
+                            else:
+                                response_to_user = "Tivemos um problema técnico ao gerar o PIX. Por favor, tente pagar com Cartão."
+                                await crud.delete_order(session, order.id)
+                        # ▲▲▲ FIM DA NOVA LÓGICA ▲▲▲
                     else:
                         response_to_user = "Não entendi. Por favor, escolha entre *PIX* ou *Cartão*."
 
@@ -1194,110 +1186,83 @@ def is_likely_shopping_intent(text: str) -> bool:
     # Usamos \b para garantir que estamos pegando a palavra inteira (evita "quero" em "qualquer")
     return any(re.search(r'\b' + keyword + r'\b', text_lower) for keyword in shopping_keywords)
 
-@router.post("/webhooks/payment-confirm")
-async def handle_payment_notification(request: Request):
+@router.post("/webhooks/payment-confirm/{order_id}")
+async def handle_payment_notification(order_id: int, request: Request):
     """
-    Este é o endpoint que o Mercado Pago (MP) chamará.
-    
-    FLUXO CORRIGIDO:
-    1. Recebe a notificação (ping) do MP com o ID do pagamento.
-    2. Usa o SDK para buscar os dados completos desse pagamento.
-    3. Processa os dados completos (status, external_reference, etc.).
+    Webhook dinâmico:
+    1. Recebe o ID do pedido na URL.
+    2. Busca o pedido no banco para descobrir quem é o BOT dono.
+    3. Usa o Token desse BOT para consultar o Mercado Pago.
     """
     async with async_session() as session:
         data = await request.json()
-        print(f"🔔 Notificação de Pagamento Recebida: {data}")
+        print(f"🔔 Webhook recebido para Pedido #{order_id}: {data}")
 
         try:
-            # 1. Analisa a NOTIFICAÇÃO (o "ping" inicial)
-            notification_type = data.get("type")
+            # 1. Busca o Pedido e o Bot Dono
+            # Precisamos carregar o bot e a config de pagamento
+            from app.models import Order 
+            result = await session.execute(select(Order).where(Order.id == order_id))
+            order = result.scalars().first()
+
+            if not order:
+                print(f"❌ Pedido {order_id} não encontrado no banco.")
+                return JSONResponse(content={"status": "order_not_found"}, status_code=404)
+
+            # Carrega o Bot e a Configuração
+            await session.refresh(order, attribute_names=["bot"])
+            await session.refresh(order.bot, attribute_names=["payment_config"])
+
+            if not order.bot.payment_config or not order.bot.payment_config.access_token:
+                print(f"❌ Bot do pedido {order_id} não tem token configurado.")
+                return JSONResponse(content={"status": "no_token"}, status_code=200)
+
+            # 2. Inicializa o SDK com o token DO CLIENTE (Dono do Bot)
+            specific_sdk = mercadopago.SDK(order.bot.payment_config.access_token)
+
+            # 3. Processa a notificação (Igual antes, mas usando specific_sdk)
+            notification_type = data.get("type") or data.get("topic") # MP as vezes manda 'topic'
             payment_id_str = data.get("data", {}).get("id")
 
             if notification_type != "payment" or not payment_id_str:
-                print(f"Notificação ignorada (tipo: {notification_type}, ID: {payment_id_str}).")
-                return JSONResponse(content={"status": "notification_ignored"}, status_code=200)
+                return JSONResponse(content={"status": "ignored"}, status_code=200)
 
-            # 2. Busca os dados completos do pagamento no Mercado Pago
-            print(f"Buscando detalhes do pagamento ID: {payment_id_str}...")
-            payment_data = None
-            try:
-                payment_info_response = mercadopago_sdk.payment().get(payment_id_str)
-                
-                if payment_info_response["status"] == 200:
-                    payment_data = payment_info_response["response"]
-                    print(f"✅ Detalhes do pagamento obtidos: {payment_data.get('status')}")
-                else:
-                    print(f"❌ Erro ao buscar dados do MP: {payment_info_response}")
-                    return JSONResponse(content={"status": "mp_get_failed"}, status_code=200)
-                    
-            except Exception as e:
-                print(f"❌ Erro CRÍTICO ao chamar SDK do MP: {e}")
-                return JSONResponse(content={"status": "internal_error_sdk"}, status_code=200)
-
-            # 3. Processa os DADOS COMPLETOS (LÓGICA REORDENADA)
+            # Consulta o MP
+            payment_info = specific_sdk.payment().get(payment_id_str)
             
+            if payment_info["status"] != 200:
+                print(f"❌ Erro ao consultar MP: {payment_info}")
+                return JSONResponse(content={"status": "mp_error"}, status_code=200)
+            
+            payment_data = payment_info["response"]
             payment_status = payment_data.get("status")
 
-            # ▼▼▼ INÍCIO DA CORREÇÃO DE LÓGICA ▼▼▼
-            # 3.1. Primeiro, mapeamos o status para o nosso status do DB
-            db_status_to_update = None
+            # Mapeia Status
+            db_status = None
             if payment_status == "approved":
-                db_status_to_update = OrderStatus.PAID
-            elif payment_status in ("rejected", "cancelled", "failed"):
-                db_status_to_update = OrderStatus.FAILED
-            elif payment_status == "expired":
-                db_status_to_update = OrderStatus.EXPIRED
+                db_status = OrderStatus.PAID
+            elif payment_status in ("rejected", "cancelled"):
+                db_status = OrderStatus.FAILED
             
-            # 3.2. Se o status não for final (ex: "pending", "in_process"),
-            #      paramos a execução. Não há nada a fazer ainda.
-            if not db_status_to_update:
-                print(f"Status de pagamento '{payment_status}' (pendente) ignorado. Nenhuma ação necessária.")
-                return JSONResponse(content={"status": "status_ignored_pending"}, status_code=200)
-            
-            # 3.3. SÓ SE o status for final (approved, failed, etc.),
-            #      continuamos para validar o resto dos dados.
-            order_id_str = payment_data.get("external_reference")
-            psp_charge_id = payment_data.get("id") # ID do pagamento no MP
-            payer_email = payment_data.get("payer", {}).get("email")
+            if db_status:
+                await crud.update_order_status_by_id(session, order_id, db_status, str(payment_id_str))
+                
+                # Notifica no WhatsApp se aprovado
+                if db_status == OrderStatus.PAID:
+                    msg = f"Pagamento APROVADO! ✅\n\nSeu pedido #{order_id} foi confirmado e já vai para a cozinha."
+                    # Usa as credenciais do bot para enviar a mensagem
+                    await send_whatsapp_message(
+                        to=payment_data["payer"]["email"].split('@')[0], # Pegamos o fone do email fake que geramos
+                        message=msg,
+                        token=order.bot.whatsapp_token,
+                        phone_id=order.bot.phone_number_id
+                    )
 
-            if not order_id_str or not psp_charge_id or not payer_email:
-                print(f"❌ Pagamento ID {payment_id_str} com status '{payment_status}' sem dados essenciais (external_reference, id, payer.email)")
-                return JSONResponse(content={"status": "missing_data_but_ok"}, status_code=200)
-            # ▲▲▲ FIM DA CORREÇÃO DE LÓGICA ▲▲▲
-            
-            order_id = int(order_id_str)
-            phone_number = payer_email.split('@')[0] #
-
-            # 4. Atualiza o banco e notifica o cliente (como antes)
-            order = await crud.update_order_status_by_id(
-                session, 
-                order_id, 
-                db_status_to_update, 
-                str(psp_charge_id)
-            )
-
-            if order and order.status == OrderStatus.PAID:
-                restaurant_name = order.bot.restaurant_name or "o restaurante"
-                message = (
-                    f"Pagamento APROVADO! ✅\n\n"
-                    f"Seu pedido #{order.id} no {restaurant_name} foi confirmado e já está sendo preparado. Obrigado!"
-                )
-                await send_whatsapp_message(phone_number, message, token=bot.whatsapp_token, phone_id=bot.phone_number_id) # (Ignorando erros do simulador)
-            
-            elif order and (order.status == OrderStatus.FAILED or order.status == OrderStatus.EXPIRED):
-                message = (
-                    f"Opa! O pagamento do seu pedido #{order.id} falhou ou expirou. 😕\n\n"
-                    f"Por favor, fale conosco novamente para refazer o pedido."
-                )
-                await send_whatsapp_message(phone_number, message, token=bot.whatsapp_token, phone_id=bot.phone_number_id) # (Ignorando erros do simulador)
-
-            return JSONResponse(content={"status": "received"}, status_code=200)
+            return JSONResponse(content={"status": "ok"}, status_code=200)
 
         except Exception as e:
-            print(f"❌ Erro crítico ao processar webhook de pagamento: {e}")
-            if session.is_active:
-                await session.rollback()
-            return JSONResponse(content={"status": "internal_error_but_ok"}, status_code=200)
+            print(f"❌ Erro no Webhook: {e}")
+            return JSONResponse(content={"status": "error"}, status_code=500)
 
 def is_store_open(bot: Bot) -> bool:
     """

@@ -61,6 +61,11 @@ class Bot(SQLModel, table=True):
     timezone: str = Field(default="America/Sao_Paulo")
     schedule: Dict[str, Any] = Field(default={}, sa_column=Column(SA_JSON))
 
+    payment_config: Optional["PaymentConfig"] = Relationship(
+        back_populates="bot", 
+        sa_relationship_kwargs={"uselist": False, "cascade": "all, delete-orphan"}
+    )
+
 class Contact(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     phone_number: str = Field(index=True)
@@ -199,3 +204,21 @@ class OrderItem(SQLModel, table=True):
 
     product_id: int = Field(foreign_key="product.id")
     product: "Product" = Relationship()
+
+class PaymentConfig(SQLModel, table=True):
+    __tablename__ = "payment_configs"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    
+    provider: str = Field(default="mercadopago")
+    access_token: Optional[str] = Field(default=None)
+    public_key: Optional[str] = Field(default=None)
+    
+    is_active: bool = Field(default=False)
+    
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    # ▼▼▼ MUDANÇA AQUI: VINCULA AO BOT, NÃO AO USUÁRIO ▼▼▼
+    bot_id: int = Field(foreign_key="bot.id", unique=True) 
+    bot: "Bot" = Relationship(back_populates="payment_config")

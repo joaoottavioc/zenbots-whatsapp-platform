@@ -8,7 +8,7 @@ from app import crud, schemas, data_extractor
 from app.database import get_session
 from app.models import User
 from app.auth import get_current_user
-from app.schemas import WhatsAppAuthRequest
+from app.schemas import WhatsAppAuthRequest, EmbeddedSignupPayload, ForgotPasswordRequest
 from app.auth import get_current_user
 import re
 
@@ -21,6 +21,7 @@ import httpx
 from pydantic import BaseModel
 from urllib.parse import urlparse
 from arq import ArqRedis
+import asyncio
 
 router = APIRouter()
 WEBHOOK_VERIFY_TOKEN = os.getenv("META_VERIFY_TOKEN")
@@ -297,7 +298,7 @@ async def upload_catalog_from_file_endpoint(
     current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
-    Recebe Imagem ou PDF (multipágina), processa com Visão e cadastra produtos.
+    Recebe Imagem ou PDF (multipágina), processa com Visão em PARALELO e cadastra produtos.
     """
     
     # 1. Validação de Segurança
@@ -316,41 +317,51 @@ async def upload_catalog_from_file_endpoint(
         # Lista final que vai acumular produtos de todas as páginas/imagens
         all_extracted_products = []
 
-        # ▼▼▼ LÓGICA DE MULTIPÁGINAS ▼▼▼
+        # ▼▼▼ LÓGICA DE MULTIPÁGINAS PARALELIZADA (TURBO) ▼▼▼
         if file.content_type == "application/pdf":
-            print("📄 PDF detectado. Processando páginas...")
+            print("📄 PDF detectado. Iniciando processamento PARALELO...")
             try:
                 # Abre o PDF
                 doc = fitz.open(stream=contents, filetype="pdf")
                 
-                # Limite de segurança: processar no máximo 5 páginas para não estourar tempo/custo
-                # (Você pode ajustar isso conforme sua política de negócio)
+                # Limite de segurança: processar no máximo 5 páginas
                 max_pages = 5
                 pages_to_process = min(len(doc), max_pages)
+                
+                tasks = [] # Lista de tarefas para o asyncio
 
                 for i in range(pages_to_process):
-                    print(f"   -> Processando página {i+1}/{len(doc)}...")
                     page = doc.load_page(i)
                     
-                    # 150 DPI é um bom equilíbrio entre qualidade para leitura e tamanho de arquivo
+                    # 150 DPI é um bom equilíbrio
                     pix = page.get_pixmap(dpi=150) 
                     page_bytes = pix.tobytes("png")
                     
-                    # Chama a IA para ESTA página específica
-                    products_on_page = await extract_products_from_image(page_bytes, "image/png")
-                    
-                    if products_on_page:
-                        all_extracted_products.extend(products_on_page)
-                        print(f"      Encontrados {len(products_on_page)} itens na página {i+1}.")
+                    # ⚠️ O PULO DO GATO: Não usamos 'await' aqui.
+                    # Apenas chamamos a função (que retorna uma corrotina) e guardamos na lista.
+                    print(f"   -> Agendando página {i+1}...")
+                    tasks.append(extract_products_from_image(page_bytes, "image/png"))
+                
+                print(f"🚀 Disparando {len(tasks)} requisições para a IA simultaneamente...")
+                
+                # Executa todas as tarefas ao mesmo tempo
+                # O tempo total será o da página mais lenta, não a soma de todas!
+                results_list = await asyncio.gather(*tasks)
+                
+                # Consolida os resultados
+                for page_products in results_list:
+                    if page_products:
+                        all_extracted_products.extend(page_products)
                 
                 doc.close()
+                print(f"✅ Processamento paralelo concluído. Total de itens brutos: {len(all_extracted_products)}")
 
             except Exception as e:
                 print(f"Erro ao processar PDF: {e}")
                 raise HTTPException(status_code=400, detail="Erro ao ler o arquivo PDF.")
         
         else:
-            # Lógica para Imagem Única (JPG/PNG)
+            # Lógica para Imagem Única (JPG/PNG) continua igual
             all_extracted_products = await extract_products_from_image(contents, file.content_type)
         # ▲▲▲ FIM DA LÓGICA ▲▲▲
 
@@ -370,6 +381,7 @@ async def upload_catalog_from_file_endpoint(
             product["is_available"] = True 
             enriched_products.append(product)
 
+        # Chama o Bulk Create (versão Blindada que você ajustou no passo anterior)
         count = await crud.bulk_create_products(
             session=session,
             bot_id=bot_id,
@@ -457,15 +469,15 @@ async def authenticate_whatsapp_bot(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Fluxo Sandbox: Code -> Token -> Discovery (Business -> WABA -> Phone) -> Save
+    Fluxo Sandbox/Live: Code -> Token -> WABA Direta -> Phone -> Save
     """
     app_id = os.getenv("FB_APP_ID")
     app_secret = os.getenv("FB_APP_SECRET")
     
-    print(f"\n🚀 [Sandbox] Iniciando Auth para: {current_user.email}")
+    print(f"\n🚀 [Auth] Iniciando troca de token para: {current_user.email}")
 
     async with httpx.AsyncClient() as client:
-        # ⚠️ Passo 6: Trocar Code por Access Token
+        # ⚠️ Passo 1: Trocar Code por Access Token
         token_url = "https://graph.facebook.com/v19.0/oauth/access_token"
         params = {
             "client_id": app_id, 
@@ -484,34 +496,32 @@ async def authenticate_whatsapp_bot(
         access_token = data["access_token"]
         print("✅ Token obtido.")
 
-        # ⚠️ Passo 7: Descobrir Hierarquia (Business -> WABA -> Phone)
+        # ⚠️ Passo 2: Descobrir WABA diretamente (CORRIGIDO PARA EMBEDDED SIGNUP)
+        # Em vez de buscar /me/businesses, buscamos direto as contas de WhatsApp vinculadas ao token
         
-        # 7a. Descobrir Businesses do usuário
-        biz_url = "https://graph.facebook.com/v19.0/me/businesses"
-        biz_resp = await client.get(biz_url, params={"access_token": access_token})
-        biz_data = biz_resp.json()
-        
-        if not biz_data.get("data"):
-            print("⚠️ Nenhum business encontrado em /me/businesses.")
-            raise HTTPException(status_code=400, detail="Nenhum Business Account encontrado para este usuário.")
-
-        business_id = biz_data["data"][0]["id"]
-        print(f"🏢 Business encontrado: {business_id}")
-
-        # 7b. Descobrir WABAs do Business
-        waba_url = f"https://graph.facebook.com/v19.0/{business_id}/owned_whatsapp_business_accounts"
-        waba_resp = await client.get(waba_url, params={"access_token": access_token})
+        print("🔍 Buscando WABA via /me/whatsapp_business_accounts...")
+        me_waba_url = "https://graph.facebook.com/v19.0/me/whatsapp_business_accounts"
+        waba_resp = await client.get(me_waba_url, params={"access_token": access_token})
         waba_data = waba_resp.json()
 
-        if not waba_data.get("data"):
-             raise HTTPException(status_code=400, detail="Este Business não possui contas de WhatsApp (WABAs).")
+        if "error" in waba_data:
+            print(f"❌ Erro Graph API: {waba_data}")
+            raise HTTPException(status_code=400, detail=waba_data['error']['message'])
 
+        if not waba_data.get("data"):
+            print("⚠️ Nenhuma WABA encontrada em /me/whatsapp_business_accounts")
+            raise HTTPException(
+                status_code=400, 
+                detail="Nenhuma conta de WhatsApp Business encontrada. Verifique se o cadastro no Facebook foi concluído."
+            )
+
+        # No Embedded Signup, o token geralmente dá acesso a apenas uma WABA recém-criada/selecionada
         target_waba = waba_data["data"][0]
         waba_id = target_waba["id"]
-        waba_name = target_waba.get("name", "Sandbox Bot")
+        waba_name = target_waba.get("name", "WhatsApp Bot")
         print(f"🔹 WABA encontrada: {waba_name} ({waba_id})")
 
-        # 7c. Pegar Números da WABA
+        # ⚠️ Passo 3: Pegar Números da WABA
         phone_url = f"https://graph.facebook.com/v19.0/{waba_id}/phone_numbers"
         phone_resp = await client.get(phone_url, params={"access_token": access_token})
         phone_data = phone_resp.json()
@@ -526,19 +536,23 @@ async def authenticate_whatsapp_bot(
             display_number = num_obj["display_phone_number"]
             print(f"📞 Número Encontrado: {display_number} (ID: {phone_number_id})")
         else:
-            raise HTTPException(status_code=400, detail="WABA encontrada, mas sem número associado.")
+            raise HTTPException(status_code=400, detail="WABA encontrada, mas sem número de telefone associado.")
 
-        # ⚠️ Passo 9 (Extra): Inscrever Webhook Automaticamente
+        # ⚠️ Passo 4: Inscrever Webhook Automaticamente
         try:
             sub_url = f"https://graph.facebook.com/v19.0/{waba_id}/subscribed_apps"
-            await client.post(sub_url, params={"access_token": access_token})
-            print("✅ Webhook inscrito na WABA.")
+            sub_resp = await client.post(sub_url, params={"access_token": access_token})
+            if sub_resp.status_code == 200:
+                print("✅ Webhook inscrito na WABA com sucesso.")
+            else:
+                print(f"⚠️ Resposta Webhook: {sub_resp.json()}")
         except Exception as e:
             print(f"⚠️ Erro ao inscrever webhook: {e}")
 
-        # Limpeza e Salvamento no Banco
+        # ⚠️ Passo 5: Limpeza e Salvamento no Banco
         clean_number = re.sub(r'\D', '', display_number)
 
+        # Tenta achar um bot existente por número (Lógica original mantida)
         existing_bot = await crud.get_bot_by_number(session, clean_number)
         
         if existing_bot:
@@ -547,11 +561,12 @@ async def authenticate_whatsapp_bot(
                  existing_bot.phone_number_id = phone_number_id 
                  session.add(existing_bot)
                  await session.commit()
-                 return {"status": "success", "number": clean_number, "message": "Token atualizado"}
+                 return {"status": "success", "number": clean_number, "message": "Bot reconectado e token atualizado"}
              else:
-                 raise HTTPException(status_code=400, detail="Número já em uso.")
+                 # Se o número existe mas é de outro usuário
+                 raise HTTPException(status_code=400, detail="Este número já está em uso por outra conta.")
 
-        # Cria novo bot
+        # Se não existe, cria novo bot
         await crud.create_bot(
             session=session, 
             user_id=current_user.id,
@@ -564,7 +579,231 @@ async def authenticate_whatsapp_bot(
             min_order_value=0
         )
         
-        return {"status": "success", "number": clean_number}
+        return {"status": "success", "number": clean_number, "message": "Novo bot criado e conectado"}
+
+# ==========================================
+# 🚀 ROTA DE ONBOARDING ENTERPRISE-GRADE
+# ==========================================
+
+@router.post("/bots/whatsapp/complete-onboarding", status_code=201)
+async def complete_onboarding(
+    data: schemas.EmbeddedSignupPayload,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Onboarding Definitivo (Enterprise-Grade):
+    - Aceita dados do evento (Happy Path)
+    - Aceita apenas Token (Fallback) e faz Discovery completo
+    """
+    print(f"🚀 [Onboarding] Processando Bot #{data.bot_id}")
+    
+    app_id = os.getenv("FB_APP_ID")
+    app_secret = os.getenv("FB_APP_SECRET")
+    
+    final_token = None
+    
+    # --- FASE 1: OBTENÇÃO DE TOKEN CONFIÁVEL ---
+    async with httpx.AsyncClient() as client:
+        
+        # CASO A: Veio Code (Cadastro novo via SDK)
+        if data.code:
+            token_url = "https://graph.facebook.com/v19.0/oauth/access_token"
+            params = {
+                "client_id": app_id, 
+                "client_secret": app_secret,
+                "code": data.code, 
+                "redirect_uri": data.redirect_uri 
+            }
+            try:
+                resp = await client.get(token_url, params=params)
+                if "access_token" in resp.json():
+                    final_token = resp.json()["access_token"]
+                else:
+                    print(f"❌ Erro Code Exchange: {resp.json()}")
+                    raise HTTPException(status_code=400, detail="Falha na validação do login.")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail="Erro de comunicação com a Meta.")
+
+        # CASO B: Veio Token Curto (Fallback/Reconnect)
+        elif data.access_token:
+            print("🔄 Trocando Token Curto por Longo...")
+            exchange_url = "https://graph.facebook.com/v19.0/oauth/access_token"
+            params = {
+                "grant_type": "fb_exchange_token",
+                "client_id": app_id,
+                "client_secret": app_secret,
+                "fb_exchange_token": data.access_token
+            }
+            try:
+                resp = await client.get(exchange_url, params=params)
+                if "access_token" in resp.json():
+                    final_token = resp.json()["access_token"]
+                    print("✅ Token Long-Lived obtido.")
+                else:
+                    print(f"❌ Erro Token Exchange: {resp.json()}")
+                    raise HTTPException(status_code=400, detail="Sessão expirada. Tente novamente.")
+            except Exception as e:
+                 raise HTTPException(status_code=500, detail="Erro ao renovar sessão.")
+        
+        else:
+            raise HTTPException(status_code=400, detail="Nenhuma credencial recebida.")
+
+    # --- FASE 2: DESCOBERTA DE IDS (Se necessário) ---
+    phone_number_id = data.phone_number_id
+    display_phone_number = data.display_phone_number
+
+    # Se faltar dados (Fallback), o Backend assume a responsabilidade de descobrir
+    if not phone_number_id or not display_phone_number:
+        print("🔍 IDs ausentes. Executando Discovery Robusto...")
+        
+        async with httpx.AsyncClient() as client:
+            try:
+                # 1. Buscar Empresas (Businesses)
+                # O endpoint /me/whatsapp_business_accounts é instável. Usamos /me/businesses primeiro.
+                biz_resp = await client.get(
+                    "https://graph.facebook.com/v19.0/me/businesses",
+                    params={"access_token": final_token}
+                )
+                biz_data = biz_resp.json()
+                
+                if not biz_data.get("data"):
+                     # Edge case: Usuário pode ter acesso direto sem business (raro, mas possível via tasks)
+                     # Nesse caso tentamos o endpoint direto como último recurso
+                     fallback_waba = await client.get(
+                        "https://graph.facebook.com/v19.0/me/whatsapp_business_accounts",
+                        params={"access_token": final_token}
+                     )
+                     if fallback_waba.json().get("data"):
+                         waba_data = fallback_waba.json()
+                         print("⚠️ WABA encontrada fora de Business.")
+                     else:
+                         raise HTTPException(status_code=400, detail="Nenhuma empresa ou conta WhatsApp encontrada.")
+                else:
+                    # Pega o primeiro Business (Assumimos fluxo simplificado)
+                    target_biz_id = biz_data["data"][0]["id"]
+                    
+                    # 2. Buscar WABAs desse Business
+                    waba_resp = await client.get(
+                        f"https://graph.facebook.com/v19.0/{target_biz_id}/owned_whatsapp_business_accounts",
+                        params={"access_token": final_token}
+                    )
+                    waba_data = waba_resp.json()
+
+                if not waba_data.get("data"):
+                     raise HTTPException(status_code=400, detail="Empresa encontrada, mas sem conta WhatsApp.")
+                
+                target_waba_id = waba_data["data"][0]["id"]
+
+                # 3. Buscar Números da WABA
+                phones_resp = await client.get(
+                    f"https://graph.facebook.com/v19.0/{target_waba_id}/phone_numbers",
+                    params={"access_token": final_token}
+                )
+                phones_data = phones_resp.json()
+
+                if not phones_data.get("data"):
+                     raise HTTPException(status_code=400, detail="Conta WhatsApp sem número cadastrado.")
+
+                # Pega o primeiro número disponível
+                target_phone = phones_data["data"][0]
+                phone_number_id = target_phone["id"]
+                display_phone_number = target_phone["display_phone_number"]
+                
+                print(f"📞 Discovery Sucesso: {display_phone_number} (ID: {phone_number_id})")
+
+            except HTTPException as he:
+                raise he
+            except Exception as e:
+                print(f"❌ Erro Discovery: {e}")
+                raise HTTPException(status_code=500, detail="Erro ao identificar sua conta WhatsApp.")
+
+    # --- FASE 3: PERSISTÊNCIA E INSCRIÇÃO ---
+    
+    # Inscrever Webhook (Importante para garantir recebimento de mensagens)
+    async with httpx.AsyncClient() as client:
+        try:
+             # Precisamos do WABA ID. Se veio do frontend, ok. Se não, pegamos do Discovery ou deduzimos.
+             # Para simplificar a inscrição, usamos o phone_number_id para achar a WABA se necessário,
+             # mas o ideal é ter o waba_id. Se veio do discovery, já temos target_waba_id.
+             pass 
+             # Nota: A inscrição de webhook geralmente é automática no Embedded Signup,
+             # mas em reconexões manuais pode ser bom reforçar. Fica como melhoria futura.
+        except Exception:
+            pass
+
+    clean_number = re.sub(r'\D', '', display_phone_number)
+    
+    # Verifica duplicidade
+    existing_bot = await crud.get_bot_by_number(session, clean_number)
+    
+    if existing_bot:
+        if existing_bot.user_id != current_user.id:
+             raise HTTPException(status_code=400, detail="Número já pertence a outro usuário.")
+        
+        # Atualiza bot existente
+        existing_bot.whatsapp_token = final_token
+        existing_bot.phone_number_id = phone_number_id
+        session.add(existing_bot)
+        await session.commit()
+    else:
+        # Vincula ao bot atual (Rascunho)
+        target_bot = await crud.get_bot_by_id(session, data.bot_id)
+        
+        if not target_bot or target_bot.user_id != current_user.id:
+             raise HTTPException(status_code=403, detail="Acesso negado ao bot.")
+
+        target_bot.whatsapp_number = clean_number
+        target_bot.phone_number_id = phone_number_id
+        target_bot.whatsapp_token = final_token
+        
+        if "Loja" in target_bot.restaurant_name or not target_bot.restaurant_name:
+             target_bot.restaurant_name = f"Loja {clean_number}"
+        
+        session.add(target_bot)
+        await session.commit()
+
+    return {"status": "connected", "number": clean_number}
+
+    # ------------------------------------------------------------------
+    # FASE 3: PERSISTÊNCIA (Salvar no Banco)
+    # ------------------------------------------------------------------
+    
+    if not phone_number_id or not display_phone_number:
+         raise HTTPException(status_code=400, detail="Falha crítica: IDs não identificados.")
+
+    clean_number = re.sub(r'\D', '', display_phone_number)
+    
+    # Validação de Duplicidade
+    existing_bot = await crud.get_bot_by_number(session, clean_number)
+    
+    if existing_bot:
+        if existing_bot.user_id != current_user.id:
+             raise HTTPException(status_code=400, detail="Este número já está em uso por outra conta.")
+        
+        # Atualiza
+        existing_bot.whatsapp_token = final_token
+        existing_bot.phone_number_id = phone_number_id
+        session.add(existing_bot)
+        await session.commit()
+    else:
+        # Cria/Vincula no bot rascunho
+        target_bot = await crud.get_bot_by_id(session, data.bot_id)
+        if not target_bot or target_bot.user_id != current_user.id:
+             raise HTTPException(status_code=403, detail="Bot alvo não encontrado ou acesso negado.")
+        
+        target_bot.whatsapp_number = clean_number
+        target_bot.phone_number_id = phone_number_id
+        target_bot.whatsapp_token = final_token
+        
+        # Atualiza nome se for padrão
+        if "Loja" in target_bot.restaurant_name or not target_bot.restaurant_name:
+             target_bot.restaurant_name = f"Loja {clean_number}"
+        
+        session.add(target_bot)
+        await session.commit()
+
+    return {"status": "connected", "number": clean_number}
 
 # 1. ROTA DE VERIFICAÇÃO (GET)
 @router.get("/bots/whatsapp/webhook")

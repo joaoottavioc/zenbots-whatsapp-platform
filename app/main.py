@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from arq import create_pool
 from arq.connections import RedisSettings
 from app.bot_routes import router as bot_router
+from app.payment_routes import router as payment_router
 
 # Importações dos seus módulos locais
 from app.database import create_db_and_tables
@@ -66,10 +67,11 @@ app.add_middleware(
 
 # --- Inclusão das Rotas ---
 app.include_router(whatsapp.router)
-app.include_router(auth.router)
+app.include_router(auth.router, prefix="/auth", tags=["Auth"])
 app.include_router(bot_routes.router)
 app.include_router(takeover_routes.router)
 app.include_router(bot_router, prefix="/api/v1")
+app.include_router(payment_router)
 
 # Rota de verificação de saúde (Health Check)
 @app.get("/")
