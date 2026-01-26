@@ -1247,12 +1247,38 @@ async def handle_payment_notification(order_id: int, request: Request):
             if db_status:
                 await crud.update_order_status_by_id(session, order_id, db_status, str(payment_id_str))
                 
-                # Notifica no WhatsApp se aprovado
+                # --- INÍCIO DA ALTERAÇÃO (Broadcast para o Painel) ---
+                if db_status == OrderStatus.PAID:
+                    try:
+                        # Precisamos garantir que temos os dados do contato para mostrar o nome no painel
+                        await session.refresh(order, attribute_names=["contact"])
+                        customer_name = order.contact.name if order.contact else "Cliente"
+
+                        print(f"📡 Enviando atualização ao vivo: Pagamento Confirmado Pedido #{order.id}")
+                        
+                        # Envia o sinal para o Front (page.tsx) atualizar de Amarelo para Verde
+                        await broadcast_order_update("payment_confirmed", {
+                            "id": order.id,
+                            "status": "PAID",
+                            "customer_name": customer_name,
+                            "bot_id": order.bot_id
+                        })
+                    except Exception as e:
+                        print(f"⚠️ Erro ao enviar broadcast de pagamento: {e}")
+                # --- FIM DA ALTERAÇÃO ---
+
+                # Notifica no WhatsApp se aprovado (Seu código original continua aqui)
                 if db_status == OrderStatus.PAID:
                     msg = f"Pagamento APROVADO! ✅\n\nSeu pedido #{order_id} foi confirmado e já vai para a cozinha."
-                    # Usa as credenciais do bot para enviar a mensagem
+                    
+                    # DICA EXTRA: Tente usar o telefone do contato se o email falhar
+                    phone_dest = payment_data["payer"]["email"].split('@')[0]
+                    # Se quiser usar o telefone real do banco de dados (mais seguro contra erro da Meta):
+                    # if order.contact and order.contact.phone_number:
+                    #     phone_dest = order.contact.phone_number
+
                     await send_whatsapp_message(
-                        to=payment_data["payer"]["email"].split('@')[0], # Pegamos o fone do email fake que geramos
+                        to=phone_dest,
                         message=msg,
                         token=order.bot.whatsapp_token,
                         phone_id=order.bot.phone_number_id
