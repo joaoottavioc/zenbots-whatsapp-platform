@@ -16,6 +16,7 @@ import redis.asyncio as redis
 import asyncio
 import json
 import ast
+from app import billing_routes
 
 load_dotenv()
 
@@ -72,6 +73,7 @@ app.include_router(bot_routes.router)
 app.include_router(takeover_routes.router)
 app.include_router(bot_router, prefix="/api/v1")
 app.include_router(payment_router)
+app.include_router(billing_routes.router)
 
 # Rota de verificação de saúde (Health Check)
 @app.get("/")

@@ -23,6 +23,7 @@ import httpx #SIMULADOR
 from arq import ArqRedis
 from sqlalchemy.exc import IntegrityError
 import mercadopago
+from app.models import Subscription
 
 # --- Imports Atualizados ---
 # Helper para gerenciar o estado de "ação pendente"
@@ -91,6 +92,58 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
             
             if not bot:
                 print("❌ Bot não encontrado para esta mensagem. Ignorando.")
+                return
+                
+            # ▼▼▼ O GATEKEEPER (BLOQUEIO DE ASSINATURA) COMEÇA AQUI ▼▼▼
+            
+            # 1. Busca a assinatura do dono do bot
+            # Precisamos carregar a assinatura. Se não estiver eager loaded, fazemos a query.
+            # (Assumindo que você criou a tabela Subscription como falamos antes)
+            result_sub = await session.execute(
+                select(Subscription).where(Subscription.user_id == bot.user_id)
+            )
+            sub = result_sub.scalars().first()
+
+            # 2. Definição da Tolerância (Grace Period)
+            # Damos 3 dias de colher de chá após o vencimento antes de cortar
+            grace_period_days = 3
+            is_blocked = False
+
+            # Cenário A: Nunca assinou (sub não existe)
+            if not sub:
+                # Se você quiser dar um trial grátis automático, a lógica mudaria aqui.
+                # Para bloquear quem nunca pagou:
+                is_blocked = True 
+            
+            # Cenário B: Assinatura existe, verificar validade
+            else:
+                now = datetime.utcnow()
+                expiration_limit = sub.current_period_end + timedelta(days=grace_period_days)
+                
+                # Se não está 'authorized' E já passou da data limite com tolerância
+                if sub.status != "authorized" and now > expiration_limit:
+                    is_blocked = True
+
+            # 3. Execução do Bloqueio
+            if is_blocked:
+                print(f"⛔ BLOQUEIO: Bot {bot.id} (User {bot.user_id}) está com assinatura vencida.")
+                
+                # Resposta "Diplomática" para o cliente da pizzaria não ficar no vácuo
+                maintenance_msg = (
+                "Olá! Devido à alta demanda, nosso robô de pedidos está temporariamente indisponível. 🤖💤\n\n"
+                "Mas não se preocupe! Um de nossos atendentes logo vai ver sua mensagem e tirar seu pedido por aqui mesmo.\n\n"
+                "Obrigado pela preferência!"
+                )
+                
+                # Envia o aviso
+                await send_whatsapp_message(
+                    to=contact_number, 
+                    message=maintenance_msg, 
+                    token=bot.whatsapp_token, 
+                    phone_id=bot.phone_number_id
+                )
+                
+                # IMPORTANTE: Interrompe o código aqui. Não chama OpenAI.
                 return
                 
             current_token = bot.whatsapp_token

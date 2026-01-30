@@ -1,13 +1,15 @@
 version: "2"
-authtoken: 2ydqaDyqDqrVOWOzdl7ScmQvkC3_5TVVenZXu5koMtkPzg7PY # Pegue em dashboard.ngrok.com
+authtoken: 2ydqaDyqDqrVOWOzdl7ScmQvkC3_5TVVenZXu5koMtkPzg7PY
 
 tunnels:
-  # Túnel para o Frontend (React/Next)
+  # Túnel do Frontend (Porta 3000)
   frontend:
     proto: http
     addr: 3000
+    domain: zenbotzfrontend.ngrok.app  # <--- Coloque aqui o domínio reservado para o FRONT
   
-  # Túnel para o Backend (FastAPI)
+  # Túnel do Backend (Porta 8000)
   backend:
     proto: http
     addr: 8000
+    domain: zenbotzbackend.ngrok.app   # <--- Coloque aqui o domínio reservado para o BACK

@@ -6,7 +6,11 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 from app.utils import normalize_phone
 from sqlalchemy import text, func, desc
-from app.models import Contact, ShoppingCart, Order, OrderStatus
+from app.models import (
+    Bot, User, ConversationHistory, Product, Order, OrderItem, ProcessedMessage,
+    Contact, ShoppingCart, CartItem, Subscription, DeliveryMethod, OrderStatus
+)
+from app.models import Subscription
 
 # 1. Imports unificados e limpos
 from app.models import (
@@ -355,30 +359,21 @@ async def get_bot_by_id(session: AsyncSession, bot_id: int) -> Optional[Bot]:
 
 async def list_user_bots(session: AsyncSession, user_id: int) -> List[Bot]:
     """
-    Lista os bots do usuário ordenados por ÚLTIMA ATIVIDADE.
-    O bot que teve o pedido mais recente (created_at) aparece no topo.
-    Em caso de empate (sem pedidos), mostra os bots criados recentemente primeiro.
+    Lista os bots do usuário ordenados por ID Crescente (Mais antigo primeiro).
     """
     query = (
         select(Bot)
-        .outerjoin(Order, Bot.id == Order.bot_id) # Junta com pedidos para poder checar datas
         .where(Bot.user_id == user_id)
         .options(
             selectinload(Bot.history), 
             selectinload(Bot.products)
         )
-        .group_by(Bot.id) # Agrupa para calcular o MAX(date)
-        .order_by(
-            # 1º Critério: Data do pedido mais recente (os NULLs ficam por último automaticamente)
-            desc(func.max(Order.created_at)), 
-            # 2º Critério: Desempate pelo ID do bot (bots mais novos primeiro)
-            desc(Bot.id)
-        )
+        # REMOVIDO: outerjoin(Order) e group_by (não precisamos mais calcular datas)
+        # ADICIONADO: Ordenação simples por ID ascendente
+        .order_by(Bot.id.asc()) 
     )
     
     result = await session.execute(query)
-    # .unique() é boa prática quando se usa joins que poderiam duplicar linhas, 
-    # embora o group_by já trate isso na maioria dos casos.
     return result.unique().scalars().all()
 
 async def update_bot(session: AsyncSession, bot_id: int, update_data: BotUpdate) -> Optional[Bot]:
@@ -598,19 +593,6 @@ async def bulk_create_products(session: AsyncSession, bot_id: int, products_data
     await session.commit()
         
     return len(processed_db_ids) + len(products_to_add)
-
-async def get_products_by_bot_id_old(session: AsyncSession, bot_id: int) -> List[Product]:
-    """Busca todos os produtos associados a um bot_id específico."""
-    # ANTES: query = select(Product).where(Product.bot_id == bot_id)
-    
-    # DEPOIS (Correção): Adicionamos order_by(Product.name.asc())
-    query = (
-        select(Product)
-        .where(Product.bot_id == bot_id)
-        .order_by(Product.name.asc())  # <--- AQUI ESTÁ A MÁGICA
-    )
-    result = await session.execute(query)
-    return result.scalars().all()
 
 async def get_products_by_bot_id(session: AsyncSession, bot_id: int) -> List[Product]:
     statement = select(Product).where(
@@ -921,3 +903,33 @@ async def update_item_notes(session: AsyncSession, cart_id: int, product_id: int
         return cart
     
     return None
+
+
+async def get_subscription_by_mp_id(session: AsyncSession, mp_id: str) -> Optional[Subscription]:
+    stmt = select(Subscription).where(Subscription.mp_subscription_id == mp_id)
+    result = await session.execute(stmt)
+    return result.scalars().first()
+
+# ▼▼▼ NOVA FUNÇÃO PARA BUSCAR ASSINATURA POR BOT ▼▼▼
+async def get_subscription_by_bot(session: AsyncSession, bot_id: int) -> Optional[Subscription]:
+    stmt = select(Subscription).where(Subscription.bot_id == bot_id)
+    result = await session.execute(stmt)
+    return result.scalars().first()
+
+# (Esta função fica deprecada, mas mantida por segurança)
+async def get_subscription_by_user(session: AsyncSession, user_id: int) -> Optional[Subscription]:
+    stmt = select(Subscription).where(Subscription.user_id == user_id)
+    result = await session.execute(stmt)
+    return result.scalars().first()
+
+# ▼▼▼ FUNÇÃO UPSERT ATUALIZADA ▼▼▼
+async def upsert_subscription(
+    session: AsyncSession, 
+    user_id: int, 
+    bot_id: int, # <--- Novo Campo
+    mp_id: str, 
+    status: str, 
+    plan_type: str = "pro" # <--- Novo Campo
+):
+    # Busca por BOT_ID (1-pra-1)
+    sub = await get_subscription_by_bot(session, bot_id)

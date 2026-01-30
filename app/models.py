@@ -28,6 +28,9 @@ class User(SQLModel, table=True):
     
     bots: List["Bot"] = Relationship(back_populates="user")
 
+    subscriptions: List["Subscription"] = Relationship(back_populates="user")
+    
+
 class Bot(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     restaurant_name: Optional[str] = Field(default=None)
@@ -60,6 +63,12 @@ class Bot(SQLModel, table=True):
 
     timezone: str = Field(default="America/Sao_Paulo")
     schedule: Dict[str, Any] = Field(default={}, sa_column=Column(SA_JSON))
+
+    # MUDANÇA 2: O Bot ganha a Assinatura (1-pra-1 com o Bot)
+    subscription: Optional["Subscription"] = Relationship(
+        back_populates="bot", 
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
 
     payment_config: Optional["PaymentConfig"] = Relationship(
         back_populates="bot", 
@@ -222,3 +231,44 @@ class PaymentConfig(SQLModel, table=True):
     # ▼▼▼ MUDANÇA AQUI: VINCULA AO BOT, NÃO AO USUÁRIO ▼▼▼
     bot_id: int = Field(foreign_key="bot.id", unique=True) 
     bot: "Bot" = Relationship(back_populates="payment_config")
+
+class Subscription(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    # MUDANÇA 3: Vínculo principal agora é com o BOT
+    bot_id: int = Field(foreign_key="bot.id", unique=True) # Cada bot só tem uma assinatura ativa
+    bot: "Bot" = Relationship(back_populates="subscription")
+    
+    # Vínculo com o dono da conta (Um usuário tem uma assinatura)
+    user_id: int = Field(foreign_key="user.id", unique=True)
+    user: "User" = Relationship(back_populates="subscriptions") # Precisamos adicionar isso no User
+    
+    # Dados do Mercado Pago
+    mp_subscription_id: str = Field(index=True, unique=True) # ID da assinatura no MP (ex: 2c9380...)
+    payer_email: Optional[str] = Field(default=None)
+    
+    # Status e Validade
+    status: str = Field(default="pending") # authorized, pending, cancelled, paused
+    
+    # Data vital: Até quando o sistema libera o acesso
+    current_period_end: datetime = Field(sa_column=Column(DateTime(timezone=True)))
+    
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    plan_type: str = Field(default="pro")
+
+class Plan(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    
+    # A "chave" para o frontend achar (ex: 'basic', 'pro', 'enterprise')
+    key: str = Field(unique=True, index=True) 
+    
+    title: str      # Ex: "ZenBotZ Pro"
+    description: str 
+    price: float    # Ex: 199.00
+    
+    # Configurações opcionais
+    currency: str = Field(default="BRL")
+    frequency: int = Field(default=1) # 1 mês
+    
+    created_at: datetime = Field(default_factory=datetime.utcnow)

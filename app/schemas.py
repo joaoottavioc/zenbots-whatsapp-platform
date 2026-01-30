@@ -168,3 +168,17 @@ class EmbeddedSignupPayload(BaseModel):
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
+
+class CheckoutResponse(BaseModel):
+    checkout_url: str
+
+class SubscriptionStatusResponse(BaseModel):
+    status: str
+    is_active: bool
+    days_remaining: int
+    next_payment: datetime
+    plan_type: str
+
+class CheckoutRequest(BaseModel):
+    plan_key: str = "pro"
+    bot_id: int

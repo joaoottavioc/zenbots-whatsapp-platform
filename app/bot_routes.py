@@ -423,13 +423,14 @@ async def update_order_status(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    """Atualiza o status do pedido (ex: de 'paid' para 'completed')."""
-    # 1. Segurança
+    """Atualiza o status do pedido e desativa automaticamente o atendimento humano se finalizado."""
+    
+    # 1. Segurança: Verifica se o bot pertence ao usuário
     db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
     if not db_bot or db_bot.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Acesso negado.")
     
-    # 2. Atualização
+    # 2. Atualização do Status do Pedido (Ex: de PAID para COMPLETED)
     updated_order = await crud.update_order_status_by_id(
         session, 
         order_id=order_id, 
@@ -439,6 +440,41 @@ async def update_order_status(
     if not updated_order:
         raise HTTPException(status_code=404, detail="Pedido não encontrado.")
 
+    # ==============================================================================
+    # 🤖 AUTO-SWITCH: Desativa o "Human Takeover" se o pedido for finalizado
+    # ==============================================================================
+    
+    # 1. Normaliza para MAIÚSCULO para evitar erro de 'completed' vs 'COMPLETED'
+    incoming_status = str(status_data.status).upper()
+    
+    # Debug para você ver no log o que está chegando
+    print(f"🔄 Tentando Auto-Switch. Status recebido: {incoming_status}")
+
+    if incoming_status in ["COMPLETED", "CANCELED"]: 
+        try:
+            # 2. Carrega o contato dono do pedido
+            await session.refresh(updated_order, attribute_names=["contact"])
+            
+            if updated_order.contact:
+                # 3. Busca o carrinho ATIVO desse contato
+                cart = await crud.get_or_create_cart(session, updated_order.contact.id)
+                
+                # 4. Se estiver em modo manual, desliga
+                if cart and cart.human_takeover_active:
+                    print(f"🤖 Auto-Switch: Pedido {incoming_status}. Reativando Bot para {updated_order.contact.name}")
+                    cart.human_takeover_active = False
+                    session.add(cart)
+                    await session.commit()
+                else:
+                    print(f"ℹ️ Auto-Switch: O usuário {updated_order.contact.name} já estava com o bot ativo (ou carrinho não achado).")
+            else:
+                print("⚠️ Auto-Switch: Pedido sem contato associado.")
+                    
+        except Exception as e:
+            print(f"⚠️ Erro no Auto-Switch do Takeover: {e}")
+    # ==============================================================================
+
+    # 3. Preparação da Resposta
     order_dict = updated_order.model_dump()
         
     order_dict["display_items"] = [
