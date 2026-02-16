@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from urllib.parse import urlparse
 from arq import ArqRedis
 import asyncio
+from app.menu_storage import upload_bytes_to_s3
 
 router = APIRouter()
 WEBHOOK_VERIFY_TOKEN = os.getenv("META_VERIFY_TOKEN")
@@ -297,79 +298,91 @@ async def upload_catalog_from_file_endpoint(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
-    """
-    Recebe Imagem ou PDF (multipágina), processa com Visão em PARALELO e cadastra produtos.
-    """
     
     # 1. Validação de Segurança
     db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
     if not db_bot or db_bot.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Acesso negado.")
 
-    valid_types = ["image/jpeg", "image/png", "image/webp", "application/pdf"]
-    if file.content_type not in valid_types:
-        raise HTTPException(status_code=400, detail="Apenas Imagens ou PDF são suportados.")
-
+    # 2. Leitura Segura do Arquivo (Evita erro de I/O closed)
     try:
-        print(f"📸 Lendo arquivo: {file.filename} ({file.content_type})")
+        print(f"📸 Recebido: {file.filename} | Tipo: {file.content_type}")
         contents = await file.read()
         
-        # Lista final que vai acumular produtos de todas as páginas/imagens
+        # 3. Upload para S3 (Assíncrono via Thread)
+        try:
+            s3_url = await asyncio.to_thread(
+                upload_bytes_to_s3, 
+                contents,           
+                file.filename,      
+                file.content_type,  
+                f"menus/bot_{bot_id}"
+            )
+            print(f"✅ Upload S3 OK: {s3_url}")
+            
+            # Salva URL no banco
+            db_bot.menu_url = s3_url
+            session.add(db_bot)
+            await session.commit()
+            
+        except Exception as e:
+            print(f"⚠️ Aviso: Upload S3 falhou, mas seguindo com extração. Erro: {e}")
+
+        # 4. Processamento IA (Lógica Blindada)
         all_extracted_products = []
 
-        # ▼▼▼ LÓGICA DE MULTIPÁGINAS PARALELIZADA (TURBO) ▼▼▼
-        if file.content_type == "application/pdf":
-            print("📄 PDF detectado. Iniciando processamento PARALELO...")
+        # DETECÇÃO HÍBRIDA: Confia no Content-Type E na extensão do arquivo
+        is_pdf = False
+        if file.content_type and "pdf" in file.content_type.lower():
+            is_pdf = True
+        elif file.filename and file.filename.lower().endswith(".pdf"):
+            is_pdf = True
+
+        if is_pdf:
+            print("📄 Modo PDF Ativado. Iniciando conversão de páginas...")
             try:
-                # Abre o PDF
+                # fitz abre direto dos bytes da memória
                 doc = fitz.open(stream=contents, filetype="pdf")
                 
-                # Limite de segurança: processar no máximo 5 páginas
+                # Processa até 5 páginas para não estourar tempo/custo
                 max_pages = 5
                 pages_to_process = min(len(doc), max_pages)
-                
-                tasks = [] # Lista de tarefas para o asyncio
+                tasks = [] 
 
                 for i in range(pages_to_process):
                     page = doc.load_page(i)
-                    
-                    # 150 DPI é um bom equilíbrio
-                    pix = page.get_pixmap(dpi=150) 
+                    # Aumentei DPI para 200 para melhorar leitura de letras pequenas
+                    pix = page.get_pixmap(dpi=200) 
                     page_bytes = pix.tobytes("png")
                     
-                    # ⚠️ O PULO DO GATO: Não usamos 'await' aqui.
-                    # Apenas chamamos a função (que retorna uma corrotina) e guardamos na lista.
-                    print(f"   -> Agendando página {i+1}...")
+                    print(f"   -> Enviando página {i+1} para IA...")
                     tasks.append(extract_products_from_image(page_bytes, "image/png"))
                 
-                print(f"🚀 Disparando {len(tasks)} requisições para a IA simultaneamente...")
-                
-                # Executa todas as tarefas ao mesmo tempo
-                # O tempo total será o da página mais lenta, não a soma de todas!
+                # Executa tudo em paralelo
                 results_list = await asyncio.gather(*tasks)
                 
-                # Consolida os resultados
                 for page_products in results_list:
                     if page_products:
                         all_extracted_products.extend(page_products)
                 
                 doc.close()
-                print(f"✅ Processamento paralelo concluído. Total de itens brutos: {len(all_extracted_products)}")
+                print(f"✅ PDF Processado. Itens encontrados: {len(all_extracted_products)}")
 
             except Exception as e:
-                print(f"Erro ao processar PDF: {e}")
-                raise HTTPException(status_code=400, detail="Erro ao ler o arquivo PDF.")
+                print(f"❌ Erro crítico ao ler PDF: {e}")
+                # Não damos raise aqui para tentar ver se achou algo antes de falhar
         
         else:
-            # Lógica para Imagem Única (JPG/PNG) continua igual
+            print("🖼️ Modo Imagem Única Ativado.")
             all_extracted_products = await extract_products_from_image(contents, file.content_type)
-        # ▲▲▲ FIM DA LÓGICA ▲▲▲
-
         
+        # 5. Validação Final
         if not all_extracted_products:
-            raise HTTPException(status_code=400, detail="A IA não conseguiu identificar produtos.")
+            msg = "O arquivo foi salvo, mas a IA não identificou nenhum produto. Verifique se a imagem está legível."
+            print(f"❌ Falha: {msg}")
+            raise HTTPException(status_code=400, detail=msg)
 
-        # 4. Enriquecimento e Salvamento (Batch único no final)
+        # 6. Salvar no Banco (Batch)
         enriched_products = []
         for product in all_extracted_products:
             name_words = product.get("name", "").lower()
@@ -381,20 +394,19 @@ async def upload_catalog_from_file_endpoint(
             product["is_available"] = True 
             enriched_products.append(product)
 
-        # Chama o Bulk Create (versão Blindada que você ajustou no passo anterior)
         count = await crud.bulk_create_products(
             session=session,
             bot_id=bot_id,
             products_data=enriched_products
         )
             
-        return {"message": f"Sucesso! {count} produtos processados do arquivo."}
+        return {"message": f"Sucesso! {count} produtos cadastrados a partir do cardápio."}
 
     except HTTPException as he:
         raise he
     except Exception as e:
-        print(f"Erro no upload: {e}")
-        raise HTTPException(status_code=500, detail="Erro interno ao processar arquivo.")
+        print(f"❌ Erro Geral na Rota: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
 
 # --- Rotas de Pedidos (KDS) ---
 
@@ -424,7 +436,6 @@ async def update_order_status(
     current_user: User = Depends(get_current_user)
 ):
     """Atualiza o status do pedido e desativa automaticamente o atendimento humano se finalizado."""
-    
     # 1. Segurança: Verifica se o bot pertence ao usuário
     db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
     if not db_bot or db_bot.user_id != current_user.id:
@@ -445,7 +456,7 @@ async def update_order_status(
     # ==============================================================================
     
     # 1. Normaliza para MAIÚSCULO para evitar erro de 'completed' vs 'COMPLETED'
-    incoming_status = str(status_data.status).upper()
+    incoming_status = str(status_data.status).lower()
     
     # Debug para você ver no log o que está chegando
     print(f"🔄 Tentando Auto-Switch. Status recebido: {incoming_status}")
@@ -485,10 +496,32 @@ async def update_order_status(
     return order_dict
 
 @router.get("/bots/{bot_id}/analytics/best-sellers")
-async def get_best_sellers(bot_id: int, session: AsyncSession = Depends(get_session)):
+async def get_best_sellers(
+    bot_id: int, 
+    session: AsyncSession = Depends(get_session),
+    # Adicione current_user para garantir segurança
+    current_user: User = Depends(get_current_user) 
+):
+    # 1. Validação de Propriedade (Segurança Básica)
+    db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
+    if not db_bot or db_bot.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Acesso negado.")
+
+    # 2. Validação de Plano (Feature Gating)
+    # Buscamos a assinatura vinculada ao bot
+    sub = await crud.get_subscription_by_bot(session, bot_id)
+    
+    # Regra: Se não tiver assinatura, ou se o status não for ativo/authorized, bloqueia.
+    # Você pode refinar isso para verificar "plan_type" também (ex: if sub.plan_type == 'basic')
+    is_pro = sub and sub.status == "authorized" and sub.plan_type in ["pro", "enterprise"]
+    
+    # Se você quiser retornar um erro 403 para o front tratar:
+    if not is_pro:
+        raise HTTPException(status_code=403, detail="SUBSCRIPTION_REQUIRED")
+
+    # 3. Busca os dados (Se passou no gate)
     results = await crud.get_top_selling_products(session, bot_id)
     
-    # Formata para JSON amigável
     return [
         {
             "name": row[0],

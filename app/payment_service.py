@@ -49,7 +49,7 @@ async def create_pix_payment(
         "external_reference": str(order_id),
         
         # O Webhook precisa ser notificado na sua URL global
-        "notification_url": f"{base_url}/webhooks/payment-confirm/{order_id}"
+        "notification_url": f"{base_url}/payments/webhooks/payment-confirm/{order_id}"
     }
 
     try:
@@ -61,16 +61,19 @@ async def create_pix_payment(
 
         result = sdk.payment().create(payment_data, request_options)
 
-        if result["status"] == 201:
-            pix_data = result["response"]["point_of_interaction"]["transaction_data"]
-            return {
-                "qr_code_base64": pix_data["qr_code_base64"],
-                "qr_code_url": pix_data["ticket_url"],
-                "pix_copy_paste": pix_data["qr_code"]
-            }
-        else:
-            print(f"❌ Erro Mercado Pago (Status {result.get('status')}):", result.get("response"))
-            return None
+        if result["status"] in [200, 201]:
+            # Captura os dados do PIX tanto se for novo (201) quanto se já existir (200)
+            pix_data = result["response"].get("point_of_interaction", {}).get("transaction_data")
+    
+            if pix_data:
+                return {
+                    "qr_code_base64": pix_data.get("qr_code_base64"),
+                    "qr_code_url": pix_data.get("ticket_url"),
+                    "pix_copy_paste": pix_data.get("qr_code")
+                }
+            else:
+                print(f"❌ Erro Mercado Pago (Status {result.get('status')}):", result.get("response"))
+                return None
 
     except Exception as e:
         print(f"❌ Erro CRÍTICO ao chamar API do Mercado Pago: {e}")

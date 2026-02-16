@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 import enum
 from sqlmodel import JSON as SA_JSON
 from sqlalchemy import Column, TIMESTAMP, text, JSON, DateTime
-import enum
 
 # ▼▼▼ 1. ADICIONE ESTE ENUM NO TOPO DO ARQUIVO ▼▼▼
 class DeliveryMethod(str, enum.Enum):
@@ -35,6 +34,8 @@ class Bot(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     restaurant_name: Optional[str] = Field(default=None)
     whatsapp_number: str = Field(unique=True, index=True)
+
+    menu_url: Optional[str] = Field(default=None, description="URL pública do cardápio (PDF/Imagem) no S3")
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     # ▼▼▼ CREDENCIAIS DA META (NOVOS CAMPOS) ▼▼▼
@@ -63,6 +64,12 @@ class Bot(SQLModel, table=True):
 
     timezone: str = Field(default="America/Sao_Paulo")
     schedule: Dict[str, Any] = Field(default={}, sa_column=Column(SA_JSON))
+    
+    max_delivery_radius: float = Field(default=10.0)
+    cep: Optional[str] = None
+    address: Optional[str] = None      # Ex: Av Paulista, 1000 - Bela Vista
+    latitude: Optional[float] = None   # Ex: -23.555
+    longitude: Optional[float] = None  # Ex: -46.666
 
     # MUDANÇA 2: O Bot ganha a Assinatura (1-pra-1 com o Bot)
     subscription: Optional["Subscription"] = Relationship(
@@ -129,6 +136,7 @@ class OrderStatus(str, enum.Enum):
     PREPARING = "preparing"
     READY = "ready"
     COMPLETED = "completed"
+    CANCELED = "canceled"
 
 class ShoppingCart(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -197,9 +205,11 @@ class Order(SQLModel, table=True):
 
     # ▼▼▼ NOVOS CAMPOS ▼▼▼
     contact_id: Optional[int] = Field(default=None, foreign_key="contact.id")
+    payment_method: Optional[str] = Field(default=None)
     contact: Optional["Contact"] = Relationship()
 
     items: List["OrderItem"] = Relationship(back_populates="order", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
+    delivery_method: DeliveryMethod = Field(default=DeliveryMethod.PICKUP)
 
 class OrderItem(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

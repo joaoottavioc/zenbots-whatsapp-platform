@@ -7,6 +7,7 @@ from arq import create_pool
 from arq.connections import RedisSettings
 from app.bot_routes import router as bot_router
 from app.payment_routes import router as payment_router
+from app import utils
 
 # Importações dos seus módulos locais
 from app.database import create_db_and_tables
@@ -17,6 +18,7 @@ import asyncio
 import json
 import ast
 from app import billing_routes
+from app import menu_router
 
 load_dotenv()
 
@@ -74,6 +76,8 @@ app.include_router(takeover_routes.router)
 app.include_router(bot_router, prefix="/api/v1")
 app.include_router(payment_router)
 app.include_router(billing_routes.router)
+app.include_router(menu_router.router)
+app.include_router(utils.router)
 
 # Rota de verificação de saúde (Health Check)
 @app.get("/")

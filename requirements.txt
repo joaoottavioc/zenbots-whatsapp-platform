@@ -30,3 +30,5 @@ pytz
 redis
 arq
 fastapi-mail==1.4.1
+boto3
+alembic

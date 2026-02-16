@@ -58,6 +58,13 @@ class BotCreate(BaseModel):
     whatsapp_token: str
     phone_number_id: str
 
+    # NOVOS CAMPOS (Opcionais na criação, o usuário configura depois)
+    max_delivery_radius: Optional[float] = 10.0
+    cep: Optional[str] = None
+    address: Optional[str] = None
+    latitude: Optional[float] = None  # Essencial para o cálculo
+    longitude: Optional[float] = None # Essencial para o cálculo
+
 class BotUpdate(BaseModel):
     """Schema para atualizar os dados de um bot."""
     restaurant_name: Optional[str] = None
@@ -72,6 +79,13 @@ class BotUpdate(BaseModel):
     whatsapp_token: Optional[str] = None
     phone_number_id: Optional[str] = None
 
+    # NOVOS CAMPOS PARA ATUALIZAÇÃO VIA CONFIGURAÇÕES
+    max_delivery_radius: Optional[float] = None
+    cep: Optional[str] = None
+    address: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
 class BotResponse(BaseModel):
     """
     Schema completo para retornar os dados de um bot, incluindo
@@ -82,10 +96,18 @@ class BotResponse(BaseModel):
     restaurant_name: Optional[str] = None
     whatsapp_number: str
     created_at: datetime
+    menu_url: Optional[str] = None
     pix_key: Optional[str] = None
 
     delivery_fee: Optional[float] = 0.0
     min_order_value: Optional[float] = 0.0
+
+    # NOVOS CAMPOS NO RETORNO
+    max_delivery_radius: float = 10.0
+    cep: Optional[str] = None
+    address: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     
     # O bot agora retorna a lista de produtos e de histórico associados a ele
     products: List[ProductResponse] = []
@@ -127,14 +149,17 @@ class OrderItemResponse(BaseModel):
     notes: Optional[str] = None
     product_name: str  
     model_config = ConfigDict(from_attributes=True)
+    price_at_time_of_order: Optional[float] = None
 
 class OrderResponse(BaseModel):
     id: int
     total_amount: float
+    delivery_fee: float = 0.0
     status: str 
     customer_address: Optional[str] = None
     created_at: datetime
     display_items: List[OrderItemResponse] = []
+    payment_method: Optional[str] = None
 
     customer_name: Optional[str] = None
 
@@ -182,3 +207,10 @@ class SubscriptionStatusResponse(BaseModel):
 class CheckoutRequest(BaseModel):
     plan_key: str = "pro"
     bot_id: int
+
+class CepResponse(BaseModel):
+    address: str
+    city: str
+    state: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None

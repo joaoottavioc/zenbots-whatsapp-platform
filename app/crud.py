@@ -3,7 +3,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select, delete, update
 from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.utils import normalize_phone
 from sqlalchemy import text, func, desc
 from app.models import (
@@ -661,8 +661,10 @@ async def create_order(
     bot_id: int,
     items: List[Dict],
     total_amount: float,
+    delivery_method: DeliveryMethod,
     customer_address: str | None = None,
-    contact_id: int | None = None # <-- 1. Novo parâmetro
+    contact_id: int | None = None, # <-- 1. Novo parâmetro
+    payment_method: str | None = None
 ) -> Order | None:
     try:
         order_items_to_create: list[OrderItem] = []
@@ -680,8 +682,10 @@ async def create_order(
         new_order = Order(
             bot_id=bot_id,
             total_amount=round(total_amount, 2),
+            delivery_method=delivery_method,
             customer_address=customer_address,
             contact_id=contact_id, # <-- 2. Salva o contato
+            payment_method=payment_method,
             items=order_items_to_create,
         )
 
@@ -787,7 +791,11 @@ async def update_order_status_by_id(session: AsyncSession, order_id: int, new_st
     )
     result = await session.execute(query)
     order = result.scalars().first()
+
+    if isinstance(new_status, str):
+        new_status = new_status.lower()
     
+
     if not order:
         print(f"Pedido {order_id} não encontrado para atualização de status.")
         return None
@@ -827,13 +835,18 @@ async def list_orders_by_bot(session: AsyncSession, bot_id: int, status_filter: 
         
     result = await session.execute(query)
     orders = result.scalars().all()
+    print(f"👀 DEBUG LISTAGEM: Encontrados {len(orders)} pedidos. Processando...")
+    # ---------------------------
     
     formatted_orders = []
     for order in orders:
         order_dict = order.model_dump()
+
+        order_dict["payment_method"] = order.payment_method
+        order_dict["delivery_fee"] = order.bot.delivery_fee if order.delivery_method == DeliveryMethod.DELIVERY else 0.0
         
         order_dict["display_items"] = [
-            {"quantity": item.quantity, "product_name": item.product.name, "notes": item.notes} 
+            {"quantity": item.quantity, "product_name": item.product.name, "notes": item.notes, "price_at_time_of_order": item.price_at_time_of_order} 
             for item in order.items
         ]
         
@@ -933,3 +946,27 @@ async def upsert_subscription(
 ):
     # Busca por BOT_ID (1-pra-1)
     sub = await get_subscription_by_bot(session, bot_id)
+
+async def cancel_expired_pix_orders(session: AsyncSession):
+    """Cancela pedidos PIX pendentes há mais de 15 minutos."""
+    limit_time = datetime.utcnow() - timedelta(minutes=15)
+    
+    query = select(Order).where(
+        Order.status == "PENDING",
+        Order.payment_method == "pix",
+        Order.created_at < limit_time
+    )
+    
+    result = await session.execute(query)
+    expired_orders = result.scalars().all()
+    
+    count = 0
+    for order in expired_orders:
+        order.status = OrderStatus.CANCELED
+        session.add(order)
+        count += 1
+        print(f"💀 Pedido #{order.id} expirou (PIX > 15min). Cancelado automaticamente.")
+        
+    if count > 0:
+        await session.commit()
+    return count
