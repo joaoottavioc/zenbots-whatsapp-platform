@@ -1,15 +1,16 @@
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, validator
 from datetime import datetime
 from typing import List, Optional, Any, Dict
+import pytz
 
 # --- Schemas de Produto ---
 # Usados para criar e retornar itens do cardápio
 
 class ProductBase(BaseModel):
-    name: str
-    description: Optional[str] = None
-    price: float
-    category: str
+    name: str = Field(max_length=150)
+    description: Optional[str] = Field(default=None, max_length=500)
+    price: float = Field(gt=0)
+    category: str = Field(max_length=100)
 
 class ProductCreate(ProductBase):
     category: str
@@ -24,12 +25,12 @@ class ProductResponse(ProductBase):
 
 class ProductUpdate(BaseModel):
     """
-    Schema para atualização. Todos os campos devem ser opcionais 
+    Schema para atualização. Todos os campos devem ser opcionais
     para permitir atualizações parciais (ex: mudar só o preço ou só a disponibilidade).
     """
     name: Optional[str] = None
     description: Optional[str] = None
-    price: Optional[float] = None
+    price: Optional[float] = Field(default=None, gt=0)
     category: Optional[str] = None  # <--- MUDANÇA CRÍTICA: De 'str' para 'Optional[str] = None'
     is_available: Optional[bool] = None
 
@@ -50,41 +51,54 @@ class ConversationHistoryResponse(BaseModel):
 
 class BotCreate(BaseModel):
     """Schema para criar um bot 'casca', apenas com os dados essenciais."""
-    restaurant_name: str
-    whatsapp_number: str
-    pix_key: Optional[str] = None
-    delivery_fee: Optional[float] = 0.0
-    min_order_value: Optional[float] = 0.0
+    restaurant_name: str = Field(max_length=150)
+    whatsapp_number: str = Field(max_length=20)
+    pix_key: Optional[str] = Field(default=None, max_length=100)
+    delivery_fee: Optional[float] = Field(default=0.0, ge=0)
+    min_order_value: Optional[float] = Field(default=0.0, ge=0)
     whatsapp_token: str
-    phone_number_id: str
+    phone_number_id: str = Field(max_length=30)
+    timezone: str = Field(default="America/Sao_Paulo")
 
     # NOVOS CAMPOS (Opcionais na criação, o usuário configura depois)
     max_delivery_radius: Optional[float] = 10.0
-    cep: Optional[str] = None
-    address: Optional[str] = None
+    cep: Optional[str] = Field(default=None, max_length=10)
+    address: Optional[str] = Field(default=None, max_length=300)
     latitude: Optional[float] = None  # Essencial para o cálculo
     longitude: Optional[float] = None # Essencial para o cálculo
 
+    @validator('timezone')
+    def validate_timezone(cls, v):
+        if v not in pytz.all_timezones:
+            raise ValueError(f'Timezone inválido: {v}')
+        return v
+
 class BotUpdate(BaseModel):
     """Schema para atualizar os dados de um bot."""
-    restaurant_name: Optional[str] = None
-    whatsapp_number: Optional[str] = None
-    pix_key: Optional[str] = None
-    delivery_fee: Optional[float] = None
-    min_order_value: Optional[float] = 0.0
+    restaurant_name: Optional[str] = Field(default=None, max_length=150)
+    whatsapp_number: Optional[str] = Field(default=None, max_length=20)
+    pix_key: Optional[str] = Field(default=None, max_length=100)
+    delivery_fee: Optional[float] = Field(default=None, ge=0)
+    min_order_value: Optional[float] = Field(default=None, ge=0)
     is_open: Optional[bool] = None
-    closing_message: Optional[str] = None
+    closing_message: Optional[str] = Field(default=None, max_length=500)
     timezone: Optional[str] = None
     schedule: Optional[Dict[str, Any]] = None
     whatsapp_token: Optional[str] = None
-    phone_number_id: Optional[str] = None
+    phone_number_id: Optional[str] = Field(default=None, max_length=30)
 
     # NOVOS CAMPOS PARA ATUALIZAÇÃO VIA CONFIGURAÇÕES
     max_delivery_radius: Optional[float] = None
-    cep: Optional[str] = None
-    address: Optional[str] = None
+    cep: Optional[str] = Field(default=None, max_length=10)
+    address: Optional[str] = Field(default=None, max_length=300)
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+
+    @validator('timezone')
+    def validate_timezone(cls, v):
+        if v is not None and v not in pytz.all_timezones:
+            raise ValueError(f'Timezone inválido: {v}')
+        return v
 
 class BotResponse(BaseModel):
     """
@@ -112,16 +126,14 @@ class BotResponse(BaseModel):
     # O bot agora retorna a lista de produtos e de histórico associados a ele
     products: List[ProductResponse] = []
     history: List[ConversationHistoryResponse] = []
-    
-    model_config = ConfigDict(from_attributes=True)
 
     is_open: bool
     closing_message: str
-
     schedule: Dict[str, Any]
-    model_config = ConfigDict(from_attributes=True)
     whatsapp_token: str
     phone_number_id: str
+
+    model_config = ConfigDict(from_attributes=True)
 
 # --- Schemas de Autenticação e Usuário ---
 
@@ -179,14 +191,14 @@ class WhatsAppAuthRequest(BaseModel):
 class EmbeddedSignupPayload(BaseModel):
     bot_id: int
     redirect_uri: str
-    
+
     # IDs são opcionais pois no fluxo de Fallback (Reconexão) o frontend não os tem.
     # O Backend descobrirá esses valores se eles vierem nulos.
     business_id: Optional[str] = None
     waba_id: Optional[str] = None
     phone_number_id: Optional[str] = None
     display_phone_number: Optional[str] = None
-    
+
     # Auth: Aceitamos Code (Fluxo Ideal) ou Token (Fluxo Fallback)
     code: Optional[str] = None
     access_token: Optional[str] = None

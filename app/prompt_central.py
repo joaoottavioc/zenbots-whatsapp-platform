@@ -52,9 +52,8 @@ Você é um assistente de pedidos para o restaurante '{restaurant_name}'.
 Sua tarefa: interpretar a mensagem do cliente e escolher UMA ferramenta do catálogo (`tools_schema`) preenchendo todos os parâmetros.
 
 Prioridade:
-1. Se o cliente indicar que terminou o pedido → use `request_customer_address`.
-2. Se o cliente pedir para limpar tudo → use `remove_items_from_cart` com todos os IDs do carrinho.
-3. Se mencionar produtos → associe aos IDs corretos do cardápio ou das sugestões recentes.
+1. Se o cliente pedir para limpar tudo → use `remove_items_from_cart` com todos os IDs do carrinho.
+2. Se mencionar produtos → associe aos IDs corretos do cardápio ou das sugestões recentes.
    - Se for alteração de quantidade de APENAS UM item já no carrinho → use `modify_item_quantity`.
    - Se for alteração de quantidade de MAIS DE UM item já no carrinho → use `bulk_modify_quantities` com `updates` contendo todos os pares product_id/new_quantity.
    - Se os itens AINDA NÃO estiverem no carrinho → use SEMPRE `add_items_to_cart`.
@@ -73,9 +72,8 @@ Conversão de quantidades:
 - Se a quantidade vier por extenso (ex.: “mil duzentos e vinte e quatro”), converta para inteiro no `quantity` (ex.: 1224).
 - Não reduza quantidades sem pedido explícito do cliente.
 
-4. Se for uma dúvida genérica (ex: “tem algo com chocolate?”) → use `answer_with_found_products` com nomes reais dos produtos encontrados.
-5. Se o estado da conversa for AWAITING_ADDRESS → use `process_order_with_address` com o endereço completo.
-6. Você **sempre** deve responder usando UMA chamada de ferramenta do catálogo (`tools_schema`), sem nunca responder em texto puro.
+3. Se for uma dúvida genérica (ex: “tem algo com chocolate?”) → use `answer_with_found_products` com nomes reais dos produtos encontrados.
+4. Você **sempre** deve responder usando UMA chamada de ferramenta do catálogo (`tools_schema`), sem nunca responder em texto puro.
 7. Se o pedido for uma SUGESTÃO GENÉRICA (ex: "tem algo com chocolate?", "quais as sobremesas?", "me ve um prato com pato", "o que tem com bacon aí?") → use a ferramenta `search_catalog_for_suggestions` e extraia apenas o conceito principal da comida para o parâmetro `search_concept`.
 Nunca responda coisas vagas como “posso sugerir algumas opções?” — você já deve sugerir os nomes e produtos diretamente.
 "Regra: NUNCA invente IDs nem produtos. Só use IDs que apareçam em **Cardápio relevante (RAG)** ou em **Sugestões recentes**. Se não houver item correspondente, use `answer_conversationally` pedindo esclarecimento."
@@ -284,30 +282,6 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
         "content": "Sugestões enviadas ao usuário.",
     }
 
-    # ADDRESS
-    ex6_user = {"role": "user", "content": "Avenida Paulista 783"}
-    ex6_assistant = {
-        "role": "assistant",
-        "content": None,
-        "tool_calls": [
-            {
-                "id": "call-ex6",
-                "type": "function",
-                "function": {
-                    "name": "process_order_with_address",
-                    "arguments": json.dumps(
-                        {"customer_address": "Avenida Paulista 783"}
-                    ),
-                },
-            }
-        ],
-    }
-    ex6_tool = {
-        "role": "tool",
-        "tool_call_id": "call-ex6",
-        "content": "Endereço registrado.",
-    }
-
     ex7_user = {"role": "user", "content": "quero cinco do primeiro e três do segundo"}
     ex7_assistant = {
         "role": "assistant",
@@ -494,56 +468,29 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
 
 
     # --- MONTAGEM FINAL ---
+    # Examples go right after system, then history (closer to LLM output boundary),
+    # then the current user query last.
+    examples = [
+        ex1_user, ex1_assistant, ex1_tool,
+        ex2_user, ex2_assistant, ex2_tool,
+        ex3_user, ex3_assistant, ex3_tool,
+        ex4_user, ex4_assistant, ex4_tool,
+        ex5_user, ex5_assistant, ex5_tool,
+        ex5b_user, ex5b_assistant, ex5b_tool,
+        ex7_user, ex7_assistant, ex7_tool,
+        ex_ordinals_user, ex_ordinals_assistant, ex_ordinals_tool,
+        ex_ordinais_extenso_user, ex_ordinais_extenso_assistant, ex_ordinais_extenso_tool,
+        ex_suggestion_user, ex_suggestion_assistant, ex_suggestion_tool,
+        ex_notes_simple_user, ex_notes_simple_assistant, ex_notes_simple_tool,
+        ex_notes_complex_user, ex_notes_complex_assistant, ex_notes_complex_tool,
+        ex_notes_update_user, ex_notes_update_assistant, ex_notes_update_tool,
+    ]
+
     prompt = (
         [system_message]
+        + examples
         + history[-5:]
-        + [
-            ex1_user,
-            ex1_assistant,
-            ex1_tool,
-            ex2_user,
-            ex2_assistant,
-            ex2_tool,
-            ex3_user,
-            ex3_assistant,
-            ex3_tool,
-            ex4_user,
-            ex4_assistant,
-            ex4_tool,
-            ex5_user,
-            ex5_assistant,
-            ex5_tool,
-            ex5b_user,
-            ex5b_assistant,
-            ex5b_tool,
-            ex6_user,
-            ex6_assistant,
-            ex6_tool,
-            ex7_user,
-            ex7_assistant,
-            ex7_tool,
-            ex_ordinals_user,
-            ex_ordinals_assistant,
-            ex_ordinals_tool,
-            ex_ordinais_extenso_user,
-            ex_ordinais_extenso_assistant,
-            ex_ordinais_extenso_tool,
-            ex_suggestion_user,
-            ex_suggestion_assistant,
-            ex_suggestion_tool,
-            # Inserindo os novos exemplos de observações aqui
-            ex_notes_simple_user,
-            ex_notes_simple_assistant,
-            ex_notes_simple_tool,
-            ex_notes_complex_user,
-            ex_notes_complex_assistant,
-            ex_notes_complex_tool,
-            ex_notes_update_user,
-            ex_notes_update_assistant,
-            ex_notes_update_tool,
-            
-            {"role": "user", "content": user_query},
-        ]
+        + [{"role": "user", "content": user_query}]
     )
 
     return prompt

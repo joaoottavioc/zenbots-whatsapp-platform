@@ -1,25 +1,100 @@
 # app/payment_service.py
+import logging
 import os
 import mercadopago
+import httpx
 from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
+from app.time import utcnow
+from app.encryption import encrypt_value, decrypt_value
 
-# NÃO inicializamos mais o SDK globalmente aqui fora.
-# sdk = mercadopago.SDK(...) <- REMOVER ISSO
+logger = logging.getLogger(__name__)
+
+MP_CLIENT_ID = os.getenv("MP_CLIENT_ID")
+MP_CLIENT_SECRET = os.getenv("MP_CLIENT_SECRET")
+
+
+async def refresh_mp_token(config, session) -> Optional[str]:
+    """
+    Refresh an expired Mercado Pago access token using the stored refresh_token.
+    Updates config in-place and commits. Returns the new plaintext access_token or None.
+    """
+    if not config.refresh_token:
+        logger.warning("No refresh_token stored for PaymentConfig %s", config.id)
+        return None
+
+    plaintext_refresh = decrypt_value(config.refresh_token)
+    if not plaintext_refresh:
+        logger.warning("Empty refresh_token after decryption for PaymentConfig %s", config.id)
+        return None
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                "https://api.mercadopago.com/oauth/token",
+                data={
+                    "client_secret": MP_CLIENT_SECRET,
+                    "client_id": MP_CLIENT_ID,
+                    "grant_type": "refresh_token",
+                    "refresh_token": plaintext_refresh,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+
+        if resp.status_code != 200:
+            logger.error("MP token refresh failed, status_code=%s", resp.status_code)
+            return None
+
+        data = resp.json()
+        new_access = data.get("access_token")
+        new_refresh = data.get("refresh_token")
+        expires_in = data.get("expires_in")
+
+        if not new_access:
+            logger.error("MP token refresh response missing access_token")
+            return None
+
+        config.access_token = encrypt_value(new_access)
+        if new_refresh:
+            config.refresh_token = encrypt_value(new_refresh)
+        if expires_in:
+            config.token_expires_at = utcnow() + timedelta(seconds=expires_in)
+        config.updated_at = utcnow()
+
+        session.add(config)
+        await session.commit()
+
+        logger.info("MP token refreshed for PaymentConfig %s", config.id)
+        return new_access
+
+    except Exception as e:
+        logger.error("MP token refresh error: %s", e)
+        return None
+
+
+async def get_valid_access_token(config, session) -> Optional[str]:
+    """
+    Return a valid plaintext access token, refreshing if expired.
+    """
+    if config.token_expires_at and utcnow() >= config.token_expires_at:
+        logger.info("MP token expired for PaymentConfig %s, refreshing...", config.id)
+        return await refresh_mp_token(config, session)
+    return decrypt_value(config.access_token) if config.access_token else None
 
 async def create_pix_payment(
     order_id: int,
     total_amount: float,
     bot_name: str,
     contact_phone: str,
-    access_token_cliente: str # <--- OBRIGATÓRIO: O Token do dono do bot
+    access_token_cliente: str,  # <--- OBRIGATÓRIO: O Token do dono do bot
+    webhook_token: str = "",    # Token for webhook URL authentication
 ) -> Optional[Dict[str, Any]]:
     """
     Cria uma cobrança PIX no Mercado Pago usando o TOKEN DO CLIENTE ESPECÍFICO.
     """
     
     if not access_token_cliente:
-        print(f"❌ Erro: Tentativa de criar pagamento sem Access Token para o pedido #{order_id}")
+        logger.error("Attempted to create payment without access token for order_id=%s", order_id)
         return None
 
     # ▼▼▼ INICIALIZAÇÃO DINÂMICA (A MÁGICA ACONTECE AQUI) ▼▼▼
@@ -27,16 +102,16 @@ async def create_pix_payment(
     try:
         sdk = mercadopago.SDK(access_token_cliente)
     except Exception as e:
-        print(f"❌ Erro ao inicializar SDK do MP com token fornecido: {e}")
+        logger.error("Failed to initialize MP SDK for order_id=%s: %s", order_id, e)
         return None
 
-    expiration_time = datetime.utcnow() + timedelta(minutes=15)
+    expiration_time = utcnow() + timedelta(minutes=15)
     expiration_date_iso = expiration_time.isoformat("T", "milliseconds") + "Z"
 
     # URL base para Webhook (Produção ou Ngrok)
     base_url = os.getenv("BASE_URL")
     if not base_url:
-        print("⚠️ AVISO: BASE_URL não configurada no .env. Webhook pode falhar.")
+        logger.warning("BASE_URL not configured, payment webhook may fail")
 
     payment_data = {
         "transaction_amount": round(total_amount, 2),
@@ -49,7 +124,7 @@ async def create_pix_payment(
         "external_reference": str(order_id),
         
         # O Webhook precisa ser notificado na sua URL global
-        "notification_url": f"{base_url}/payments/webhooks/payment-confirm/{order_id}"
+        "notification_url": f"{base_url}/payments/webhooks/payment-confirm/{order_id}?token={webhook_token}"
     }
 
     try:
@@ -72,9 +147,9 @@ async def create_pix_payment(
                     "pix_copy_paste": pix_data.get("qr_code")
                 }
             else:
-                print(f"❌ Erro Mercado Pago (Status {result.get('status')}):", result.get("response"))
+                logger.error("MP payment creation failed for order_id=%s, status=%s", order_id, result.get("status"))
                 return None
 
     except Exception as e:
-        print(f"❌ Erro CRÍTICO ao chamar API do Mercado Pago: {e}")
+        logger.exception("Critical error calling MP API for order_id=%s", order_id)
         return None

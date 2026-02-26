@@ -1,7 +1,10 @@
 # app/billing_routes.py
 
+import logging
 import os
 import mercadopago
+
+logger = logging.getLogger(__name__)
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select
@@ -11,6 +14,7 @@ from app.database import get_session
 from app.auth import get_current_user
 from app.models import User, Plan, Subscription, Bot
 from app import crud, schemas
+from app.webhook_security import require_mp_signature
 
 
 router = APIRouter(prefix="/billing", tags=["SaaS Billing"])
@@ -60,22 +64,27 @@ async def create_checkout(
         
         if result["status"] != 201:
             error_detail = result.get("response", {}).get("message", "Erro desconhecido")
-            print(f"❌ Erro MP: {error_detail}")
+            logger.error("Mercado Pago preapproval creation failed: %s", error_detail)
             raise HTTPException(status_code=400, detail=f"Erro MP: {error_detail}")
             
         checkout_link = result["response"]["init_point"]
         return {"checkout_url": checkout_link}
 
     except Exception as e:
-        print(f"🔥 Erro Python: {e}")
+        logger.exception("Checkout creation failed")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/webhook")
 async def billing_webhook(request: Request, session: AsyncSession = Depends(get_session)):
     try:
         data = await request.json()
+
+        # --- Signature verification (P0-1) ---
+        data_id = str(data.get("data", {}).get("id", ""))
+        await require_mp_signature(request, data_id)
+
         topic = data.get("topic") or data.get("type")
-        
+
         if topic == "subscription_preapproval":
             preapproval_id = data.get("data", {}).get("id")
             
@@ -100,11 +109,11 @@ async def billing_webhook(request: Request, session: AsyncSession = Depends(get_
                         status=status,
                         plan_type="pro" if status == "authorized" else "free"
                     )
-                    print(f"✅ Assinatura atualizada para Bot {bot_id}: {status}")
+                    logger.info("Subscription updated for bot_id=%s, status=%s", bot_id, status)
 
         return {"status": "ok"}
     except Exception as e:
-        print(f"❌ Erro Webhook: {e}")
+        logger.exception("Billing webhook processing failed")
         return {"status": "error"}
 
 @router.get("/status", response_model=schemas.SubscriptionStatusResponse)

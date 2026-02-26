@@ -1,3 +1,4 @@
+import secrets
 from sqlmodel import SQLModel, Field, Relationship, Column
 from pgvector.sqlalchemy import Vector
 from typing import Optional, List, Dict, Any
@@ -5,20 +6,22 @@ from datetime import datetime, timedelta, timezone
 import enum
 from sqlmodel import JSON as SA_JSON
 from sqlalchemy import Column, TIMESTAMP, text, JSON, DateTime
+from app.time import utcnow
 
 # ▼▼▼ 1. ADICIONE ESTE ENUM NO TOPO DO ARQUIVO ▼▼▼
 class DeliveryMethod(str, enum.Enum):
     DELIVERY = "delivery"
     PICKUP = "pickup"
 
-# Define forward references for type hinting
-class Bot(SQLModel): pass
-class Product(SQLModel): pass
-class ConversationHistory(SQLModel): pass
-class Contact(SQLModel): pass
-class ShoppingCart(SQLModel): pass
-class Order(SQLModel): pass
-class OrderItem(SQLModel): pass
+class CartState(str, enum.Enum):
+    GREETING = "GREETING"
+    SHOPPING = "SHOPPING"
+    AWAITING_DELIVERY_METHOD = "AWAITING_DELIVERY_METHOD"
+    AWAITING_CEP = "AWAITING_CEP"
+    AWAITING_NUMBER_COMPLEMENT = "AWAITING_NUMBER_COMPLEMENT"
+    AWAITING_ADDRESS_CONFIRMATION = "AWAITING_ADDRESS_CONFIRMATION"
+    AWAITING_CUSTOMER_NAME = "AWAITING_CUSTOMER_NAME"
+    AWAITING_PAYMENT_METHOD = "AWAITING_PAYMENT_METHOD"
 
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -36,12 +39,12 @@ class Bot(SQLModel, table=True):
     whatsapp_number: str = Field(unique=True, index=True)
 
     menu_url: Optional[str] = Field(default=None, description="URL pública do cardápio (PDF/Imagem) no S3")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
 
     # ▼▼▼ CREDENCIAIS DA META (NOVOS CAMPOS) ▼▼▼
     whatsapp_token: str = Field(default="") # O Token de acesso (EAA...)
     phone_number_id: str = Field(default="", index=True) # O ID numérico (8812...)
-    
+
     pix_key: Optional[str] = Field(default=None, index=True)
 
     # Permite que cada restaurante defina sua taxa de entrega
@@ -114,7 +117,7 @@ class ConversationHistory(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     role: str 
     content: str
-    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    created_at: datetime = Field(default_factory=utcnow, index=True)
     
     bot_id: int = Field(foreign_key="bot.id")
     bot: "Bot" = Relationship(back_populates="history")
@@ -126,7 +129,7 @@ class ConversationHistory(SQLModel, table=True):
 class ProcessedMessage(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     message_id: str = Field(index=True, unique=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
 
 class OrderStatus(str, enum.Enum):
     PENDING = "pending"
@@ -140,7 +143,7 @@ class OrderStatus(str, enum.Enum):
 
 class ShoppingCart(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    state: str = Field(default="GREETING")
+    state: CartState = Field(default=CartState.GREETING)
 
     # Usaremos este campo para guardar o endereço encontrado pelo CEP enquanto esperamos o número.
     partial_address: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(SA_JSON))
@@ -172,6 +175,8 @@ class ShoppingCart(SQLModel, table=True):
 
     items: List["CartItem"] = Relationship(back_populates="cart", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
 
+    pix_only: bool = Field(default=False)
+
     # ▼▼▼ novos campos para pending_action
     pending_action_tool: Optional[str] = None
     pending_action_args: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
@@ -196,9 +201,10 @@ class Order(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     total_amount: float
     status: OrderStatus = Field(default=OrderStatus.PENDING)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
     psp_charge_id: Optional[str] = Field(default=None, index=True)
     customer_address: Optional[str] = Field(default=None)
+    webhook_token: str = Field(default_factory=lambda: secrets.token_urlsafe(32), index=True)
 
     bot_id: int = Field(foreign_key="bot.id")
     bot: "Bot" = Relationship(back_populates="orders")
@@ -228,18 +234,20 @@ class PaymentConfig(SQLModel, table=True):
     __tablename__ = "payment_configs"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    
+
     provider: str = Field(default="mercadopago")
     access_token: Optional[str] = Field(default=None)
     public_key: Optional[str] = Field(default=None)
-    
+    refresh_token: Optional[str] = Field(default=None)
+    token_expires_at: Optional[datetime] = Field(default=None)
+
     is_active: bool = Field(default=False)
-    
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
     # ▼▼▼ MUDANÇA AQUI: VINCULA AO BOT, NÃO AO USUÁRIO ▼▼▼
-    bot_id: int = Field(foreign_key="bot.id", unique=True) 
+    bot_id: int = Field(foreign_key="bot.id", unique=True)
     bot: "Bot" = Relationship(back_populates="payment_config")
 
 class Subscription(SQLModel, table=True):
@@ -263,8 +271,8 @@ class Subscription(SQLModel, table=True):
     # Data vital: Até quando o sistema libera o acesso
     current_period_end: datetime = Field(sa_column=Column(DateTime(timezone=True)))
     
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
     plan_type: str = Field(default="pro")
 
 class Plan(SQLModel, table=True):
@@ -281,4 +289,4 @@ class Plan(SQLModel, table=True):
     currency: str = Field(default="BRL")
     frequency: int = Field(default=1) # 1 mês
     
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utcnow)

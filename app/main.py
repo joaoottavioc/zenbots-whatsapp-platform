@@ -1,26 +1,29 @@
+import logging
 import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
 from dotenv import load_dotenv
 from arq import create_pool
 from arq.connections import RedisSettings
-from app.bot_routes import router as bot_router
 from app.payment_routes import router as payment_router
 from app import utils
 
 # Importações dos seus módulos locais
-from app.database import create_db_and_tables
+from app.database import create_db_and_tables, get_session
 from app import whatsapp, auth, bot_routes, takeover_routes
-from fastapi.responses import StreamingResponse
+from app.auth import get_user_from_token
+from app import crud
 import redis.asyncio as redis
 import asyncio
 import json
-import ast
 from app import billing_routes
 from app import menu_router
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 # Configurações do Redis para a Fila
 REDIS_HOST = os.getenv("REDIS_HOST", "redis")
@@ -30,50 +33,73 @@ REDIS_DATABASE = 1  # Mesmo banco definido no worker.py
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- INICIALIZAÇÃO (STARTUP) ---
-    print("🚀 Inicializando aplicação...")
-    
+    logger.info("Inicializando aplicacao...")
+
     # 1. Cria as tabelas do Banco de Dados
     await create_db_and_tables()
-    print("✅ Banco de dados verificado.")
+    logger.info("Banco de dados verificado.")
 
     # 2. Cria o pool de conexão com o Redis da Fila (ARQ)
-    print("🔌 Conectando ao Redis Queue...")
+    logger.info("Conectando ao Redis Queue...")
     try:
         app.state.arq_redis = await create_pool(
             RedisSettings(host=REDIS_HOST, port=REDIS_PORT, database=REDIS_DATABASE)
         )
-        print("✅ Conexão com Redis Queue estabelecida!")
+        logger.info("Conexao com Redis Queue estabelecida.")
     except Exception as e:
-        print(f"❌ Falha ao conectar no Redis: {e}")
-    
+        logger.error("Falha ao conectar no Redis: %s", e)
+
     yield  # O servidor roda aqui e atende as requisições
-    
+
     # --- ENCERRAMENTO (SHUTDOWN) ---
-    print("🔌 Fechando conexão com Redis Queue...")
+    logger.info("Fechando conexao com Redis Queue...")
     if hasattr(app.state, 'arq_redis'):
         await app.state.arq_redis.close()
-    print("🛑 Aplicação encerrada.")
+    logger.info("Aplicacao encerrada.")
 
 # Criação única da aplicação com o ciclo de vida configurado
 app = FastAPI(lifespan=lifespan)
 
 # --- Configuração do CORS ---
-app.add_middleware(
-    CORSMiddleware,
-    # Em vez de listar origens fixas, usamos um Regex que aceita tudo que começa com http/https
-    # Isso resolve o problema de URLs do Ngrok mudando toda hora e permite credenciais.
-    allow_origin_regex="https?://.*", 
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
+
+def build_cors_kwargs() -> dict:
+    """Build CORS middleware kwargs based on environment variables."""
+    origins_raw = os.getenv("CORS_ORIGINS", "")
+    origin_regex = os.getenv("CORS_ORIGIN_REGEX", "")
+    environment = os.getenv("ENVIRONMENT", "development")
+
+    kwargs: dict = dict(
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    if origins_raw:
+        kwargs["allow_origins"] = [o.strip() for o in origins_raw.split(",") if o.strip()]
+    elif origin_regex:
+        kwargs["allow_origin_regex"] = origin_regex
+    elif environment == "development":
+        kwargs["allow_origin_regex"] = "https?://.*"
+    else:
+        # Production without explicit origins: restrictive default
+        logger.warning(
+            "CORS_ORIGINS not set in production. No origins will be allowed. "
+            "Set CORS_ORIGINS env var with comma-separated origins."
+        )
+        kwargs["allow_origins"] = []
+
+    return kwargs
+
+
+_cors_kwargs = build_cors_kwargs()
+app.add_middleware(CORSMiddleware, **_cors_kwargs)
 
 # --- Inclusão das Rotas ---
 app.include_router(whatsapp.router)
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
 app.include_router(bot_routes.router)
 app.include_router(takeover_routes.router)
-app.include_router(bot_router, prefix="/api/v1")
 app.include_router(payment_router)
 app.include_router(billing_routes.router)
 app.include_router(menu_router.router)
@@ -85,72 +111,87 @@ async def root():
     return {"status": "ZenBots API Online 🚀", "queue": "Active"}
 
 @app.get("/stream")
-async def stream_events(request: Request):
+async def stream_events(request: Request, token: str = Query(default=None)):
     """
-    Rota SSE Robusta com Heartbeat e Sanitização de JSON.
+    Authenticated SSE endpoint — requires JWT token as query parameter.
+    Only streams events for bots owned by the authenticated user.
     """
+    # --- Authentication gate (P0-3) ---
+    if not token:
+        return JSONResponse(content={"detail": "Token required"}, status_code=401)
+
+    from app.database import async_session
+    async with async_session() as session:
+        user = await get_user_from_token(token, session)
+        if not user:
+            return JSONResponse(content={"detail": "Invalid or expired token"}, status_code=401)
+
+        bots = await crud.list_user_bots(session, user.id)
+        if not bots:
+            return JSONResponse(content={"detail": "No bots found"}, status_code=404)
+
+        bot_ids = [bot.id for bot in bots]
+
     async def event_generator():
         # 1. Configuração da Conexão Redis
-        local_redis_url = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DATABASE}"
-        
-        r = redis.from_url(local_redis_url, encoding="utf-8", decode_responses=True)
+        local_redis_url = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
+
+        r = redis.from_url(
+            local_redis_url, encoding="utf-8", decode_responses=True,
+            socket_timeout=2, socket_connect_timeout=2,
+        )
         pubsub = r.pubsub()
-        await pubsub.subscribe("dashboard_events")
-        
+
+        # Subscribe to per-bot channels only
+        channels = [f"dashboard_events:{bid}" for bid in bot_ids]
+        await pubsub.subscribe(*channels)
+
         try:
-            print("📡 Cliente conectado ao stream SSE")
+            logger.info("SSE client connected, bot_ids=%s", bot_ids)
             # Envia o ping inicial já em formato JSON correto
             yield f"data: {json.dumps({'type': 'ping', 'message': 'connected'})}\n\n"
-            
+
             while True:
                 # 2. Verifica desconexão do cliente
                 if await request.is_disconnected():
-                    print("📴 Cliente desconectou do stream")
+                    logger.info("SSE client disconnected")
                     break
-                
+
                 # 3. Aguarda mensagem do Redis (Timeout curto p/ manter o loop rodando)
                 message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
-                
+
                 if message:
                     raw_data = message['data']
-                    final_payload = raw_data
-
-                    # --- BLOCO DE CORREÇÃO (Sanitização de JSON) ---
+                    # broadcast.py now publishes valid JSON, so parse directly
                     try:
-                        # Tenta ler como JSON padrão. Se falhar, é string Python.
-                        json.loads(raw_data)
+                        json.loads(raw_data)  # validate
+                        final_payload = raw_data
                     except json.JSONDecodeError:
-                        try:
-                            # Converte string Python "{'a': 1}" para Dict, depois para JSON "{\"a\": 1}"
-                            dict_data = ast.literal_eval(raw_data)
-                            final_payload = json.dumps(dict_data)
-                        except Exception as e:
-                            print(f"⚠️ Erro ao converter dados do Redis: {e}")
-                            # Payload de emergência para não quebrar o front
-                            final_payload = json.dumps({"type": "error", "message": "Dados inválidos do Redis"})
-                    
-                    print(f"📤 Enviando evento SSE: {final_payload}")
+                        logger.warning("Invalid JSON received from Redis PubSub")
+                        final_payload = json.dumps({"type": "error", "message": "Dados inválidos do Redis"})
+
+                    logger.info("Sending SSE event to client")
                     yield f"data: {final_payload}\n\n"
                 else:
                     # 4. Heartbeat (Mantém a conexão viva em Load Balancers/Nginx)
                     yield ": keep-alive\n\n"
-                
+
         except asyncio.CancelledError:
-            print("Client disconnected (CancelledError)")
+            logger.info("SSE client disconnected (CancelledError)")
         except Exception as e:
-            print(f"❌ Erro crítico no Stream: {e}")
+            logger.error("Critical error in SSE stream: %s", e)
             # Tenta avisar o front se a conexão ainda existir
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
         finally:
             # 5. Limpeza de recursos
             try:
-                await pubsub.unsubscribe("dashboard_events")
+                await pubsub.unsubscribe(*channels)
                 await r.aclose()
             except:
                 pass
 
     return StreamingResponse(
-        event_generator(), 
+        event_generator(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

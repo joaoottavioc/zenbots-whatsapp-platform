@@ -1,24 +1,28 @@
 # app/crud.py - VERSÃO CORRIGIDA
+import logging
+import re
 from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlmodel import select, delete, update
+from sqlmodel import select, update
 from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
-from app.utils import normalize_phone
-from sqlalchemy import text, func, desc
+from app.utils import normalize_phone, mask_phone
+from app.time import utcnow
+from sqlalchemy import func, desc
 from app.models import (
     Bot, User, ConversationHistory, Product, Order, OrderItem, ProcessedMessage,
-    Contact, ShoppingCart, CartItem, Subscription, DeliveryMethod, OrderStatus
-)
-from app.models import Subscription
-
-# 1. Imports unificados e limpos
-from app.models import (
-    Bot, User, ConversationHistory, Product, Order, OrderItem, ProcessedMessage,
-    Contact, ShoppingCart, CartItem
+    Contact, ShoppingCart, CartItem, Subscription, DeliveryMethod, OrderStatus, CartState
 )
 from app.schemas import BotUpdate, ProductUpdate
-from app.embedding_service import generate_embedding, embed_async
+from app.embedding_service import embed_async
+
+logger = logging.getLogger(__name__)
+
+
+def escape_ilike(value: str) -> str:
+    """Escape ILIKE wildcards (\\, %, _) so user input is matched literally."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
 
 # --- Funções do Webhook (NÃO DEVEM FAZER COMMIT) ---
 
@@ -39,7 +43,7 @@ async def add_processed_message(session: AsyncSession, message_id: str):
 
 async def get_or_create_contact(session: AsyncSession, bot_id: int, contact_number: str) -> Contact:
     """Busca um contato pelo número ou o cria, sem commitar a sessão."""
-    #contact_number = normalize_phone(contact_number)
+    contact_number = normalize_phone(contact_number) or re.sub(r"[^\d]", "", contact_number)
     result = await session.execute(
         select(Contact).where(Contact.phone_number == contact_number, Contact.bot_id == bot_id)
     )
@@ -64,7 +68,7 @@ async def get_or_create_cart(session: AsyncSession, contact_id: int) -> Shopping
     cart = result.scalars().first()
 
     if not cart:
-        cart = ShoppingCart(contact_id=contact_id, state="GREETING")
+        cart = ShoppingCart(contact_id=contact_id, state=CartState.GREETING)
         session.add(cart)
         await session.flush()
         await session.refresh(cart)
@@ -91,7 +95,7 @@ async def add_items_to_db_cart(session: AsyncSession, cart_id: int, items_to_add
         
         # 2. SE O PRODUTO NÃO EXISTIR OU ESTIVER INDISPONÍVEL, PULA
         if not product or not product.is_available:
-            print(f"🚫 Tentativa de adicionar produto indisponível: {product_id}")
+            logger.warning("Attempt to add unavailable product: %s", product_id)
             continue
 
         existing_item = next((item for item in cart.items if item.product_id == product_id), None)
@@ -138,8 +142,8 @@ async def clear_db_cart(session: AsyncSession, cart_id: int) -> Optional[Shoppin
         await session.delete(item)
     
     cart.items = [] # Limpa a lista na memória também
-    cart.state = "GREETING"
-    
+    cart.state = CartState.GREETING
+
     cart.customer_address = None
     # A linha que definia 'last_activity_at' foi REMOVIDA.
     # A responsabilidade de atualizar o timestamp é da função principal que orquestra a conversa.
@@ -150,6 +154,7 @@ async def clear_db_cart(session: AsyncSession, cart_id: int) -> Optional[Shoppin
     cart.pending_action_question = None
     cart.pending_action_expires_at = None
     cart.delivery_method = None
+    cart.pix_only = False
 
     # se você usa last_suggestions, pode limpar também:
     cart.last_suggestions = None
@@ -158,8 +163,14 @@ async def clear_db_cart(session: AsyncSession, cart_id: int) -> Optional[Shoppin
     return cart
 
 async def get_history_for_contact(session: AsyncSession, bot_id: int, contact_number: str, limit: int = 20) -> List[ConversationHistory]:
-    """Recupera o histórico de uma conversa usando o objeto Contact."""
-    contact = await get_or_create_contact(session, bot_id, contact_number)
+    """Recupera o histórico de uma conversa. Retorna [] se o contato não existir."""
+    contact_number = normalize_phone(contact_number) or re.sub(r"[^\d]", "", contact_number)
+    result = await session.execute(
+        select(Contact).where(Contact.phone_number == contact_number, Contact.bot_id == bot_id)
+    )
+    contact = result.scalar_one_or_none()
+    if not contact:
+        return []
     query = (
         select(ConversationHistory)
         .where(ConversationHistory.contact_id == contact.id)
@@ -196,7 +207,8 @@ async def find_relevant_products(session: AsyncSession, bot_id: int, extracted_i
         # 🔹 1. Busca por nome (correspondência exata/parcial forte)
         name_query = select(Product).where(
             Product.bot_id == bot_id,
-            Product.name.ilike(f"%{item_name}%")
+            Product.is_available == True,
+            Product.name.ilike(f"%{escape_ilike(item_name)}%", escape="\\")
         ).limit(limit_per_item)
         for p in (await session.execute(name_query)).scalars().all():
             if p.id not in all_results_map: all_results_map[p.id] = p
@@ -204,7 +216,8 @@ async def find_relevant_products(session: AsyncSession, bot_id: int, extracted_i
         # 🔹 2. Busca por keywords (nova camada super importante!)
         keywords_query = select(Product).where(
             Product.bot_id == bot_id,
-            Product.keywords.ilike(f"%{item_name}%")
+            Product.is_available == True,
+            Product.keywords.ilike(f"%{escape_ilike(item_name)}%", escape="\\")
         ).limit(limit_per_item)
         for p in (await session.execute(keywords_query)).scalars().all():
             if p.id not in all_results_map: all_results_map[p.id] = p
@@ -212,8 +225,9 @@ async def find_relevant_products(session: AsyncSession, bot_id: int, extracted_i
         # 🔹 3. Busca por descrição
         desc_query = select(Product).where(
             Product.bot_id == bot_id,
+            Product.is_available == True,
             Product.description.is_not(None),
-            Product.description.ilike(f"%{item_name}%")
+            Product.description.ilike(f"%{escape_ilike(item_name)}%", escape="\\")
         ).limit(limit_per_item)
         for p in (await session.execute(desc_query)).scalars().all():
             if p.id not in all_results_map: all_results_map[p.id] = p
@@ -222,86 +236,13 @@ async def find_relevant_products(session: AsyncSession, bot_id: int, extracted_i
         text_to_embed = f"PRODUTO PRINCIPAL: {item_name}"
         embeddings = await embed_async([text_to_embed], space="products", normalize=False)
         query_embedding = embeddings[0]
-        embedding_query = select(Product).where(Product.bot_id == bot_id).order_by(
+        embedding_query = select(Product).where(Product.bot_id == bot_id, Product.is_available == True).order_by(
             Product.embedding.cosine_distance(query_embedding) #
         ).limit(limit_per_item) #
         for p in (await session.execute(embedding_query)).scalars().all():
              if p.id not in all_results_map: all_results_map[p.id] = p
 
     # Retorna apenas os valores do dicionário, garantindo produtos únicos
-    return list(all_results_map.values())
-
-async def find_relevant_products_old(
-    session: AsyncSession, 
-    bot_id: int, 
-    extracted_items: List[str], 
-    limit_per_item: int = 3,
-    min_similarity: float = 0.55  # <-- NOSSO NOVO CONTROLE DE QUALIDADE!
-) -> List[Product]:
-    """
-    Busca em camadas otimizada com threshold de similaridade semântica.
-    1. Nome > 2. Keywords > 3. Descrição (matches de alta confiança)
-    4. Embedding (somente se a similaridade for > min_similarity)
-    """
-    if not extracted_items:
-        return []
-
-    all_results_map: Dict[int, Product] = {}
-
-    for item_name in extracted_items:
-        # Camadas 1, 2 e 3 (buscas por texto) continuam iguais, pois são de alta confiança.
-        # 🔹 1. Busca por nome
-        name_query = select(Product).where(
-            Product.bot_id == bot_id,
-            Product.is_available == True,
-            Product.name.ilike(f"%{item_name}%")
-        ).limit(limit_per_item)
-        for p in (await session.execute(name_query)).scalars().all():
-            if p.id not in all_results_map: all_results_map[p.id] = p
-
-        # 🔹 2. Busca por keywords
-        keywords_query = select(Product).where(
-            Product.bot_id == bot_id,
-            Product.is_available == True,
-            Product.keywords.ilike(f"%{item_name}%")
-        ).limit(limit_per_item)
-        for p in (await session.execute(keywords_query)).scalars().all():
-            if p.id not in all_results_map: all_results_map[p.id] = p
-
-        # 🔹 3. Busca por descrição
-        desc_query = select(Product).where(
-            Product.bot_id == bot_id,
-            Product.is_available == True,
-            Product.description.is_not(None),
-            Product.description.ilike(f"%{item_name}%")
-        ).limit(limit_per_item)
-        for p in (await session.execute(desc_query)).scalars().all():
-            if p.id not in all_results_map: all_results_map[p.id] = p
-            
-        # ▼▼▼ A MÁGICA ACONTECE AQUI ▼▼▼
-        # 🔹 4. Fallback: busca semântica (RAG) com filtro de qualidade
-        query_embedding = generate_embedding(item_name)
-        
-        # Criamos uma "coluna" virtual com o score de similaridade
-        # Lembre-se: Similaridade = 1 - Distância
-        similarity_score = (1 - Product.embedding.cosine_distance(query_embedding)).label("similarity")
-
-        embedding_query = (
-            select(Product, similarity_score)
-            .where(Product.bot_id == bot_id,
-                   Product.is_available == True)
-            .filter(similarity_score > min_similarity) # <-- FILTRA PELA QUALIDADE MÍNIMA
-            .order_by(text("similarity DESC")) # <-- Ordena pela maior similaridade
-            .limit(limit_per_item)
-        )
-        
-        # O resultado agora vem como uma tupla (Produto, similaridade)
-        embedding_results = await session.execute(embedding_query)
-        for product, similarity in embedding_results.all():
-            print(f"[DEBUG RAG] Item encontrado: '{product.name}' com similaridade: {similarity:.2f}")
-            if product.id not in all_results_map:
-                all_results_map[product.id] = product
-    
     return list(all_results_map.values())
 
 async def get_user_by_email(session: AsyncSession, email: str) -> Optional[User]:
@@ -594,11 +535,13 @@ async def bulk_create_products(session: AsyncSession, bot_id: int, products_data
         
     return len(processed_db_ids) + len(products_to_add)
 
-async def get_products_by_bot_id(session: AsyncSession, bot_id: int) -> List[Product]:
+async def get_products_by_bot_id(
+    session: AsyncSession, bot_id: int, limit: int = 50, offset: int = 0
+) -> List[Product]:
     statement = select(Product).where(
         Product.bot_id == bot_id,
         Product.is_deleted == False  # <--- FILTRO NOVO
-    ).order_by(Product.category, Product.name)
+    ).order_by(Product.category, Product.name).offset(offset).limit(limit)
     result = await session.execute(statement)
     return result.scalars().all()
 
@@ -606,25 +549,6 @@ async def get_product_by_id(session: AsyncSession, product_id: int) -> Optional[
     query = select(Product).where(Product.id == product_id).options(selectinload(Product.bot))
     result = await session.execute(query)
     return result.scalars().first()
-
-async def bulk_delete_products_old(session: AsyncSession, bot_id: int, product_ids: List[int]) -> int:
-    """Deleta produtos em lote, garantindo que eles pertençam ao bot_id especificado."""
-    
-    # A consulta fica muito mais simples, pois já validamos o dono do bot na rota
-    query = select(Product.id).where(
-        Product.bot_id == bot_id, 
-        Product.id.in_(product_ids)
-    )
-    result = await session.execute(query)
-    ids_to_delete = result.scalars().all()
-    
-    if not ids_to_delete: 
-        return 0
-        
-    delete_statement = delete(Product).where(Product.id.in_(ids_to_delete))
-    await session.execute(delete_statement)
-    await session.commit()
-    return len(ids_to_delete)
 
 async def bulk_delete_products(session: AsyncSession, bot_id: int, product_ids: List[int]) -> int:
     # Em vez de delete(), usamos update()
@@ -638,18 +562,6 @@ async def bulk_delete_products(session: AsyncSession, bot_id: int, product_ids: 
     result = await session.execute(statement)
     await session.commit()
     return result.rowcount
-
-async def delete_product_old(session: AsyncSession, db_product: Product) -> bool:
-    """
-    Deleta um objeto Product que já foi buscado e verificado pela rota.
-    (Recebe o objeto Product, não o product_id)
-    """
-    if not db_product:
-        return False
-        
-    await session.delete(db_product)
-    await session.commit()
-    return True
 
 async def delete_product(session: AsyncSession, db_product: Product):
     db_product.is_deleted = True # Soft Delete
@@ -696,7 +608,7 @@ async def create_order(
 
     except ValueError as exc:
         await session.rollback()
-        print(f"Erro ao criar pedido: {exc}")
+        logger.error("Failed to create order: %s", exc)
         return None
 
 # app/crud.py
@@ -739,7 +651,7 @@ async def set_human_takeover_by_phone(session: AsyncSession, bot_id: int, phone_
     contact = contact_result.scalar_one_or_none()
 
     if not contact:
-        print(f"Contato com o número {phone_number} não encontrado para o bot {bot_id}.")
+        logger.warning("Contact not found for phone %s, bot %s", mask_phone(phone_number), bot_id)
         return False
 
     # Encontra o carrinho associado a esse contato
@@ -749,7 +661,7 @@ async def set_human_takeover_by_phone(session: AsyncSession, bot_id: int, phone_
     cart = cart_result.scalar_one_or_none()
 
     if not cart:
-        print(f"Carrinho para o contato {contact.id} não encontrado.")
+        logger.warning("Cart not found for contact %s", contact.id)
         return False
     
     # Ativa ou desativa o interruptor
@@ -758,7 +670,7 @@ async def set_human_takeover_by_phone(session: AsyncSession, bot_id: int, phone_
     await session.commit()
     
     status = "ATIVADO" if active else "DESATIVADO"
-    print(f"✅ Atendimento humano {status} para o número {phone_number}.")
+    logger.info("Human takeover %s for phone %s", status, mask_phone(phone_number))
     return True
 
 async def delete_order(session: AsyncSession, order_id: int) -> bool:
@@ -769,12 +681,12 @@ async def delete_order(session: AsyncSession, order_id: int) -> bool:
     order_to_delete = await session.get(Order, order_id)
     
     if not order_to_delete:
-        print(f"Pedido com ID {order_id} não encontrado para deleção.")
+        logger.warning("Order %s not found for deletion", order_id)
         return False
         
     await session.delete(order_to_delete)
     await session.commit()
-    print(f"Pedido {order_id} deletado com sucesso.")
+    logger.info("Order %s deleted", order_id)
     return True
 
 async def update_order_status_by_id(session: AsyncSession, order_id: int, new_status: OrderStatus, psp_charge_id: Optional[str] = None) -> Optional[Order]:
@@ -797,14 +709,14 @@ async def update_order_status_by_id(session: AsyncSession, order_id: int, new_st
     
 
     if not order:
-        print(f"Pedido {order_id} não encontrado para atualização de status.")
+        logger.warning("Order %s not found for status update", order_id)
         return None
     
     # IMPORTANTE: Proteção de idempotência
     # Se o status já for o final, não fazemos nada e não retornamos o pedido.
     # Isso evita enviar 5 confirmações para o cliente se o MP enviar 5 webhooks.
     if order.status == new_status or order.status in [OrderStatus.FAILED, OrderStatus.EXPIRED]:
-        print(f"Pedido {order_id} já está em estado final ({order.status}). Ignorando atualização.")
+        logger.info("Order %s already in terminal state (%s), skipping", order_id, order.status)
         return None
     
     order.status = new_status
@@ -815,7 +727,7 @@ async def update_order_status_by_id(session: AsyncSession, order_id: int, new_st
     await session.commit()
     await session.refresh(order, attribute_names=["bot", "items"]) # Garante que os dados carregados estão frescos
     
-    print(f"✅ Pedido {order_id} atualizado para {new_status}.")
+    logger.info("Order %s updated to %s", order_id, new_status)
     return order
 
 async def list_orders_by_bot(session: AsyncSession, bot_id: int, status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -835,9 +747,7 @@ async def list_orders_by_bot(session: AsyncSession, bot_id: int, status_filter: 
         
     result = await session.execute(query)
     orders = result.scalars().all()
-    print(f"👀 DEBUG LISTAGEM: Encontrados {len(orders)} pedidos. Processando...")
-    # ---------------------------
-    
+
     formatted_orders = []
     for order in orders:
         order_dict = order.model_dump()
@@ -871,15 +781,6 @@ async def list_orders_by_bot(session: AsyncSession, bot_id: int, status_filter: 
     return formatted_orders
 
 async def get_top_selling_products(session: AsyncSession, bot_id: int, limit: int = 5):
-    # --- DEBUG: Adicione isto ---
-    print(f"🔍 DEBUG ANALYTICS: Buscando dados para o Bot ID: {bot_id}")
-    
-    # Verifica se existem pedidos para este bot, independente dos produtos
-    check_query = select(func.count(Order.id)).where(Order.bot_id == bot_id)
-    total_orders = (await session.execute(check_query)).scalar()
-    print(f"📊 DEBUG ANALYTICS: O Bot {bot_id} tem um total de {total_orders} pedidos no banco.")
-    # -----------------------------
-
     query = (
         select(
             Product.name, 
@@ -896,10 +797,7 @@ async def get_top_selling_products(session: AsyncSession, bot_id: int, limit: in
     )
     
     result = await session.execute(query)
-    final_list = result.all()
-    print(f"📈 DEBUG ANALYTICS: Resultado final da query: {len(final_list)} produtos encontrados.")
-    
-    return final_list
+    return result.all()
 
 async def update_item_notes(session: AsyncSession, cart_id: int, product_id: int, notes: str) -> Optional[ShoppingCart]:
     """Atualiza apenas a observação de um item no carrinho."""
@@ -937,19 +835,32 @@ async def get_subscription_by_user(session: AsyncSession, user_id: int) -> Optio
 
 # ▼▼▼ FUNÇÃO UPSERT ATUALIZADA ▼▼▼
 async def upsert_subscription(
-    session: AsyncSession, 
-    user_id: int, 
-    bot_id: int, # <--- Novo Campo
-    mp_id: str, 
-    status: str, 
-    plan_type: str = "pro" # <--- Novo Campo
+    session: AsyncSession,
+    user_id: int,
+    bot_id: int,
+    mp_id: str,
+    status: str,
 ):
-    # Busca por BOT_ID (1-pra-1)
     sub = await get_subscription_by_bot(session, bot_id)
+    if sub:
+        sub.mp_subscription_id = mp_id
+        sub.status = status
+    else:
+        sub = Subscription(
+            user_id=user_id,
+            bot_id=bot_id,
+            mp_subscription_id=mp_id,
+            status=status,
+            current_period_end=utcnow() + timedelta(days=30),
+        )
+        session.add(sub)
+    await session.flush()
+    await session.refresh(sub)
+    return sub
 
 async def cancel_expired_pix_orders(session: AsyncSession):
     """Cancela pedidos PIX pendentes há mais de 15 minutos."""
-    limit_time = datetime.utcnow() - timedelta(minutes=15)
+    limit_time = utcnow() - timedelta(minutes=15)
     
     query = select(Order).where(
         Order.status == "PENDING",
@@ -965,7 +876,7 @@ async def cancel_expired_pix_orders(session: AsyncSession):
         order.status = OrderStatus.CANCELED
         session.add(order)
         count += 1
-        print(f"💀 Pedido #{order.id} expirou (PIX > 15min). Cancelado automaticamente.")
+        logger.info("Order #%s expired (PIX > 15min), auto-canceled", order.id)
         
     if count > 0:
         await session.commit()

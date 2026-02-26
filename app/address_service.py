@@ -15,7 +15,7 @@ async def get_address_from_cep(cep: str) -> Optional[Dict]:
 
     # 2. Monta a URL e faz a chamada
     url = f"https://viacep.com.br/ws/{cleaned_cep}/json/"
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             response = await client.get(url)
             response.raise_for_status() # Lança um erro para respostas 4xx ou 5xx

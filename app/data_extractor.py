@@ -1,8 +1,11 @@
 import json
+import logging
 from typing import List, Dict
 
 # Importa a função correta que chama a API da OpenAI
 from app.openai_client import get_extraction_response
+
+logger = logging.getLogger(__name__)
 
 def _create_extraction_prompt(menu_text: str) -> List[Dict]:
     """
@@ -44,22 +47,22 @@ async def extract_products_from_text(menu_text: str) -> List[Dict]:
     Usa a API da OpenAI para extrair uma lista de produtos, incluindo
     palavras-chave, e lida com o formato de resposta esperado.
     """
-    print("--- Iniciando extração de produtos e palavras-chave com a API da OpenAI ---")
+    logger.info("Starting product extraction via OpenAI API")
     extraction_prompt = _create_extraction_prompt(menu_text)
-    
+
     json_string_response = await get_extraction_response(extraction_prompt)
-    print(f"--- OpenAI API retornou: {json_string_response} ---")
-    
+    logger.info("OpenAI API extraction response received")
+
     try:
         data = json.loads(json_string_response)
-        
+
         if isinstance(data, dict) and "products" in data and isinstance(data["products"], list):
-            print(f"--- JSON extraído com sucesso! {len(data['products'])} produtos encontrados. ---")
+            logger.info("Extracted %d products from menu text", len(data["products"]))
             return data["products"]
         else:
-            print("--- Resposta do LLM não continha o formato esperado {'products': [...]} ---")
+            logger.warning("LLM response missing expected 'products' key")
             return []
-            
+
     except (json.JSONDecodeError, IndexError) as e:
-        print(f"Erro ao decodificar o JSON da resposta do LLM: {e}")
+        logger.error("Failed to decode LLM extraction response: %s", e)
         return []

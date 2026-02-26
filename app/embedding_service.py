@@ -1,10 +1,13 @@
 # app/embedding_service.py
 from __future__ import annotations
+import logging
 from typing import List, Iterable
 import unicodedata, difflib, math, asyncio
 import regex as re
 from sentence_transformers import SentenceTransformer
 import threading  # <--- ADICIONADO PARA PROTEÇÃO
+
+logger = logging.getLogger(__name__)
 
 # ========= Config dos modelos (384d em ambos) =========
 # Catálogo (mantém o que você já tem)
@@ -30,7 +33,7 @@ def _get_products_model() -> SentenceTransformer:
         with _products_lock:
             # Segunda verificação (garante que ninguém carregou enquanto esperávamos)
             if _model_products is None:
-                print(f"🧠 Carregando modelo de PRODUTOS (Thread-Safe)...")
+                logger.info("Loading products embedding model (thread-safe)")
                 _model_products = SentenceTransformer(_PRODUCTS_MODEL_NAME)
     return _model_products
 
@@ -39,7 +42,7 @@ def _get_router_model() -> SentenceTransformer:
     if _model_router is None:
         with _router_lock:
             if _model_router is None:
-                print(f"🧠 Carregando modelo de ROUTER (Thread-Safe)...")
+                logger.info("Loading router embedding model (thread-safe)")
                 _model_router = SentenceTransformer(_ROUTER_MODEL_NAME)
     return _model_router
 

@@ -1,9 +1,12 @@
+import logging
 import boto3
 import os
 from uuid import uuid4
 from fastapi import UploadFile, HTTPException
 from botocore.exceptions import NoCredentialsError
 import io
+
+logger = logging.getLogger(__name__)
 
 # Carrega configurações
 AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY_ID")
@@ -45,7 +48,7 @@ def upload_bytes_to_s3(file_content: bytes, filename: str, content_type: str, fo
     except NoCredentialsError:
         raise HTTPException(status_code=500, detail="Credenciais AWS não encontradas")
     except Exception as e:
-        print(f"Erro S3 Upload: {str(e)}")
+        logger.error("S3 upload failed: %s", e)
         raise HTTPException(status_code=500, detail="Falha ao fazer upload para S3")
 
 # Mantemos a antiga para compatibilidade se usada em outros lugares

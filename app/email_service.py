@@ -1,8 +1,11 @@
 # app/email_service.py
+import logging
 import os
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 from pydantic import EmailStr
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Configurações lidas do docker-compose / .env
 conf = ConnectionConfig(
@@ -52,4 +55,4 @@ async def send_password_reset_email(email: EmailStr, token: str):
 
     fm = FastMail(conf)
     await fm.send_message(message)
-    print(f"📧 E-mail de recuperação enviado para {email} via {conf.MAIL_SERVER}")
+    logger.info("Password reset email sent via %s", conf.MAIL_SERVER)
