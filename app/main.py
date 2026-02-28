@@ -15,6 +15,7 @@ from app.database import create_db_and_tables, get_session
 from app import whatsapp, auth, bot_routes, takeover_routes
 from app.auth import get_user_from_token
 from app import crud
+from app.rate_limiter import consume_sse_ticket
 import redis.asyncio as redis
 import asyncio
 import json
@@ -111,21 +112,49 @@ async def root():
     return {"status": "ZenBots API Online 🚀", "queue": "Active"}
 
 @app.get("/stream")
-async def stream_events(request: Request, token: str = Query(default=None)):
+async def stream_events(
+    request: Request,
+    token: str = Query(default=None),
+    ticket: str = Query(default=None),
+):
     """
-    Authenticated SSE endpoint — requires JWT token as query parameter.
-    Only streams events for bots owned by the authenticated user.
+    Authenticated SSE endpoint.
+    Supports three auth methods (checked in order):
+      1. ticket query param — short-lived, one-time-use (best practice)
+      2. Authorization: Bearer <jwt> header — standard header auth
+      3. token query param — JWT in URL (legacy fallback)
     """
-    # --- Authentication gate (P0-3) ---
-    if not token:
-        return JSONResponse(content={"detail": "Token required"}, status_code=401)
-
     from app.database import async_session
-    async with async_session() as session:
-        user = await get_user_from_token(token, session)
-        if not user:
-            return JSONResponse(content={"detail": "Invalid or expired token"}, status_code=401)
 
+    user = None
+
+    # --- Authentication gate ---
+    if ticket:
+        # Ticket-based auth: atomic consume from Redis (one-time use)
+        user_id = await consume_sse_ticket(ticket)
+        if not user_id:
+            return JSONResponse(content={"detail": "Invalid or expired ticket"}, status_code=401)
+        async with async_session() as session:
+            user = await crud.get_user_by_id(session, user_id)
+            if not user:
+                return JSONResponse(content={"detail": "User not found"}, status_code=401)
+    else:
+        # Extract JWT from Authorization header or token query param
+        bearer_token = None
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.startswith("Bearer "):
+            bearer_token = auth_header[7:]
+
+        jwt_token = bearer_token or token
+        if jwt_token:
+            async with async_session() as session:
+                user = await get_user_from_token(jwt_token, session)
+                if not user:
+                    return JSONResponse(content={"detail": "Invalid or expired token"}, status_code=401)
+        else:
+            return JSONResponse(content={"detail": "Authentication required"}, status_code=401)
+
+    async with async_session() as session:
         bots = await crud.list_user_bots(session, user.id)
         if not bots:
             return JSONResponse(content={"detail": "No bots found"}, status_code=404)

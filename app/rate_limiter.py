@@ -120,3 +120,35 @@ async def consume_oauth_state(token: str) -> Optional[Tuple[int, int]]:
         return (data["user_id"], data["bot_id"])
     except (json.JSONDecodeError, KeyError):
         return None
+
+
+async def create_sse_ticket(user_id: int) -> str:
+    """
+    Create a short-lived, one-time-use ticket for SSE authentication.
+    Stores sse_ticket:{token} → {"user_id": N} with 60s TTL.
+    """
+    token = secrets.token_urlsafe(32)
+    key = f"sse_ticket:{token}"
+    value = json.dumps({"user_id": user_id})
+    r = _get_client()
+    await r.set(key, value, ex=60)
+    return token
+
+
+async def consume_sse_ticket(ticket: str) -> Optional[int]:
+    """
+    Atomically retrieve and delete an SSE ticket.
+    Returns user_id or None if the ticket is invalid/expired.
+    """
+    if not ticket:
+        return None
+    key = f"sse_ticket:{ticket}"
+    r = _get_client()
+    raw = await r.getdel(key)
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        return data["user_id"]
+    except (json.JSONDecodeError, KeyError):
+        return None

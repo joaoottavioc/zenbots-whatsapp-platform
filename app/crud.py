@@ -75,7 +75,7 @@ async def get_or_create_cart(session: AsyncSession, contact_id: int) -> Shopping
     return cart
 
 
-async def add_items_to_db_cart(session: AsyncSession, cart_id: int, items_to_add: List[Dict]) -> Optional[ShoppingCart]:
+async def add_items_to_db_cart(session: AsyncSession, cart_id: int, items_to_add: List[Dict], bot_id: int | None = None) -> Optional[ShoppingCart]:
     """Adiciona itens ao carrinho, ignorando produtos indisponíveis."""
     # Carrega o carrinho e seus itens
     cart = await session.get(ShoppingCart, cart_id, options=[selectinload(ShoppingCart.items)])
@@ -92,10 +92,15 @@ async def add_items_to_db_cart(session: AsyncSession, cart_id: int, items_to_add
 
         # 1. Carrega o produto para verificar disponibilidade
         product = await session.get(Product, product_id)
-        
+
         # 2. SE O PRODUTO NÃO EXISTIR OU ESTIVER INDISPONÍVEL, PULA
         if not product or not product.is_available:
             logger.warning("Attempt to add unavailable product: %s", product_id)
+            continue
+
+        # 3. SE bot_id FORNECIDO, VERIFICA SE O PRODUTO PERTENCE AO BOT CORRETO
+        if bot_id is not None and product.bot_id != bot_id:
+            logger.warning("Product %s belongs to bot %s, expected bot %s", product_id, product.bot_id, bot_id)
             continue
 
         existing_item = next((item for item in cart.items if item.product_id == product_id), None)
@@ -247,6 +252,10 @@ async def find_relevant_products(session: AsyncSession, bot_id: int, extracted_i
 
 async def get_user_by_email(session: AsyncSession, email: str) -> Optional[User]:
     result = await session.execute(select(User).where(User.email == email))
+    return result.scalars().first()
+
+async def get_user_by_id(session: AsyncSession, user_id: int) -> Optional[User]:
+    result = await session.execute(select(User).where(User.id == user_id))
     return result.scalars().first()
 
 async def create_bot(
@@ -705,7 +714,7 @@ async def update_order_status_by_id(session: AsyncSession, order_id: int, new_st
     order = result.scalars().first()
 
     if isinstance(new_status, str):
-        new_status = new_status.lower()
+        new_status = OrderStatus(new_status.lower())
     
 
     if not order:
@@ -863,7 +872,7 @@ async def cancel_expired_pix_orders(session: AsyncSession):
     limit_time = utcnow() - timedelta(minutes=15)
     
     query = select(Order).where(
-        Order.status == "PENDING",
+        Order.status == OrderStatus.PENDING,
         Order.payment_method == "pix",
         Order.created_at < limit_time
     )

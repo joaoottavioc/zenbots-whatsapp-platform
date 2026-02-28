@@ -18,7 +18,7 @@ from app.schemas import ForgotPasswordRequest
 from app.email_service import send_password_reset_email
 from sqlmodel import select
 from app.time import utcnow
-from app.rate_limiter import is_rate_limited
+from app.rate_limiter import is_rate_limited, create_sse_ticket
 
 
 logger = logging.getLogger(__name__)
@@ -339,3 +339,13 @@ async def read_users_me(current_user: models.User = Depends(get_current_user)):
     Retorna os dados do usuário atual baseado no Token JWT enviado no Header.
     """
     return current_user
+
+
+@router.post("/sse-ticket")
+async def issue_sse_ticket(current_user: models.User = Depends(get_current_user)):
+    """
+    Issue a short-lived, one-time-use ticket for SSE /stream authentication.
+    The ticket expires in 60 seconds and can only be used once.
+    """
+    ticket = await create_sse_ticket(current_user.id)
+    return {"ticket": ticket}
