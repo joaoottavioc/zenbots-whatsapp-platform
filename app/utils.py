@@ -168,7 +168,7 @@ async def get_address_from_cep(cep: str):
         logger.warning("CEP out of valid range: %s", clean_cep)
         return None
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0)) as client:
         try:
             logger.info("Looking up CEP %s", clean_cep)
             resp = await client.get(f"https://brasilapi.com.br/api/cep/v2/{clean_cep}", timeout=10.0)

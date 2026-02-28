@@ -11,6 +11,7 @@ Strategy:
     2. The new cart.state after execution
     3. Which CRUD functions were called
 """
+import json
 import pytest
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
@@ -29,6 +30,7 @@ from tests.conftest import (
     PATCH_CREATE_PIX,
     PATCH_BROADCAST,
     PATCH_ASYNC_SESSION,
+    PATCH_CONTACT_LOCK,
 )
 from app.models import DeliveryMethod, OrderStatus
 
@@ -43,6 +45,17 @@ def make_session_ctx(mock_session):
     async def _ctx():
         yield mock_session
     return _ctx
+
+
+@asynccontextmanager
+async def _noop_lock():
+    """Transparent no-op async context manager replacing the Redis lock in tests."""
+    yield
+
+
+def _noop_lock_factory(*args, **kwargs):
+    """Returns a no-op lock regardless of contact_id."""
+    return _noop_lock()
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +121,7 @@ class BaseConversationTest:
             patch(PATCH_BROADCAST, AsyncMock()),
             patch(PATCH_ASYNC_SESSION, make_session_ctx(self.session)),
             patch("app.whatsapp.decrypt_value", side_effect=lambda v: v),
+            patch(PATCH_CONTACT_LOCK, side_effect=_noop_lock_factory),
         ):
             yield
 
@@ -744,6 +758,94 @@ class TestFinishOrderIntent(BaseConversationTest):
 
 
 # ===========================================================================
+# 11a. UPDATE ITEM OBSERVATION
+# ===========================================================================
+
+PATCH_GET_AI = "app.whatsapp.get_ai_decision"
+PATCH_EXTRACT_ITEMS = "app.whatsapp.extract_potential_items"
+
+
+def _make_tool_call_message(tool_name: str, arguments: dict):
+    """Build a mock AI message with a single tool call, matching OpenAI response shape."""
+    func = MagicMock()
+    func.name = tool_name
+    func.arguments = json.dumps(arguments)
+    tc = MagicMock()
+    tc.function = func
+    msg = MagicMock()
+    msg.tool_calls = [tc]
+    return msg
+
+
+class TestUpdateItemObservation(BaseConversationTest):
+
+    @pytest.fixture(autouse=True)
+    def set_state(self):
+        self.cart.state = "SHOPPING"
+        self.cart.items = [
+            make_cart_item(10, "John's Paranaense", 45.0),
+            make_cart_item(20, "Coca-cola 600ml", 10.0),
+        ]
+        self.crud_mock.update_item_notes = AsyncMock(return_value=self.cart)
+
+    @pytest.mark.asyncio
+    async def test_update_observation_calls_crud_and_confirms(self):
+        """LLM returns update_item_observation → crud.update_item_notes is called, user gets confirmation."""
+        from app.whatsapp import process_whatsapp_message
+
+        ai_msg = _make_tool_call_message("update_item_observation", {"product_id": 10, "notes": "sem cebola"})
+
+        with (
+            patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="MODIFY")),
+            patch(PATCH_GET_AI, AsyncMock(return_value=ai_msg)),
+            patch(PATCH_EXTRACT_ITEMS, AsyncMock(return_value=["johns paranaense"])),
+        ):
+            await process_whatsapp_message({}, build_whatsapp_payload(text="o johns paranaense é sem cebola"))
+
+        self.crud_mock.update_item_notes.assert_called_once_with(
+            self.session, self.cart.id, 10, "sem cebola"
+        )
+        msg = get_sent_message(self.send_mock)
+        assert "observação anotada" in msg.lower() or "anotada" in msg.lower()
+
+    @pytest.mark.asyncio
+    async def test_update_observation_product_not_in_cart(self):
+        """update_item_observation with a product_id not in the cart → user gets helpful error."""
+        from app.whatsapp import process_whatsapp_message
+
+        ai_msg = _make_tool_call_message("update_item_observation", {"product_id": 999, "notes": "sem cebola"})
+
+        with (
+            patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="MODIFY")),
+            patch(PATCH_GET_AI, AsyncMock(return_value=ai_msg)),
+            patch(PATCH_EXTRACT_ITEMS, AsyncMock(return_value=["johns paranaense"])),
+        ):
+            await process_whatsapp_message({}, build_whatsapp_payload(text="o johns paranaense é sem cebola"))
+
+        self.crud_mock.update_item_notes.assert_not_called()
+        msg = get_sent_message(self.send_mock)
+        assert "não está no seu carrinho" in msg.lower()
+
+    @pytest.mark.asyncio
+    async def test_update_observation_missing_notes(self):
+        """update_item_observation with missing notes → user is asked to clarify."""
+        from app.whatsapp import process_whatsapp_message
+
+        ai_msg = _make_tool_call_message("update_item_observation", {"product_id": 10})
+
+        with (
+            patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="MODIFY")),
+            patch(PATCH_GET_AI, AsyncMock(return_value=ai_msg)),
+            patch(PATCH_EXTRACT_ITEMS, AsyncMock(return_value=["johns paranaense"])),
+        ):
+            await process_whatsapp_message({}, build_whatsapp_payload(text="o johns paranaense precisa de algo"))
+
+        self.crud_mock.update_item_notes.assert_not_called()
+        msg = get_sent_message(self.send_mock)
+        assert "não entendi" in msg.lower() or "repetir" in msg.lower()
+
+
+# ===========================================================================
 # 11. CART MANAGEMENT INTENTS
 # ===========================================================================
 
@@ -774,3 +876,109 @@ class TestCartManagementIntents(BaseConversationTest):
 
         msg = get_sent_message(self.send_mock)
         assert "Pizza" in msg or "Pedido" in msg
+
+
+# ===========================================================================
+# DISTRIBUTED LOCK BEHAVIOR TESTS
+# ===========================================================================
+
+class TestDistributedLock(BaseConversationTest):
+    """Tests that the distributed lock integrates correctly with the message pipeline."""
+
+    @pytest.mark.asyncio
+    async def test_lock_acquired_before_cart_operations(self):
+        """Verifies lock is acquired before get_or_create_cart."""
+        from app.whatsapp import process_whatsapp_message
+
+        call_order = []
+
+        @asynccontextmanager
+        async def _tracking_lock():
+            call_order.append("lock_acquired")
+            yield
+            call_order.append("lock_released")
+
+        original_get_cart = self.crud_mock.get_or_create_cart
+
+        async def _tracking_get_cart(*args, **kwargs):
+            call_order.append("get_or_create_cart")
+            return await original_get_cart(*args, **kwargs)
+
+        self.crud_mock.get_or_create_cart = AsyncMock(side_effect=_tracking_get_cart)
+
+        with (
+            patch(PATCH_CONTACT_LOCK, return_value=_tracking_lock()),
+            patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="GREETING_OR_QUESTION")),
+        ):
+            await process_whatsapp_message({}, build_whatsapp_payload(text="Oi"))
+
+        assert call_order.index("lock_acquired") < call_order.index("get_or_create_cart")
+
+    @pytest.mark.asyncio
+    async def test_lock_released_after_commit(self):
+        """Verifies lock is held through session.commit() and released after."""
+        from app.whatsapp import process_whatsapp_message
+
+        call_order = []
+
+        @asynccontextmanager
+        async def _tracking_lock():
+            call_order.append("lock_acquired")
+            yield
+            call_order.append("lock_released")
+
+        original_commit = self.session.commit
+
+        async def _tracking_commit(*args, **kwargs):
+            call_order.append("commit")
+            return await original_commit(*args, **kwargs)
+
+        self.session.commit = AsyncMock(side_effect=_tracking_commit)
+
+        with (
+            patch(PATCH_CONTACT_LOCK, return_value=_tracking_lock()),
+            patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="GREETING_OR_QUESTION")),
+        ):
+            await process_whatsapp_message({}, build_whatsapp_payload(text="Oi"))
+
+        assert "commit" in call_order
+        assert call_order.index("commit") < call_order.index("lock_released")
+
+    @pytest.mark.asyncio
+    async def test_lock_timeout_sends_polite_message(self):
+        """When LockError is raised, user receives a friendly retry message."""
+        from app.whatsapp import process_whatsapp_message
+        from redis.exceptions import LockError
+
+        @asynccontextmanager
+        async def _lock_that_fails():
+            raise LockError("Could not acquire lock")
+            yield  # pragma: no cover
+
+        with patch(PATCH_CONTACT_LOCK, return_value=_lock_that_fails()):
+            await process_whatsapp_message({}, build_whatsapp_payload(text="Quero pizza"))
+
+        msg = get_sent_message(self.send_mock)
+        assert "processando" in msg.lower()
+        assert "aguarde" in msg.lower()
+
+    @pytest.mark.asyncio
+    async def test_lock_released_even_on_exception(self):
+        """Context manager releases lock even if cart code throws."""
+        from app.whatsapp import process_whatsapp_message
+
+        lock_released = []
+
+        @asynccontextmanager
+        async def _tracking_lock():
+            try:
+                yield
+            finally:
+                lock_released.append(True)
+
+        self.crud_mock.get_or_create_cart = AsyncMock(side_effect=RuntimeError("DB exploded"))
+
+        with patch(PATCH_CONTACT_LOCK, return_value=_tracking_lock()):
+            await process_whatsapp_message({}, build_whatsapp_payload(text="Oi"))
+
+        assert lock_released, "Lock should have been released even on exception"

@@ -202,6 +202,7 @@ PATCH_CALC_DIST = "app.utils.calculate_distance"
 PATCH_CREATE_PIX = "app.whatsapp.create_pix_payment"
 PATCH_BROADCAST = "app.whatsapp.broadcast_order_update"
 PATCH_ASYNC_SESSION = "app.whatsapp.async_session"
+PATCH_CONTACT_LOCK = "app.whatsapp.contact_lock"
 
 
 # ---------------------------------------------------------------------------

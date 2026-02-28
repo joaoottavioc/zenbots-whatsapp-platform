@@ -17,7 +17,6 @@ from app.tools_definition import tools_schema
 from datetime import datetime, timedelta, timezone
 import regex as re
 from app.semantic_router import semantic_intent, THRESHOLDS
-from app.address_service import get_address_from_cep
 from app.payment_service import create_pix_payment
 from arq import ArqRedis
 from sqlalchemy.exc import IntegrityError
@@ -38,6 +37,8 @@ from app.utils import check_delivery_radius, mask_phone
 from app.webhook_security import require_mp_signature
 from app.sanitize import sanitize_llm_output
 from app.encryption import decrypt_value
+from app.distributed_lock import contact_lock
+from redis.exceptions import LockError
 import logging
 
 logger = logging.getLogger(__name__)
@@ -174,6 +175,41 @@ _SESSION_TIMEOUT = timedelta(minutes=10)
 _LONG_TIMEOUT = timedelta(hours=12)
 
 
+async def _send_welcome_with_menu(session, bot, cart, contact_number, text_body):
+    """Sends the welcome greeting with menu image/PDF — reused for first contact and session resets."""
+    all_products = await crud.get_products_by_bot_id(session, bot.id)
+    sample_products = [p for p in all_products if p.is_available]
+    if sample_products and len(sample_products) >= 2:
+        picks = random.sample(sample_products, 2)
+        example_text = f'_Ex: "Quero um(a) {picks[0].name} e um(a) {picks[1].name}"_'
+    elif sample_products:
+        example_text = f'_Ex: "Quero um(a) {sample_products[0].name}"_'
+    else:
+        example_text = '_Ex: "Quero uma pizza de calabresa e uma coca-cola"_'
+
+    response_to_user = (
+        f"Olá! Seja bem-vindo ao *{bot.restaurant_name or 'nosso restaurante'}*! 😊\n\n"
+        "Confira o cardápio acima e me diga o que vai querer. Pode escrever ou mandar um áudio!\n\n"
+        f"{example_text}"
+    )
+    menu_url = bot.menu_url
+    media_type = None
+    if menu_url:
+        media_type = "document" if menu_url.lower().endswith(".pdf") else "image"
+
+    await send_whatsapp_message(
+        to=contact_number, message=response_to_user,
+        token=bot.whatsapp_token, phone_id=bot.phone_number_id,
+        media_url=menu_url, media_type=media_type,
+    )
+    await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, "Enviou Cardápio (Imagem)")
+
+    cart.state = CartState.SHOPPING
+    cart.last_activity_at = utcnow()
+    session.add(cart)
+    await session.commit()
+
+
 async def _handle_session_expiry(mctx: MessageContext) -> bool:
     """Checks inactivity timeouts. Returns True if session expired and message was handled."""
     cart, session, bot = mctx.cart, mctx.session, mctx.bot
@@ -183,41 +219,13 @@ async def _handle_session_expiry(mctx: MessageContext) -> bool:
 
     inactivity_duration = utcnow() - cart.last_activity_at.replace(tzinfo=None)
 
-    if inactivity_duration > _LONG_TIMEOUT:
-        logger.info("Long inactivity (%s), clearing cart and sending welcome", inactivity_duration)
+    if inactivity_duration > _LONG_TIMEOUT or inactivity_duration > _SESSION_TIMEOUT:
+        logger.info("Session expired after %s, resetting cart and sending welcome with menu", inactivity_duration)
         clear_pending(cart)
         await crud.clear_db_cart(session, cart.id)
         cart.state = CartState.GREETING
         cart.delivery_method = None
-
-        response_to_user = (
-            "Olá! Que bom ter você de volta! 😊\n\n"
-            "Seu carrinho anterior foi limpo. Quando quiser pedir, é só me dizer!"
-        )
-        await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
-        await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
-        cart.last_activity_at = utcnow()
-        session.add(cart)
-        await session.commit()
-        return True
-
-    elif inactivity_duration > _SESSION_TIMEOUT:
-        logger.info("Session expired after %s, notifying user", inactivity_duration)
-        clear_pending(cart)
-        await crud.clear_db_cart(session, cart.id)
-        cart.state = CartState.GREETING
-        cart.delivery_method = None
-
-        response_to_user = (
-            "Olá! 👋 Seu carrinho foi esvaziado por inatividade.\n\n"
-            "Sempre que quiser pedir, é só me dizer o que deseja! 😊"
-        )
-
-        await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
-        await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
-        cart.last_activity_at = utcnow()
-        session.add(cart)
-        await session.commit()
+        await _send_welcome_with_menu(session, bot, cart, contact_number, text_body)
         return True
 
     return False
@@ -522,7 +530,7 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
                     webhook_token=order.webhook_token,
                 )
                 if pix_info:
-                    response = "Tudo certo! Seu pedido foi registrado. Copie o código abaixo para pagar via PIX:"
+                    response = "Tudo certo! Seu pedido foi registrado. Copie o código abaixo para pagar via PIX:\n\n⏳ *Você tem 15 minutos para realizar o pagamento*, após esse prazo o pedido será cancelado automaticamente."
                     pix_code_to_send = pix_info['pix_copy_paste']
                     order_created = True
                 else:
@@ -777,155 +785,170 @@ async def _handle_shopping_intent(mctx: MessageContext, intent: str | None) -> s
         ai_message = await get_ai_decision(prompt, tools_schema, force_tool=True)
 
         if ai_message and ai_message.tool_calls:
-            tool_call, tool_name, tool_args = ai_message.tool_calls[0], ai_message.tool_calls[0].function.name, json.loads(ai_message.tool_calls[0].function.arguments)
-
-            # --- V3: Validate LLM tool arguments ---
             from app.tool_arg_schemas import TOOL_VALIDATORS
             from pydantic import ValidationError as PydanticValidationError
-            _tool_args_valid = True
-            _validator_cls = TOOL_VALIDATORS.get(tool_name)
-            if _validator_cls:
+
+            _CART_MODIFYING_TOOLS = {"add_items_to_cart", "remove_items_from_cart", "modify_item_quantity", "bulk_modify_quantities", "update_item_observation"}
+            _CONVERSATIONAL_TOOLS = {"answer_conversationally", "answer_with_found_products", "search_catalog_for_suggestions"}
+
+            for tool_call in ai_message.tool_calls:
+                tool_name = tool_call.function.name
                 try:
-                    _validated = _validator_cls(**tool_args)
-                    tool_args = _validated.model_dump()
-                except PydanticValidationError:
-                    _tool_args_valid = False
+                    tool_args = json.loads(tool_call.function.arguments)
+                except json.JSONDecodeError:
                     response_to_user = "Desculpe, não entendi. Pode repetir?"
+                    break
 
-            if not _tool_args_valid:
-                pass  # skip tool execution, validation failed
-            elif tool_name == "add_items_to_cart":
-                items_arg = tool_args.get("items", [])
+                # --- Validate LLM tool arguments ---
+                _validator_cls = TOOL_VALIDATORS.get(tool_name)
+                if _validator_cls:
+                    try:
+                        _validated = _validator_cls(**tool_args)
+                        tool_args = _validated.model_dump()
+                    except PydanticValidationError:
+                        response_to_user = "Desculpe, não entendi. Pode repetir?"
+                        break
 
-                if not items_arg:
-                    extracted_items_for_msg = await extract_potential_items(text_body)
-                    items_str = " e ".join(f"'{item}'" for item in extracted_items_for_msg) if extracted_items_for_msg else "O item que você pediu"
-                    response_to_user = f"Não encontrei *{items_str}* no nosso cardápio. 😕 Quer tentar outro item ou ver nossas sugestões?"
-                else:
-                    clear_pending(cart)
-                    qty_before = sum(item.quantity for item in cart.items)
+                if tool_name == "add_items_to_cart":
+                    items_arg = tool_args.get("items", [])
 
-                    await crud.add_items_to_db_cart(session, cart.id, items_arg)
-                    await session.refresh(cart, attribute_names=['items'])
-
-                    qty_after = sum(item.quantity for item in cart.items)
-
-                    if qty_after > qty_before:
-                        product_ids = [i.get("product_id") for i in items_arg if isinstance(i, dict) and i.get("product_id") is not None]
-                        if not any(pid in (cart.last_suggestions or []) for pid in product_ids): cart.last_suggestions = None
-
-                        response_to_user = (
-                            _build_cart_summary_message(cart, bot, "✅") +
-                            "\n\nAdicionado. Se quiser incluir algo mais é só falar!"
-                        )
-                    else:
+                    if not items_arg:
                         extracted_items_for_msg = await extract_potential_items(text_body)
                         items_str = " e ".join(f"'{item}'" for item in extracted_items_for_msg) if extracted_items_for_msg else "O item que você pediu"
                         response_to_user = f"Não encontrei *{items_str}* no nosso cardápio. 😕 Quer tentar outro item ou ver nossas sugestões?"
-
-            elif tool_name in ("remove_items_from_cart", "modify_item_quantity", "bulk_modify_quantities"):
-                clear_pending(cart)
-                await session.refresh(cart, attribute_names=['items'])
-                current_ids = {it.product_id for it in cart.items}
-
-                if tool_name == "remove_items_from_cart":
-                    raw_ids = tool_args.get("product_ids", []) or []
-                    targets = []
-                    for pid in raw_ids:
-                        try: pid = int(pid)
-                        except Exception: continue
-                        if pid in current_ids: targets.append(pid)
-
-                    if not targets:
-                        response_to_user = "Esse item não está no seu carrinho. Quer que eu adicione alguma coisa?"
                     else:
-                        for pid in targets:
-                            await crud.modify_item_quantity_in_db_cart(session, cart.id, pid, 0)
+                        clear_pending(cart)
+                        qty_before = sum(item.quantity for item in cart.items)
+
+                        await crud.add_items_to_db_cart(session, cart.id, items_arg, bot_id=bot.id)
                         await session.refresh(cart, attribute_names=['items'])
-                        response_to_user = _build_cart_summary_message(cart, bot, "❌") + "\n\nAlgo mais?"
 
-                elif tool_name == "modify_item_quantity":
-                    try:
-                        pid = int(tool_args.get("product_id"))
-                        newq = int(tool_args.get("new_quantity"))
-                    except Exception: pid, newq = None, None
+                        qty_after = sum(item.quantity for item in cart.items)
 
-                    if pid is None or newq is None or pid not in current_ids:
-                        response_to_user = "Esse item não está no seu carrinho. Posso adicioná-lo para você?"
-                    else:
-                        await crud.modify_item_quantity_in_db_cart(session, cart.id, pid, newq)
-                        await session.refresh(cart, attribute_names=['items'])
-                        response_to_user = _build_cart_summary_message(cart, bot, "✏️") + "\n\nAlgo mais?"
+                        if qty_after > qty_before:
+                            product_ids = [i.get("product_id") for i in items_arg if isinstance(i, dict) and i.get("product_id") is not None]
+                            if not any(pid in (cart.last_suggestions or []) for pid in product_ids): cart.last_suggestions = None
 
-                elif tool_name == "update_item_observation":
-                    pid = tool_args.get("product_id")
-                    notes = tool_args.get("notes")
+                            response_to_user = (
+                                _build_cart_summary_message(cart, bot, "✅") +
+                                "\n\nAdicionado. Se quiser incluir algo mais é só falar!"
+                            )
+                        else:
+                            extracted_items_for_msg = await extract_potential_items(text_body)
+                            items_str = " e ".join(f"'{item}'" for item in extracted_items_for_msg) if extracted_items_for_msg else "O item que você pediu"
+                            response_to_user = f"Não encontrei *{items_str}* no nosso cardápio. 😕 Quer tentar outro item ou ver nossas sugestões?"
+                    break
 
-                    if pid and notes:
-                        await crud.update_item_notes(session, cart.id, int(pid), str(notes)[:200])
-                        await session.refresh(cart, attribute_names=['items'])
-                        response_to_user = _build_cart_summary_message(cart, bot, "✏️") + "\n\nObservação anotada! Mais alguma coisa?"
-                    else:
-                        response_to_user = "Não entendi qual item você quer alterar. Pode repetir?"
+                elif tool_name in ("remove_items_from_cart", "modify_item_quantity", "bulk_modify_quantities", "update_item_observation"):
+                    clear_pending(cart)
+                    await session.refresh(cart, attribute_names=['items'])
+                    current_ids = {it.product_id for it in cart.items}
 
-                else:
-                    # bulk_modify_quantities
-                    updates_raw = tool_args.get("updates", []) or []
-                    updates = []
-                    for upd in updates_raw:
+                    if tool_name == "remove_items_from_cart":
+                        raw_ids = tool_args.get("product_ids", []) or []
+                        targets = []
+                        for pid in raw_ids:
+                            try: pid = int(pid)
+                            except Exception: continue
+                            if pid in current_ids: targets.append(pid)
+
+                        if not targets:
+                            response_to_user = "Esse item não está no seu carrinho. Quer que eu adicione alguma coisa?"
+                        else:
+                            for pid in targets:
+                                await crud.modify_item_quantity_in_db_cart(session, cart.id, pid, 0)
+                            await session.refresh(cart, attribute_names=['items'])
+                            response_to_user = _build_cart_summary_message(cart, bot, "❌") + "\n\nAlgo mais?"
+
+                    elif tool_name == "modify_item_quantity":
                         try:
-                            pid, newq = int(upd.get("product_id")), int(upd.get("new_quantity"))
-                        except Exception: continue
-                        if pid in current_ids: updates.append({"product_id": pid, "new_quantity": newq})
+                            pid = int(tool_args.get("product_id"))
+                            newq = int(tool_args.get("new_quantity"))
+                        except Exception: pid, newq = None, None
 
-                    if not updates:
-                        response_to_user = "Não encontrei esses itens no seu carrinho. Posso sugerir opções para adicionar?"
+                        if pid is None or newq is None or pid not in current_ids:
+                            response_to_user = "Esse item não está no seu carrinho. Posso adicioná-lo para você?"
+                        else:
+                            await crud.modify_item_quantity_in_db_cart(session, cart.id, pid, newq)
+                            await session.refresh(cart, attribute_names=['items'])
+                            response_to_user = _build_cart_summary_message(cart, bot, "✏️") + "\n\nAlgo mais?"
+
+                    elif tool_name == "update_item_observation":
+                        pid = tool_args.get("product_id")
+                        notes = tool_args.get("notes")
+
+                        if pid and notes and int(pid) in current_ids:
+                            await crud.update_item_notes(session, cart.id, int(pid), str(notes)[:200])
+                            await session.refresh(cart, attribute_names=['items'])
+                            response_to_user = _build_cart_summary_message(cart, bot, "✏️") + "\n\nObservação anotada! Mais alguma coisa?"
+                        elif pid and notes:
+                            response_to_user = "Esse item não está no seu carrinho. Posso adicionar algo para você?"
+                        else:
+                            response_to_user = "Não entendi qual item você quer alterar. Pode repetir?"
+
                     else:
-                        for upd in updates:
-                            await crud.modify_item_quantity_in_db_cart(session, cart.id, upd["product_id"], upd["new_quantity"])
-                        await session.refresh(cart, attribute_names=['items'])
-                        response_to_user = _build_cart_summary_message(cart, bot, "✏️") + "\n\nAlgo mais?"
+                        # bulk_modify_quantities
+                        updates_raw = tool_args.get("updates", []) or []
+                        updates = []
+                        for upd in updates_raw:
+                            try:
+                                pid, newq = int(upd.get("product_id")), int(upd.get("new_quantity"))
+                            except Exception: continue
+                            if pid in current_ids: updates.append({"product_id": pid, "new_quantity": newq})
 
-            elif tool_name == "propose_and_confirm_action":
-                question = tool_args.get("confirmation_question")
-                proposed = tool_args.get("proposed_action", {}) or {}
-                ptool, pargs = proposed.get("tool_name"), proposed.get("tool_args") or proposed.get("parameters") or {}
-                normalized_args = None
-                if ptool == "add_items_to_cart":
-                    raw_items = pargs.get("items") or pargs.get("products")
-                    resolved = await _resolve_items_for_proposal(session, bot.id, raw_items) if raw_items else []
-                    if not resolved and question: resolved = await _items_from_confirmation_question(session, bot.id, question)
-                    if resolved: normalized_args = {"items": resolved}
-                elif ptool == "modify_item_quantity":
-                    pid, newq = pargs.get("product_id"), pargs.get("new_quantity")
-                    if pid is not None and newq is not None:
-                        chk = await session.execute(select(Product.id).where(Product.bot_id == bot.id, Product.id == int(pid)))
-                        if chk.scalars().first(): normalized_args = {"product_id": int(pid), "new_quantity": int(newq)}
+                        if not updates:
+                            response_to_user = "Não encontrei esses itens no seu carrinho. Posso sugerir opções para adicionar?"
+                        else:
+                            for upd in updates:
+                                await crud.modify_item_quantity_in_db_cart(session, cart.id, upd["product_id"], upd["new_quantity"])
+                            await session.refresh(cart, attribute_names=['items'])
+                            response_to_user = _build_cart_summary_message(cart, bot, "✏️") + "\n\nAlgo mais?"
+                    break
 
-                if question and ptool and normalized_args:
-                    sanitized_question = sanitize_llm_output(question)
-                    save_pending(cart, ptool, normalized_args, sanitized_question)
-                    response_to_user = sanitized_question
+                elif tool_name == "propose_and_confirm_action":
+                    question = tool_args.get("confirmation_question")
+                    proposed = tool_args.get("proposed_action", {}) or {}
+                    ptool, pargs = proposed.get("tool_name"), proposed.get("tool_args") or proposed.get("parameters") or {}
+                    normalized_args = None
+                    if ptool == "add_items_to_cart":
+                        raw_items = pargs.get("items") or pargs.get("products")
+                        resolved = await _resolve_items_for_proposal(session, bot.id, raw_items) if raw_items else []
+                        if not resolved and question: resolved = await _items_from_confirmation_question(session, bot.id, question)
+                        if resolved: normalized_args = {"items": resolved}
+                    elif ptool == "modify_item_quantity":
+                        pid, newq = pargs.get("product_id"), pargs.get("new_quantity")
+                        if pid is not None and newq is not None:
+                            chk = await session.execute(select(Product.id).where(Product.bot_id == bot.id, Product.id == int(pid)))
+                            if chk.scalars().first(): normalized_args = {"product_id": int(pid), "new_quantity": int(newq)}
+
+                    if question and ptool and normalized_args:
+                        sanitized_question = sanitize_llm_output(question)
+                        save_pending(cart, ptool, normalized_args, sanitized_question)
+                        response_to_user = sanitized_question
+                    else:
+                        response_to_user = "Não encontrei itens válidos para essa ação. 😔 Pode me dizer novamente o que deseja pedir?"
+
+                    # propose_and_confirm does its own send+commit — signal caller with None
+                    await send_whatsapp_message(contact_number, response_to_user, token=mctx.token, phone_id=mctx.phone_id)
+                    await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
+                    cart.last_activity_at = utcnow()
+                    session.add(cart)
+                    await session.commit()
+                    return None
+
+                elif tool_name in _CONVERSATIONAL_TOOLS:
+                    if tool_name == "answer_conversationally":
+                        response_to_user = sanitize_llm_output(tool_args.get("response_text", "Não entendi o que você quis dizer. Pode tentar de outra forma?"))
+                    continue
+
                 else:
-                    response_to_user = "Não encontrei itens válidos para essa ação. 😔 Pode me dizer novamente o que deseja pedir?"
-
-                # propose_and_confirm does its own send+commit — signal caller with None
-                await send_whatsapp_message(contact_number, response_to_user, token=mctx.token, phone_id=mctx.phone_id)
-                await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
-                cart.last_activity_at = utcnow()
-                session.add(cart)
-                await session.commit()
-                return None
-
-            else:
-                final_intent = intent
-                if final_intent in ("ADD", "ADD_ITEMS") and extracted_items:
-                    items_str = " e ".join(f"'{item}'" for item in extracted_items)
-                    response_to_user = f"Não encontrei *{items_str}* no nosso cardápio. 😕 Quer tentar outro item ou ver nossas sugestões?"
-                elif tool_name == "answer_conversationally":
-                    response_to_user = sanitize_llm_output(tool_args.get("response_text", "Não entendi o que você quis dizer. Pode tentar de outra forma?"))
-                else:
-                    response_to_user = "Não consegui entender sua solicitação. 😅 Pode reformular de outra forma?"
+                    final_intent = intent
+                    if final_intent in ("ADD", "ADD_ITEMS") and extracted_items:
+                        items_str = " e ".join(f"'{item}'" for item in extracted_items)
+                        response_to_user = f"Não encontrei *{items_str}* no nosso cardápio. 😕 Quer tentar outro item ou ver nossas sugestões?"
+                    else:
+                        response_to_user = "Não consegui entender sua solicitação. 😅 Pode reformular de outra forma?"
+                    break
 
         else:
             # AI returned no tool calls
@@ -937,6 +960,126 @@ async def _handle_shopping_intent(mctx: MessageContext, intent: str | None) -> s
                 response_to_user = "Desculpe, não consegui processar. 😅 Pode tentar de outra forma?"
 
     return response_to_user
+
+
+async def _process_contact_message(
+    session, bot, contact, contact_number,
+    text_body, current_token, current_phone_id,
+):
+    """Cart operations executed while holding the per-contact Redis lock."""
+    cart = await crud.get_or_create_cart(session, contact.id)
+
+    # Gate: Human takeover
+    if cart.human_takeover_active:
+        logger.info("Human takeover active for %s, bot skipping message", mask_phone(contact_number))
+        return
+
+    # Gate: Session expiry
+    mctx = MessageContext(
+        session=session, bot=bot, contact=contact, cart=cart,
+        contact_number=contact_number, text_body=text_body,
+        token=current_token, phone_id=current_phone_id
+    )
+    if await _handle_session_expiry(mctx):
+        return
+
+    # ▼▼▼ INÍCIO DA NOVA LÓGICA DE RESET DE ESTADO ▼▼▼
+    # Se o cliente realizar uma ação de compra enquanto estivermos finalizando,
+    # o bot entende que ele voltou a "fazer o pedido"
+    if cart.state in [CartState.AWAITING_CEP, CartState.AWAITING_NUMBER_COMPLEMENT, CartState.AWAITING_CUSTOMER_NAME] and not is_likely_shopping_intent(text_body):
+        logger.info("State %s detected, message not a shopping intent, skipping classification", cart.state)
+        intent = None # Definimos a intenção como None para pular a lógica de reset
+    else:
+        # Caso contrário, executamos a classificação de intenção normalmente
+        await session.refresh(cart, attribute_names=["items"])
+        cart_items_for_intent = [{"id": item.product_id, "name": item.product.name} for item in cart.items]
+        intent = await resolve_intent(text_body, cart, cart_items_for_intent)
+        logger.info("[INTENT] resolved intent: %s", intent)
+
+    # INTERCEPTADOR DE BOAS-VINDAS COM IMAGEM
+    if intent == "GREETING_OR_QUESTION" and cart.state == CartState.GREETING:
+        await _send_welcome_with_menu(session, bot, cart, contact_number, text_body)
+        logger.info("[GREETING] Cart %s state updated to SHOPPING", cart.id)
+        return
+
+    # A lógica de reset de estado continua a mesma, mas agora só será
+    # acionada por intenções de compra genuínas.
+    intents_that_resume_shopping = ["ADD", "REMOVE", "MODIFY", "REQUEST_SUGGESTION", "SHOW_CART", "CLEAR_CART", "ADD_ITEMS", "REMOVE_ITEMS"]
+    finalizing_states = [CartState.AWAITING_CEP, CartState.AWAITING_NUMBER_COMPLEMENT, CartState.AWAITING_ADDRESS_CONFIRMATION, CartState.AWAITING_CUSTOMER_NAME]
+
+    if intent in intents_that_resume_shopping and cart.state in finalizing_states:
+        logger.info("Customer resumed shopping (intent=%s), resetting state from %s to GREETING", intent, cart.state)
+        cart.state = CartState.GREETING
+        await session.flush()
+
+    # Checkout FSM: dispatch to state handlers
+    checkout_result = await _handle_delivery_method(mctx)
+    if checkout_result is not None:
+        return
+    checkout_result = await _handle_cep(mctx)
+    if checkout_result is not None:
+        return
+    checkout_result = await _handle_number_complement(mctx)
+    if checkout_result is not None:
+        return
+    checkout_result = await _handle_address_confirmation(mctx, intent)
+    if checkout_result is not None:
+        return
+    checkout_result = await _handle_customer_name(mctx)
+    if checkout_result is not None:
+        return
+    checkout_result = await _handle_payment_method(mctx)
+    if checkout_result is not None:
+        return
+
+    # Intent handlers: confirm/negate, clear, show, finish
+    result = await _handle_confirm_negate(mctx, intent)
+    if result is not None:
+        return
+
+    response_to_user = "Não entendi bem. 😅 Pode tentar de outra forma?"
+
+    clear_result = await _handle_clear_cart(mctx, intent)
+    if clear_result is not None:
+        response_to_user = clear_result
+    elif _handle_show_cart(mctx, intent) is not None:
+        response_to_user = _handle_show_cart(mctx, intent)
+    elif intent == "FINISH_ORDER":
+        finish_result = await _handle_finish_order(mctx, intent)
+        if finish_result is not None:
+            response_to_user = finish_result
+            # _handle_finish_order does its own early returns for empty cart / min order;
+            # for the rest, we fall through to the final send+commit block below.
+    else:
+        # Shopping logic: ADD, REMOVE, MODIFY, REQUEST_SUGGESTION
+        shopping_result = await _handle_shopping_intent(mctx, intent)
+        if shopping_result is None:
+            # propose_and_confirm path already did send+commit
+            return
+        response_to_user = shopping_result
+
+    cart.last_activity_at = utcnow()
+    session.add(cart)
+
+
+    await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
+    await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
+    await session.commit()
+    logger.info("Message processed and response sent")
+
+
+def _classify_error_message(exc: Exception) -> str:
+    """Return a user-facing error message based on the exception type."""
+    exc_str = str(exc).lower()
+    if isinstance(exc, (httpx.TimeoutException, httpx.ConnectError, ConnectionError, TimeoutError)):
+        return "Estamos com dificuldade de conexão no momento. Por favor, tente novamente em alguns instantes."
+    if "database" in exc_str or "sqlalchemy" in type(exc).__name__.lower():
+        return "Nosso sistema está temporariamente indisponível. Por favor, tente novamente em alguns instantes."
+    if "openai" in type(exc).__name__.lower() or "rate_limit" in exc_str:
+        return "Nosso assistente está com dificuldade no momento. Tente enviar sua mensagem novamente."
+    if "mercadopago" in exc_str or "payment" in exc_str or "pix" in exc_str:
+        return "Tivemos um problema com o sistema de pagamento. Por favor, tente novamente ou escolha outra forma de pagamento."
+    return "Desculpe, ocorreu um erro. Por favor, tente novamente em alguns instantes."
 
 
 async def process_whatsapp_message(ctx, data: Dict[str, Any]):
@@ -984,164 +1127,42 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
                 return
 
             contact = await crud.get_or_create_contact(session, bot.id, contact_number)
-            cart = await crud.get_or_create_cart(session, contact.id)
 
-            # Gate: Human takeover
-            if cart.human_takeover_active:
-                logger.info("Human takeover active for %s, bot skipping message", mask_phone(contact_number))
-                return
-
-            # Gate: Session expiry
-            mctx = MessageContext(
-                session=session, bot=bot, contact=contact, cart=cart,
-                contact_number=contact_number, text_body=text_body,
-                token=current_token, phone_id=current_phone_id
-            )
-            if await _handle_session_expiry(mctx):
-                return
-
-            # ▼▼▼ INÍCIO DA NOVA LÓGICA DE RESET DE ESTADO ▼▼▼
-            # Se o cliente realizar uma ação de compra enquanto estivermos finalizando,
-            # o bot entende que ele voltou a "fazer o pedido"    
-            if cart.state in [CartState.AWAITING_CEP, CartState.AWAITING_NUMBER_COMPLEMENT, CartState.AWAITING_CUSTOMER_NAME] and not is_likely_shopping_intent(text_body):
-                logger.info("State %s detected, message not a shopping intent, skipping classification", cart.state)
-                intent = None # Definimos a intenção como None para pular a lógica de reset
-            else:
-                # Caso contrário, executamos a classificação de intenção normalmente
-                await session.refresh(cart, attribute_names=["items"])
-                cart_items_for_intent = [{"id": item.product_id, "name": item.product.name} for item in cart.items]
-                intent = await resolve_intent(text_body, cart, cart_items_for_intent)
-                logger.info("[INTENT] resolved intent: %s", intent)
-                
-            # INTERCEPTADOR DE BOAS-VINDAS COM IMAGEM
-            if intent == "GREETING_OR_QUESTION" and cart.state == CartState.GREETING:
-                # Busca produtos reais do cardápio para montar um exemplo dinâmico
-                all_products = await crud.get_products_by_bot_id(session, bot.id)
-                sample_products = [p for p in all_products if p.is_available]
-                if sample_products and len(sample_products) >= 2:
-                    picks = random.sample(sample_products, 2)
-                    example_text = f'_Ex: "Quero um(a) {picks[0].name} e um(a) {picks[1].name}"_'
-                elif sample_products:
-                    example_text = f'_Ex: "Quero um(a) {sample_products[0].name}"_'
-                else:
-                    example_text = '_Ex: "Quero uma pizza de calabresa e uma coca-cola"_'
-
-                response_to_user = (
-                    f"Olá! Seja bem-vindo ao *{bot.restaurant_name or 'nosso restaurante'}*! 😊\n\n"
-                    "Confira o cardápio acima e me diga o que vai querer. Pode escrever ou mandar um áudio!\n\n"
-                    f"{example_text}"
+            try:
+                async with contact_lock(contact.id):
+                    await _process_contact_message(
+                        session, bot, contact, contact_number,
+                        text_body, current_token, current_phone_id,
+                    )
+            except LockError:
+                logger.warning("Lock timeout for contact_id=%s", contact.id)
+                await send_whatsapp_message(
+                    to=contact_number,
+                    message="Estou processando sua mensagem anterior. Aguarde um instante e tente novamente.",
+                    token=current_token,
+                    phone_id=current_phone_id,
                 )
-                menu_url = bot.menu_url
-                # --- LÓGICA DE DETECÇÃO DE TIPO (CORREÇÃO) ---
-                media_type = None
-                if menu_url:
-                    # Se terminar com .pdf, é documento. Senão, assumimos imagem.
-                    if menu_url.lower().endswith(".pdf"):
-                        media_type = "document"
-                    else:
-                        media_type = "image"
-                # ---------------------------------------------
-                
-
-                await send_whatsapp_message(to=contact_number, message=response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id, media_url=menu_url, media_type=media_type)
-                await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, "Enviou Cardápio (Imagem)")
-                
-                # ▼▼▼ CORREÇÃO 2: Atualização robusta do estado e tempo ▼▼▼
-                cart.state = CartState.SHOPPING
-                cart.last_activity_at = utcnow() # Atualiza o tempo para não expirar logo em seguida
-                session.add(cart)
-                await session.commit()
-                logger.info("[GREETING] Cart %s state updated to SHOPPING", cart.id)
-                return
-
-            # A lógica de reset de estado continua a mesma, mas agora só será
-            # acionada por intenções de compra genuínas.
-            intents_that_resume_shopping = ["ADD", "REMOVE", "MODIFY", "REQUEST_SUGGESTION", "SHOW_CART", "CLEAR_CART", "ADD_ITEMS", "REMOVE_ITEMS"]
-            finalizing_states = [CartState.AWAITING_CEP, CartState.AWAITING_NUMBER_COMPLEMENT, CartState.AWAITING_ADDRESS_CONFIRMATION, CartState.AWAITING_CUSTOMER_NAME]
-
-            if intent in intents_that_resume_shopping and cart.state in finalizing_states:
-                logger.info("Customer resumed shopping (intent=%s), resetting state from %s to GREETING", intent, cart.state)
-                cart.state = CartState.GREETING
-                await session.flush()
-            
-            # Checkout FSM: dispatch to state handlers
-            checkout_result = await _handle_delivery_method(mctx)
-            if checkout_result is not None:
-                return
-            checkout_result = await _handle_cep(mctx)
-            if checkout_result is not None:
-                return
-            checkout_result = await _handle_number_complement(mctx)
-            if checkout_result is not None:
-                return
-            checkout_result = await _handle_address_confirmation(mctx, intent)
-            if checkout_result is not None:
-                return
-            checkout_result = await _handle_customer_name(mctx)
-            if checkout_result is not None:
-                return
-            checkout_result = await _handle_payment_method(mctx)
-            if checkout_result is not None:
-                return
-
-            # Intent handlers: confirm/negate, clear, show, finish
-            result = await _handle_confirm_negate(mctx, intent)
-            if result is not None:
-                return
-
-            response_to_user = "Não entendi bem. 😅 Pode tentar de outra forma?"
-
-            clear_result = await _handle_clear_cart(mctx, intent)
-            if clear_result is not None:
-                response_to_user = clear_result
-            elif _handle_show_cart(mctx, intent) is not None:
-                response_to_user = _handle_show_cart(mctx, intent)
-            elif intent == "FINISH_ORDER":
-                finish_result = await _handle_finish_order(mctx, intent)
-                if finish_result is not None:
-                    response_to_user = finish_result
-                    # _handle_finish_order does its own early returns for empty cart / min order;
-                    # for the rest, we fall through to the final send+commit block below.
-            else:
-                # Shopping logic: ADD, REMOVE, MODIFY, REQUEST_SUGGESTION
-                shopping_result = await _handle_shopping_intent(mctx, intent)
-                if shopping_result is None:
-                    # propose_and_confirm path already did send+commit
-                    return
-                response_to_user = shopping_result
-
-            cart.last_activity_at = utcnow()
-            session.add(cart)
-            
-            
-            await send_whatsapp_message(contact_number, response_to_user, token=bot.whatsapp_token, phone_id=bot.phone_number_id)
-            await crud.add_interaction_to_history(session, bot.id, contact_number, text_body, response_to_user)
-            await session.commit()
-            logger.info("Message processed and response sent")
 
         except Exception as e:
-            logger.error("Critical error processing message: %s", e)
-            
+            logger.error("Critical error processing message: %s", e, exc_info=True)
+
             # Tenta reverter o banco para não deixar travado
             if 'session' in locals() and session.is_active:
                 try:
                     await session.rollback()
-                except: pass
-            
-            # ▼▼▼ LÓGICA SEGURA DE ENVIO DE ERRO ▼▼▼
-            # Verifica se:
-            # 1. Temos o número do cliente ('contact_number' existe)
-            # 2. Temos o token salvo na memória ('current_token' existe)
+                except Exception:
+                    pass
+
+            # Envia mensagem de erro classificada ao usuário
             if 'contact_number' in locals() and 'current_token' in locals() and current_token:
                  try:
                      await send_whatsapp_message(
                          to=contact_number,
-                         message="Desculpe, ocorreu um erro. 😔 Por favor, tente novamente em alguns instantes.",
-                         token=current_token,      # Usa a variável local (segura)
-                         phone_id=current_phone_id # Usa a variável local (segura)
+                         message=_classify_error_message(e),
+                         token=current_token,
+                         phone_id=current_phone_id
                      )
                  except Exception as send_err:
-                     # Se falhar aqui (ex: erro de rede), apenas loga e não quebra o app
                      logger.error("Failed to send error message to user: %s", send_err)
 
 
@@ -1224,7 +1245,7 @@ async def send_whatsapp_message(
             response = await client.post(url, headers=headers, json=data)
             response.raise_for_status()
         except httpx.HTTPStatusError as e:
-            logger.error("Failed to send WhatsApp message: status=%s", e.response.status_code)
+            logger.error("Failed to send WhatsApp message: status=%s body=%s", e.response.status_code, e.response.text)
 
 async def mark_message_as_read(message_id: str, token: str, phone_id: str):
     url = f"https://graph.facebook.com/v20.0/{phone_id}/messages"
@@ -1279,7 +1300,7 @@ async def _execute_pending_action(session: AsyncSession, cart: ShoppingCart, bot
             clear_pending(cart)
             return "Os itens propostos não foram encontrados em nosso cardápio. Quer ver outras opções?"
             
-        await crud.add_items_to_db_cart(session, cart.id, valid_items)
+        await crud.add_items_to_db_cart(session, cart.id, valid_items, bot_id=bot_id)
         await session.flush()
         await session.refresh(cart, attribute_names=['items'])
         clear_pending(cart)
@@ -1510,7 +1531,8 @@ async def handle_payment_notification(order_id: int, request: Request):
                 if db_status == OrderStatus.PAID:
                     msg = f"Pagamento confirmado! Seu pedido foi recebido e já está sendo preparado. Obrigado pela preferência!"
                     
-                    phone_dest = order.contact.phone_number if order.contact else None
+                    phone_raw = order.contact.phone_number if order.contact else None
+                    phone_dest = f"55{phone_raw}" if phone_raw and not phone_raw.startswith("55") else phone_raw
 
                     if phone_dest:
                         await send_whatsapp_message(

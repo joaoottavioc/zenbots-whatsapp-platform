@@ -24,6 +24,7 @@ from app.crud import (
     is_message_processed,
     upsert_subscription,
     find_relevant_products,
+    add_items_to_db_cart,
 )
 from app.schemas import BotUpdate
 
@@ -436,3 +437,77 @@ class TestFindRelevantProducts:
         result = await find_relevant_products(session, bot_id=1, extracted_items=[])
         assert result == []
         session.execute.assert_not_called()
+
+
+# ===========================================================================
+# TestAddItemsBotIdValidation
+# ===========================================================================
+
+class TestAddItemsBotIdValidation:
+
+    def _make_product(self, product_id: int, bot_id: int = 1, is_available: bool = True):
+        p = MagicMock()
+        p.id = product_id
+        p.bot_id = bot_id
+        p.is_available = is_available
+        return p
+
+    def _make_cart_for_add(self, cart_id: int = 100):
+        cart = MagicMock()
+        cart.id = cart_id
+        cart.items = []
+        return cart
+
+    async def test_add_items_rejects_product_from_wrong_bot(self):
+        """A product belonging to a different bot_id is silently skipped."""
+        session = _make_session()
+        cart = self._make_cart_for_add()
+        product = self._make_product(product_id=10, bot_id=2, is_available=True)
+
+        # session.get returns cart for first call, product for second
+        session.get = AsyncMock(side_effect=[cart, product])
+
+        result = await add_items_to_db_cart(
+            session, cart_id=100,
+            items_to_add=[{"product_id": 10, "quantity": 1}],
+            bot_id=1,  # product belongs to bot 2, we expect bot 1
+        )
+
+        # Product should NOT have been added
+        session.add.assert_not_called()
+        session.flush.assert_awaited_once()
+
+    async def test_add_items_without_bot_id_preserves_old_behavior(self):
+        """When bot_id is None (default), any available product is accepted."""
+        session = _make_session()
+        cart = self._make_cart_for_add()
+        product = self._make_product(product_id=10, bot_id=99, is_available=True)
+
+        session.get = AsyncMock(side_effect=[cart, product])
+
+        result = await add_items_to_db_cart(
+            session, cart_id=100,
+            items_to_add=[{"product_id": 10, "quantity": 1}],
+            # bot_id not passed → None → skip bot_id check
+        )
+
+        # Product SHOULD be added (new item)
+        session.add.assert_called_once()
+        session.flush.assert_awaited_once()
+
+    async def test_add_items_accepts_product_from_correct_bot(self):
+        """A product belonging to the correct bot_id is accepted."""
+        session = _make_session()
+        cart = self._make_cart_for_add()
+        product = self._make_product(product_id=10, bot_id=1, is_available=True)
+
+        session.get = AsyncMock(side_effect=[cart, product])
+
+        result = await add_items_to_db_cart(
+            session, cart_id=100,
+            items_to_add=[{"product_id": 10, "quantity": 1}],
+            bot_id=1,
+        )
+
+        session.add.assert_called_once()
+        session.flush.assert_awaited_once()

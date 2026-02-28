@@ -533,8 +533,11 @@ async def update_order_status(
             contact = updated_order.contact
             bot = updated_order.bot
             if contact and bot and bot.whatsapp_token and bot.phone_number_id:
+                phone = contact.phone_number
+                if not phone.startswith("55"):
+                    phone = "55" + phone
                 await send_whatsapp_message(
-                    to=contact.phone_number,
+                    to=phone,
                     message=notify_msg,
                     token=bot.whatsapp_token,
                     phone_id=bot.phone_number_id,
@@ -740,16 +743,20 @@ async def complete_onboarding(
                 "client_id": app_id,
                 "client_secret": app_secret,
                 "code": data.code,
-                "redirect_uri": data.redirect_uri
             }
             try:
                 resp = await client.get(token_url, params=params)
-                if "access_token" in resp.json():
-                    final_token = resp.json()["access_token"]
+                resp_data = resp.json()
+                logger.info("Code exchange response: %s", resp_data)
+                if "access_token" in resp_data:
+                    final_token = resp_data["access_token"]
                 else:
-                    logger.error("Code exchange failed")
+                    logger.error("Code exchange failed: %s", resp_data)
                     raise HTTPException(status_code=400, detail="Falha na validação do login.")
+            except HTTPException:
+                raise
             except Exception as e:
+                logger.error("Meta communication error: %s", e)
                 raise HTTPException(status_code=500, detail="Erro de comunicação com a Meta.")
 
         # CASO B: Veio Token Curto (Fallback/Reconnect)
@@ -764,14 +771,19 @@ async def complete_onboarding(
             }
             try:
                 resp = await client.get(exchange_url, params=params)
-                if "access_token" in resp.json():
-                    final_token = resp.json()["access_token"]
+                resp_data = resp.json()
+                logger.info("Token exchange response: %s", resp_data)
+                if "access_token" in resp_data:
+                    final_token = resp_data["access_token"]
                     logger.info("Long-lived token obtained")
                 else:
-                    logger.error("Token exchange failed")
+                    logger.error("Token exchange failed: %s", resp_data)
                     raise HTTPException(status_code=400, detail="Sessão expirada. Tente novamente.")
+            except HTTPException:
+                raise
             except Exception as e:
-                 raise HTTPException(status_code=500, detail="Erro ao renovar sessão.")
+                logger.error("Token exchange communication error: %s", e)
+                raise HTTPException(status_code=500, detail="Erro ao renovar sessão.")
 
         else:
             raise HTTPException(status_code=400, detail="Nenhuma credencial recebida.")

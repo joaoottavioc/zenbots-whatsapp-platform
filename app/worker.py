@@ -2,10 +2,20 @@
 import os
 import logging
 from arq.connections import RedisSettings
+from arq.cron import cron
 # Importamos a função pesada que já existe
 from app.whatsapp import process_whatsapp_message
+from app.database import async_session
+from app.crud import cancel_expired_pix_orders
 
 logger = logging.getLogger(__name__)
+
+
+async def run_cancel_expired_pix_orders(ctx):
+    async with async_session() as session:
+        count = await cancel_expired_pix_orders(session)
+        if count:
+            logger.info("Cron: canceled %d expired PIX orders", count)
 
 # Configurações do Redis (Pega do env ou usa default)
 # Note o database=1 para separar da fila do RateLimit
@@ -24,6 +34,11 @@ class WorkerSettings:
 
     # Funções que este worker sabe executar
     functions = [process_whatsapp_message]
+
+    # Cron jobs — cancel expired PIX orders every 5 minutes
+    cron_jobs = [
+        cron(run_cancel_expired_pix_orders, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}),
+    ]
 
     # Configurações extras
     max_jobs = 10  # Quantas mensagens processar ao mesmo tempo por worker
