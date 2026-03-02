@@ -10,9 +10,12 @@ Ref: https://www.mercadopago.com.br/developers/en/docs/your-integrations/notific
 
 import hashlib
 import hmac
+import logging
 import os
 
 from fastapi import HTTPException, Request
+
+logger = logging.getLogger(__name__)
 
 
 MP_WEBHOOK_SECRET = os.getenv("MP_WEBHOOK_SECRET", "")
@@ -72,4 +75,5 @@ async def require_mp_signature(request: Request, data_id: str) -> None:
     x_request_id = request.headers.get("x-request-id", "")
 
     if not verify_mp_signature(x_signature, x_request_id, data_id, secret):
+        logger.warning("Invalid MP webhook signature from IP %s", request.client.host if request.client else "unknown")
         raise HTTPException(status_code=403, detail="Invalid webhook signature")

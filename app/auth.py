@@ -208,7 +208,8 @@ async def get_user_from_token(token: str, session: AsyncSession) -> Optional[mod
         email: Optional[str] = payload.get("sub")
         if email is None:
             return None
-    except JWTError:
+    except JWTError as e:
+        logger.debug("JWT decode failed in get_user_from_token: %s", type(e).__name__)
         return None
 
     return await crud.get_user_by_email(session, email=email)

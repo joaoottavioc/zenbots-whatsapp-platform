@@ -1,0 +1,247 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "*.md"
+      - "docs/**"
+      - "tech_debt/**"
+      - "plan/**"
+      - "infra/**"
+
+concurrency:
+  group: deploy-prod
+  # Do NOT cancel in-progress prod deploys
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: zenbots/app
+  ECS_CLUSTER: zenbots-prod
+  ECS_SERVICE_BACKEND: zenbots-prod-backend
+  ECS_SERVICE_WORKER: zenbots-prod-worker
+
+jobs:
+  # ── Build & push to ECR ───────────────────────────────────────
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_PROD_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr-login
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Set image tag
+        id: meta
+        run: echo "tag=prod-${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: backend
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }}
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest-prod
+          cache-from: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest-prod
+          cache-to: type=inline
+
+      - name: Build and push worker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: worker
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }}-worker
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest-prod-worker
+          cache-from: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest-prod
+          cache-to: type=inline
+
+      - name: Build and push migrations image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: migrations
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }}-migrations
+          cache-from: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest-prod
+          cache-to: type=inline
+
+  # ── Manual approval gate ──────────────────────────────────────
+  approval:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: production  # ← GitHub Environment with required reviewers
+    steps:
+      - name: Approval received
+        run: echo "Production deployment approved for ${{ needs.build-and-push.outputs.image-tag }}"
+
+  # ── Run database migrations (with RDS snapshot) ───────────────
+  migrate:
+    needs: approval
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_PROD_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Create pre-migration RDS snapshot
+        run: |
+          SNAPSHOT_ID="pre-deploy-$(date +%Y%m%d-%H%M%S)"
+          echo "Creating RDS snapshot: $SNAPSHOT_ID"
+
+          aws rds create-db-snapshot \
+            --db-instance-identifier zenbots-prod \
+            --db-snapshot-identifier "$SNAPSHOT_ID"
+
+          echo "Waiting for snapshot to be available..."
+          aws rds wait db-snapshot-available \
+            --db-snapshot-identifier "$SNAPSHOT_ID"
+
+          echo "Snapshot $SNAPSHOT_ID ready — safe to proceed with migration"
+
+      - name: Run database migration via ECS RunTask
+        run: |
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "$ECS_CLUSTER" \
+            --task-definition zenbots-prod-migrations \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ secrets.PROD_PRIVATE_SUBNETS }}],securityGroups=[${{ secrets.PROD_ECS_SECURITY_GROUP }}],assignPublicIp=DISABLED}" \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          echo "Migration task: $TASK_ARN"
+
+          aws ecs wait tasks-stopped \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "$TASK_ARN"
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "$TASK_ARN" \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "::error::Migration failed with exit code $EXIT_CODE"
+            echo "::warning::RDS snapshot available for rollback"
+
+            TASK_ID=$(echo "$TASK_ARN" | awk -F'/' '{print $NF}')
+            aws logs get-log-events \
+              --log-group-name "/ecs/zenbots-prod" \
+              --log-stream-name "migrations/migrations/$TASK_ID" \
+              --query 'events[*].message' \
+              --output text || echo "Could not retrieve migration logs"
+
+            exit 1
+          fi
+
+          echo "Migration completed successfully"
+
+  # ── Deploy ECS services (zero-downtime) ───────────────────────
+  deploy:
+    needs: migrate
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_PROD_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy backend service (zero-downtime)
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE_BACKEND" \
+            --force-new-deployment \
+            --deployment-configuration "minimumHealthyPercent=100,maximumPercent=200"
+
+      - name: Deploy worker service
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE_WORKER" \
+            --force-new-deployment \
+            --deployment-configuration "minimumHealthyPercent=100,maximumPercent=200"
+
+      - name: Wait for services to stabilize
+        run: |
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE_BACKEND" "$ECS_SERVICE_WORKER"
+        timeout-minutes: 10
+
+  # ── Smoke test ────────────────────────────────────────────────
+  smoke-test:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Full readiness check
+        run: |
+          HEALTH_URL="${{ secrets.PROD_API_URL }}/health/ready"
+
+          for i in {1..10}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed (full readiness)"
+              exit 0
+            fi
+            echo "Attempt $i/10: HTTP $STATUS, retrying in 15s..."
+            sleep 15
+          done
+
+          echo "::error::Health check failed after 10 attempts"
+          exit 1
+
+  # ── Notification ──────────────────────────────────────────────
+  notify:
+    needs: [build-and-push, smoke-test]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Deployment notification
+        run: |
+          TAG="${{ needs.build-and-push.outputs.image-tag }}"
+          if [ "${{ needs.smoke-test.result }}" = "success" ]; then
+            echo "::notice::Production deployment SUCCEEDED — $TAG (${{ github.sha }})"
+            # Future: Post to Slack webhook
+            # curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+            #   -H 'Content-Type: application/json' \
+            #   -d "{\"text\": \"Production deploy succeeded: $TAG\"}"
+          else
+            echo "::error::Production deployment FAILED — $TAG (${{ github.sha }})"
+            # Future: Post alert to Slack webhook
+            # curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+            #   -H 'Content-Type: application/json' \
+            #   -d "{\"text\": \"ALERT: Production deploy FAILED: $TAG\"}"
+          fi

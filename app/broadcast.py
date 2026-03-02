@@ -15,6 +15,7 @@ async def broadcast_order_update(type: str, data: dict, bot_id: int = None):
     type: 'new_order', 'status_change', etc.
     bot_id: when provided, publishes to 'dashboard_events:{bot_id}' instead of the global channel.
     """
+    r = None
     try:
         # Conexão rápida apenas para publicar
         r = redis.from_url(
@@ -27,7 +28,9 @@ async def broadcast_order_update(type: str, data: dict, bot_id: int = None):
         }
         channel = f"dashboard_events:{bot_id}" if bot_id else "dashboard_events"
         await r.publish(channel, json.dumps(message))
-        await r.aclose()
         logger.info("Broadcast sent: type=%s, channel=%s", type, channel)
     except Exception as e:
-        logger.warning("Broadcast failed for type=%s: %s", type, e)
+        logger.error("Broadcast failed for type=%s bot_id=%s: %s", type, bot_id, e)
+    finally:
+        if r is not None:
+            await r.aclose()

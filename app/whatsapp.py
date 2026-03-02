@@ -39,7 +39,10 @@ from app.sanitize import sanitize_llm_output
 from app.encryption import decrypt_value
 from app.distributed_lock import contact_lock
 from redis.exceptions import LockError
+from app.context import new_trace_id, current_bot_id, current_contact_id
+from app.monitoring import record_api_usage, record_business_event, record_error
 import logging
+import time as _time
 
 logger = logging.getLogger(__name__)
 
@@ -1083,6 +1086,7 @@ def _classify_error_message(exc: Exception) -> str:
 
 
 async def process_whatsapp_message(ctx, data: Dict[str, Any]):
+    trace_id = new_trace_id()
     async with async_session() as session:
         try:
             # 1. Extração segura dos dados
@@ -1105,11 +1109,13 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
             incoming_phone_id = value["metadata"]["phone_number_id"]
             bot_display_phone = value["metadata"]["display_phone_number"]
             logger.info("Message received from %s to phone_id %s", mask_phone(contact_number), incoming_phone_id)
+            await record_business_event("message_received")
 
             # Gate: Find bot
             bot = await _find_bot(session, incoming_phone_id, bot_display_phone)
             if not bot:
                 return
+            current_bot_id.set(bot.id)
 
             # Gate: Subscription check
             if await _check_subscription(session, bot, contact_number):
@@ -1127,6 +1133,7 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
                 return
 
             contact = await crud.get_or_create_contact(session, bot.id, contact_number)
+            current_contact_id.set(contact.id)
 
             try:
                 async with contact_lock(contact.id):
@@ -1145,6 +1152,8 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
 
         except Exception as e:
             logger.error("Critical error processing message: %s", e, exc_info=True)
+            await record_business_event("message_failed")
+            await record_error("whatsapp", type(e).__name__)
 
             # Tenta reverter o banco para não deixar travado
             if 'session' in locals() and session.is_active:
@@ -1240,11 +1249,16 @@ async def send_whatsapp_message(
             "text": {"body": message}
         }
     
+    _start = _time.perf_counter_ns()
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             response = await client.post(url, headers=headers, json=data)
             response.raise_for_status()
+            _elapsed = (_time.perf_counter_ns() - _start) // 1_000_000
+            await record_api_usage(None, "whatsapp", "send_message", cost_usd=0.05, duration_ms=_elapsed)
         except httpx.HTTPStatusError as e:
+            _elapsed = (_time.perf_counter_ns() - _start) // 1_000_000
+            await record_api_usage(None, "whatsapp", "send_message", cost_usd=0.0, duration_ms=_elapsed, success=False)
             logger.error("Failed to send WhatsApp message: status=%s body=%s", e.response.status_code, e.response.text)
 
 async def mark_message_as_read(message_id: str, token: str, phone_id: str):

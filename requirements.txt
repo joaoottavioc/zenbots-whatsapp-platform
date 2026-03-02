@@ -29,6 +29,7 @@ mercadopago
 pytz
 redis
 arq
+python-json-logger==2.0.7
 fastapi-mail==1.4.1
 boto3
 alembic

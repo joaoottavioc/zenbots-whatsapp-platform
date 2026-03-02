@@ -1,9 +1,12 @@
 # app/semantic_router.py
 from __future__ import annotations
+import logging
 from typing import List, Tuple, Dict
 import math
 
 from app.embedding_service import embed_router  # ✅ centralizado
+
+logger = logging.getLogger(__name__)
 
 def cos_sim(u: List[float], v: List[float]) -> float:
     return sum(a*b for a,b in zip(u,v))
@@ -37,8 +40,10 @@ _EMB_CACHE: Dict[str, List[List[float]]] = {}
 
 async def _ensure_proto_embeddings():
     if _EMB_CACHE: return
+    logger.debug("Populating semantic router embedding cache (%d intents)", len(PROTOS))
     for intent, phrases in PROTOS.items():
         _EMB_CACHE[intent] = await embed_router(phrases)
+    logger.debug("Semantic router cache populated")
 
 def _argmax(xs: List[float]) -> Tuple[int, float]:
     i = max(range(len(xs)), key=lambda k: xs[k])
@@ -53,6 +58,7 @@ async def semantic_intent(text: str) -> Tuple[str, float, str]:
         i, s = _argmax(sims)
         if s > best_score:
             best_intent, best_score, best_phrase = intent, s, PROTOS[intent][i]
+    logger.debug("Semantic intent: %s (score=%.3f, phrase='%s')", best_intent, best_score, best_phrase)
     return best_intent, best_score, best_phrase
 
 # (se você usa o detector de "SHOW_CART", reimporte embed_router ali também)

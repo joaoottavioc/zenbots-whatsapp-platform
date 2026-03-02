@@ -1,9 +1,13 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlmodel.ext.asyncio.session import AsyncSession
 from app.database import get_session
 from app.auth import get_current_user
 from app.models import User
 from app import crud
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/takeover",
@@ -21,6 +25,7 @@ async def activate_takeover(
     success = await crud.set_human_takeover_by_phone(session, bot_id, phone_number, active=True)
     if not success:
         raise HTTPException(status_code=404, detail="Cliente ou bot não encontrado.")
+    logger.info("Human takeover activated: bot_id=%s phone=%s", bot_id, phone_number)
     return {"message": f"Atendimento humano ativado para {phone_number}."}
 
 @router.post("/{bot_id}/{phone_number}/deactivate", status_code=200)
@@ -33,4 +38,5 @@ async def deactivate_takeover(
     success = await crud.set_human_takeover_by_phone(session, bot_id, phone_number, active=False)
     if not success:
         raise HTTPException(status_code=404, detail="Cliente ou bot não encontrado.")
+    logger.info("Human takeover deactivated: bot_id=%s phone=%s", bot_id, phone_number)
     return {"message": f"Bot reativado para {phone_number}."}

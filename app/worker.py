@@ -3,6 +3,8 @@ import os
 import logging
 from arq.connections import RedisSettings
 from arq.cron import cron
+from app.logging_config import setup_logging
+from app.monitoring import start_flush_task, stop_flush_task, run_aggregate_daily_costs
 # Importamos a função pesada que já existe
 from app.whatsapp import process_whatsapp_message
 from app.database import async_session
@@ -35,9 +37,10 @@ class WorkerSettings:
     # Funções que este worker sabe executar
     functions = [process_whatsapp_message]
 
-    # Cron jobs — cancel expired PIX orders every 5 minutes
+    # Cron jobs — cancel expired PIX orders every 5 minutes + daily cost aggregation at 3 AM UTC
     cron_jobs = [
         cron(run_cancel_expired_pix_orders, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}),
+        cron(run_aggregate_daily_costs, hour={3}, minute={0}),
     ]
 
     # Configurações extras
@@ -60,8 +63,11 @@ class WorkerSettings:
 
     # Executado quando o worker inicia
     async def on_startup(self):
+        setup_logging()
+        start_flush_task()
         logger.info("Message worker started, waiting for jobs")
 
     # Executado quando o worker desliga
     async def on_shutdown(self):
+        await stop_flush_task()
         logger.info("Message worker shutting down")

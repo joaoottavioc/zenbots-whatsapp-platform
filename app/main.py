@@ -1,6 +1,10 @@
 import logging
 import os
 from contextlib import asynccontextmanager
+
+from app.logging_config import setup_logging
+setup_logging()
+
 from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -11,7 +15,7 @@ from app.payment_routes import router as payment_router
 from app import utils
 
 # Importações dos seus módulos locais
-from app.database import create_db_and_tables, get_session
+from app.database import create_db_and_tables, get_session, engine
 from app import whatsapp, auth, bot_routes, takeover_routes
 from app.auth import get_user_from_token
 from app import crud
@@ -21,6 +25,9 @@ import asyncio
 import json
 from app import billing_routes
 from app import menu_router
+from app import health_routes
+from app import monitoring_routes
+from app.monitoring import start_flush_task, stop_flush_task
 
 load_dotenv()
 
@@ -31,9 +38,34 @@ REDIS_HOST = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 REDIS_DATABASE = 1  # Mesmo banco definido no worker.py
 
+# --- Startup env var validation ---
+REQUIRED_ENV_VARS = [
+    "DATABASE_URL",
+    "SECRET_KEY",
+    "ENCRYPTION_KEY",
+    "OPENAI_API_KEY",
+]
+
+PRODUCTION_ENV_VARS = [
+    "WHATSAPP_TOKEN",
+    "CORS_ORIGINS",
+]
+
+
+def validate_required_env_vars():
+    env = os.getenv("ENVIRONMENT", "development")
+    required = list(REQUIRED_ENV_VARS)
+    if env == "production":
+        required.extend(PRODUCTION_ENV_VARS)
+    missing = [v for v in required if not os.getenv(v)]
+    if missing:
+        raise RuntimeError(f"Missing required env vars: {', '.join(missing)}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- INICIALIZAÇÃO (STARTUP) ---
+    validate_required_env_vars()
     logger.info("Inicializando aplicacao...")
 
     # 1. Cria as tabelas do Banco de Dados
@@ -50,12 +82,18 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error("Falha ao conectar no Redis: %s", e)
 
+    # 3. Start monitoring flush background task
+    start_flush_task()
+
     yield  # O servidor roda aqui e atende as requisições
 
     # --- ENCERRAMENTO (SHUTDOWN) ---
+    logger.info("Shutting down — draining connections")
+    await stop_flush_task()
     logger.info("Fechando conexao com Redis Queue...")
     if hasattr(app.state, 'arq_redis'):
         await app.state.arq_redis.close()
+    await engine.dispose()
     logger.info("Aplicacao encerrada.")
 
 # Criação única da aplicação com o ciclo de vida configurado
@@ -105,6 +143,8 @@ app.include_router(payment_router)
 app.include_router(billing_routes.router)
 app.include_router(menu_router.router)
 app.include_router(utils.router)
+app.include_router(health_routes.router)
+app.include_router(monitoring_routes.router)
 
 # Rota de verificação de saúde (Health Check)
 @app.get("/")

@@ -1,23 +1,42 @@
-# Use official Python image
-FROM python:3.10
-
-# Set working directory
+# ============================================
+# Base stage — shared by all targets
+# ============================================
+FROM python:3.10-slim AS base
 WORKDIR /code
 
-# Copy and install dependencies first for better caching
+# Non-root user for security
+RUN useradd -m -u 1000 appuser
+
+# Install dependencies (cached layer)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# --- MUDANÇA ADICIONADA AQUI ---
-# Pré-aquece o cache, baixando o modelo de embedding durante o build.
-# Isso garante que a aplicação inicie instantaneamente, sem travar no download.
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+# Pre-warm embedding model (cached layer, ~400MB)
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')"
 
-# Copy the rest of the application code
+# Copy application code
 COPY . .
+RUN chown -R appuser:appuser /code
 
-# Expose port
+USER appuser
+
+# ============================================
+# Backend target — serves HTTP via Uvicorn
+# ============================================
+FROM base AS backend
 EXPOSE 8000
+# SIGTERM triggers graceful shutdown via uvicorn
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
 
-# Default command to run the app (sem --reload, ideal para produção)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# ============================================
+# Worker target — ARQ async job consumer
+# ============================================
+FROM base AS worker
+# stopTimeout=120s in ECS task def gives running jobs time to finish
+CMD ["arq", "app.worker.WorkerSettings"]
+
+# ============================================
+# Migrations target — one-off alembic task
+# ============================================
+FROM base AS migrations
+CMD ["alembic", "upgrade", "head"]

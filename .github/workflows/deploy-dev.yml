@@ -1,0 +1,248 @@
+name: Deploy to Dev
+
+on:
+  push:
+    branches: [develop]
+    paths-ignore:
+      - "*.md"
+      - "docs/**"
+      - "tech_debt/**"
+      - "plan/**"
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: zenbots/app
+  ECS_CLUSTER: zenbots-dev
+  ECS_SERVICE_BACKEND: zenbots-dev-backend
+  ECS_SERVICE_WORKER: zenbots-dev-worker
+
+jobs:
+  # ── Quality gate ──────────────────────────────────────────────
+  checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: botbuilder_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      redis:
+        image: redis:alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/botbuilder_test
+      REDIS_URL: redis://localhost:6379/0
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      SECRET_KEY: test-secret-key-for-ci
+      ENCRYPTION_KEY: TwG3wHb7SKizcVoU0bi3V7x3ODONyZCgdJr8jPK44L0=
+      OPENAI_API_KEY: sk-test-ci-placeholder
+      ENVIRONMENT: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+      - run: pip install ruff
+      - run: ruff check app/ tests/
+      - run: ruff format --check app/ tests/
+      - run: pip install -r requirements.txt
+      - run: pytest tests/ -v --tb=short
+
+  # ── Build & push to ECR ───────────────────────────────────────
+  build-and-push:
+    needs: checks
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEV_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr-login
+
+      # ARM64 cross-compilation (matches Graviton Fargate)
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Set image tag
+        id: meta
+        run: echo "tag=dev-${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: backend
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }}
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest-dev
+          cache-from: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest-dev
+          cache-to: type=inline
+
+      - name: Build and push worker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: worker
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }}-worker
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest-dev-worker
+          cache-from: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest-dev
+          cache-to: type=inline
+
+      - name: Build and push migrations image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: migrations
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }}-migrations
+          cache-from: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest-dev
+          cache-to: type=inline
+
+  # ── Run database migrations ───────────────────────────────────
+  migrate:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEV_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Run database migration via ECS RunTask
+        run: |
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "$ECS_CLUSTER" \
+            --task-definition zenbots-dev-migrations \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ secrets.DEV_PRIVATE_SUBNETS }}],securityGroups=[${{ secrets.DEV_ECS_SECURITY_GROUP }}],assignPublicIp=DISABLED}" \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          echo "Migration task: $TASK_ARN"
+
+          aws ecs wait tasks-stopped \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "$TASK_ARN"
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "$TASK_ARN" \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "::error::Migration failed with exit code $EXIT_CODE"
+
+            # Print migration logs for debugging
+            TASK_ID=$(echo "$TASK_ARN" | awk -F'/' '{print $NF}')
+            aws logs get-log-events \
+              --log-group-name "/ecs/zenbots-dev" \
+              --log-stream-name "migrations/migrations/$TASK_ID" \
+              --query 'events[*].message' \
+              --output text || echo "Could not retrieve migration logs"
+
+            exit 1
+          fi
+
+          echo "Migration completed successfully"
+
+  # ── Deploy ECS services ───────────────────────────────────────
+  deploy:
+    needs: migrate
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEV_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy backend service
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE_BACKEND" \
+            --force-new-deployment
+
+      - name: Deploy worker service
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE_WORKER" \
+            --force-new-deployment
+
+      - name: Wait for services to stabilize
+        run: |
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE_BACKEND" "$ECS_SERVICE_WORKER"
+        timeout-minutes: 5
+
+  # ── Smoke test ────────────────────────────────────────────────
+  smoke-test:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Health check (full readiness)
+        run: |
+          # Use /health/ready (DB + Redis check) for deploy verification
+          # ALB uses /health/live only — this is intentional
+          HEALTH_URL="${{ secrets.DEV_API_URL }}/health/ready"
+
+          for i in {1..10}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed (full readiness)"
+              exit 0
+            fi
+            echo "Attempt $i/10: HTTP $STATUS, retrying in 10s..."
+            sleep 10
+          done
+
+          echo "::error::Health check failed after 10 attempts"
+          exit 1

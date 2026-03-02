@@ -2,10 +2,10 @@ import secrets
 from sqlmodel import SQLModel, Field, Relationship, Column
 from pgvector.sqlalchemy import Vector
 from typing import Optional, List, Dict, Any
-from datetime import datetime, timedelta, timezone
+from datetime import date as date_type, datetime, timedelta, timezone
 import enum
 from sqlmodel import JSON as SA_JSON
-from sqlalchemy import Column, TIMESTAMP, text, JSON, DateTime
+from sqlalchemy import Column, TIMESTAMP, text, JSON, DateTime, UniqueConstraint, Index
 from app.time import utcnow
 
 # ▼▼▼ 1. ADICIONE ESTE ENUM NO TOPO DO ARQUIVO ▼▼▼
@@ -288,5 +288,71 @@ class Plan(SQLModel, table=True):
     # Configurações opcionais
     currency: str = Field(default="BRL")
     frequency: int = Field(default=1) # 1 mês
-    
+
     created_at: datetime = Field(default_factory=utcnow)
+
+
+# ────────────────────────────────────────────────────────────────
+# Monitoring & Observability Models
+# ────────────────────────────────────────────────────────────────
+
+class UsageEvent(SQLModel, table=True):
+    """Append-only log of every external API call with cost attribution."""
+    __tablename__ = "usage_events"
+    __table_args__ = (
+        Index("ix_usage_events_bot_created", "bot_id", "created_at"),
+        Index("ix_usage_events_service_created", "service", "created_at"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    bot_id: int = Field(foreign_key="bot.id", index=True)
+    service: str                                    # "openai" | "google_maps" | "aws_s3" | "whatsapp" | "mercado_pago" | "facebook"
+    operation: str                                  # "get_ai_decision" | "geocode" | "s3_put" | "send_message" | ...
+    model: Optional[str] = Field(default=None)      # "gpt-4o-mini" | "gpt-4o" | None
+
+    # Token metrics (OpenAI only)
+    input_tokens: int = Field(default=0)
+    output_tokens: int = Field(default=0)
+    cached_tokens: int = Field(default=0)
+
+    # Cost (pre-calculated at write time)
+    cost_usd: float = Field(default=0.0)
+
+    # Generic metrics
+    quantity: int = Field(default=1)
+
+    # Latency
+    duration_ms: int = Field(default=0)
+
+    # Status
+    success: bool = Field(default=True)
+
+    # Context
+    contact_id: Optional[int] = Field(default=None)
+    trace_id: Optional[str] = Field(default=None)
+    created_at: datetime = Field(default_factory=utcnow, sa_column=Column(DateTime, index=True, default=utcnow))
+
+
+class DailyCostSummary(SQLModel, table=True):
+    """Materialized daily cost aggregates per bot per service."""
+    __tablename__ = "daily_cost_summary"
+    __table_args__ = (
+        UniqueConstraint("bot_id", "date", "service", name="uq_daily_cost_bot_date_service"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    bot_id: int = Field(foreign_key="bot.id", index=True)
+    date: date_type = Field(index=True)
+    service: str
+
+    # Aggregated metrics
+    total_cost_usd: float = Field(default=0.0)
+    total_input_tokens: int = Field(default=0)
+    total_output_tokens: int = Field(default=0)
+    total_api_calls: int = Field(default=0)
+    total_failed_calls: int = Field(default=0)
+    total_duration_ms: int = Field(default=0)
+
+    # Anomaly detection helpers
+    avg_cost_per_call: float = Field(default=0.0)
+    max_cost_single_call: float = Field(default=0.0)

@@ -1,6 +1,9 @@
 # app/distributed_lock.py
+import logging
 import os
 import redis.asyncio as redis
+
+logger = logging.getLogger(__name__)
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
@@ -22,6 +25,7 @@ def contact_lock(contact_id: int):
     Returns a Redis distributed lock for the given contact.
     Use as: async with contact_lock(contact_id): ...
     """
+    logger.debug("Acquiring lock for contact_id=%s", contact_id)
     return _get_client().lock(
         name=f"contact_lock:{contact_id}",
         timeout=90,

@@ -1,6 +1,9 @@
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 from app.time import utcnow
+
+logger = logging.getLogger(__name__)
 
 # se quiser parametrizar por env mais tarde, troque 10 por uma leitura de settings
 _TTL_MINUTES = 10
@@ -14,12 +17,14 @@ def _to_naive_utc(dt: datetime) -> datetime:
 
 
 def save_pending(cart, tool: str, args: Dict[str, Any], question: str) -> None:
+    logger.debug("Saving pending action: tool=%s cart_id=%s", tool, getattr(cart, "id", None))
     cart.pending_action_tool = tool
     cart.pending_action_args = args
     cart.pending_action_question = question
     cart.pending_action_expires_at = utcnow() + timedelta(minutes=_TTL_MINUTES)
 
 def clear_pending(cart) -> None:
+    logger.debug("Clearing pending action for cart_id=%s", getattr(cart, "id", None))
     cart.pending_action_tool = None
     cart.pending_action_args = None
     cart.pending_action_question = None
@@ -34,4 +39,5 @@ def has_valid_pending(cart) -> bool:
 
 def expire_if_needed(cart) -> None:
     if cart.pending_action_expires_at and utcnow() > _to_naive_utc(cart.pending_action_expires_at):
+        logger.debug("Expiring pending action for cart_id=%s", getattr(cart, "id", None))
         clear_pending(cart)

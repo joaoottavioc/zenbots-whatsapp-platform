@@ -1,5 +1,7 @@
 # Arquivos de ambiente - NUNCA ENVIE SUAS SENHAS!
 .env
+.env.*
+!.env.example
 
 # Cache do Python
 __pycache__/
@@ -16,3 +18,9 @@ db_data/
 # Arquivos de IDEs
 .vscode/
 .idea/
+
+# Test / lint caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/

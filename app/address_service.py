@@ -1,7 +1,10 @@
 # app/address_service.py
 import httpx
+import logging
 import re
 from typing import Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 async def get_address_from_cep(cep: str) -> Optional[Dict]:
     """
@@ -15,6 +18,7 @@ async def get_address_from_cep(cep: str) -> Optional[Dict]:
 
     # 2. Monta a URL e faz a chamada
     url = f"https://viacep.com.br/ws/{cleaned_cep}/json/"
+    logger.debug("CEP lookup attempt: %s", cleaned_cep)
     async with httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0)) as client:
         try:
             response = await client.get(url)
@@ -23,8 +27,9 @@ async def get_address_from_cep(cep: str) -> Optional[Dict]:
 
             # 3. Verifica se a API retornou um erro (ex: CEP inexistente)
             if data.get("erro"):
+                logger.debug("CEP %s not found (API returned erro=true)", cleaned_cep)
                 return None
-            
+
             # 4. Retorna os dados do endereço
             return {
                 "cep": data.get("cep"),
@@ -33,6 +38,6 @@ async def get_address_from_cep(cep: str) -> Optional[Dict]:
                 "city": data.get("localidade"),
                 "state": data.get("uf"),
             }
-        except (httpx.RequestError, httpx.HTTPStatusError, KeyError):
-            # Se a API falhar ou o formato for inesperado, retorna None
+        except (httpx.RequestError, httpx.HTTPStatusError, KeyError) as e:
+            logger.warning("ViaCEP lookup failed for CEP %s: %s", cleaned_cep, e)
             return None

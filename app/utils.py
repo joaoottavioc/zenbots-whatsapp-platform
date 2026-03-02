@@ -1,12 +1,14 @@
 import logging
 import re
 import math
+import time
 import httpx
 import os
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from sqlmodel.ext.asyncio.session import AsyncSession
 from app.database import get_session
+from app.monitoring import record_api_usage
 
 logger = logging.getLogger(__name__)
 
@@ -114,23 +116,28 @@ async def _fetch_coordinates(client, zipcode, street, city, state, brasilapi_loc
     google_key = os.getenv("GOOGLE_MAPS_API_KEY")
 
     if google_key:
+        start = time.perf_counter_ns()
         try:
             logger.info("Calling Google Maps geocoding for cep=%s", zipcode)
             g_url = "https://maps.googleapis.com/maps/api/geocode/json"
-            # Buscamos pelo CEP + Endereço retornado para garantir precisão máxima
             address_query = f"{zipcode}, {street}, {city}, {state}, Brazil"
             params = {"address": address_query, "key": google_key}
             resp = await client.get(g_url, params=params, timeout=5.0)
-            
+            elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("status") == "OK":
                     loc = data["results"][0]["geometry"]["location"]
                     logger.info("Coordinates resolved via Google Maps for cep=%s", zipcode)
+                    await record_api_usage(None, "google_maps", "geocode", cost_usd=0.005, duration_ms=elapsed_ms)
                     return float(loc['lat']), float(loc['lng'])
                 else:
                     logger.warning("Google Maps geocoding failed: status=%s", data.get("status"))
+                    await record_api_usage(None, "google_maps", "geocode", cost_usd=0.005, duration_ms=elapsed_ms, success=False)
         except Exception as e:
+            elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+            await record_api_usage(None, "google_maps", "geocode", cost_usd=0.0, duration_ms=elapsed_ms, success=False)
             logger.error("Google Maps geocoding error: %s", e)
     else:
         logger.warning("GOOGLE_MAPS_API_KEY not configured")

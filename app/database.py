@@ -11,10 +11,11 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,
-    # 🟢 ADICIONE/MODIFIQUE ESTAS 3 LINHAS:
-    pool_size=20,       # Aumenta conexões fixas de 5 para 20
-    max_overflow=10,    # Permite criar mais 10 extras temporariamente
-    pool_timeout=30,    # Espera 30s se o banco estiver cheio antes de dar erro
+    pool_size=20,
+    max_overflow=10,
+    pool_timeout=30,
+    pool_pre_ping=True,
+    pool_recycle=3600,
 )
 
 # Criando a factory de sessão assíncrona

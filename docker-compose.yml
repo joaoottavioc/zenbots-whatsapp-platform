@@ -55,7 +55,9 @@ services:
 
   # API (Produtor de mensagens)
   backend:
-    build: .
+    build:
+      context: .
+      target: backend
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"
@@ -89,7 +91,9 @@ services:
 
   # WORKER (Consumidor de mensagens)
   worker:
-    build: .
+    build:
+      context: .
+      target: worker
     # Comando para iniciar o processamento da fila
     # --watch /code faz ele reiniciar se você alterar o código
     command: arq app.worker.WorkerSettings --watch /code

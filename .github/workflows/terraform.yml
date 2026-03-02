@@ -1,0 +1,146 @@
+name: Terraform
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ["infra/**"]
+  push:
+    branches: [main]
+    paths: ["infra/**"]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  # ── Terraform Plan ────────────────────────────────────────────
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine environment
+        id: env
+        run: |
+          if [ -n "${{ github.event.inputs.environment }}" ]; then
+            echo "environment=${{ github.event.inputs.environment }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "environment=dev" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.5"
+
+      - name: Terraform Init
+        working-directory: infra/environments/${{ steps.env.outputs.environment }}
+        run: terraform init -input=false
+
+      - name: Terraform Validate
+        working-directory: infra/environments/${{ steps.env.outputs.environment }}
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: infra/environments/${{ steps.env.outputs.environment }}
+        run: |
+          terraform plan \
+            -input=false \
+            -no-color \
+            -out=plan.tfplan \
+            2>&1 | tee plan_output.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ steps.env.outputs.environment }}
+          path: infra/environments/${{ steps.env.outputs.environment }}/plan.tfplan
+          retention-days: 5
+
+      # Post plan output as PR comment (only on pull_request)
+      - name: Post plan to PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const env = '${{ steps.env.outputs.environment }}';
+            const planPath = `infra/environments/${env}/plan_output.txt`;
+            let plan = '';
+            try {
+              plan = fs.readFileSync(planPath, 'utf8');
+            } catch (e) {
+              plan = 'Could not read plan output.';
+            }
+
+            // Truncate if too long for a PR comment
+            const maxLen = 60000;
+            if (plan.length > maxLen) {
+              plan = plan.substring(0, maxLen) + '\n\n... (truncated)';
+            }
+
+            const body = `### Terraform Plan — \`${env}\`
+            \`\`\`
+            ${plan}
+            \`\`\`
+
+            *Pushed by @${context.actor} — commit ${context.sha.substring(0, 8)}*`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body,
+            });
+
+  # ── Terraform Apply (manual approval) ─────────────────────────
+  apply:
+    needs: plan
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: infrastructure  # ← GitHub Environment with required reviewers
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.5"
+
+      - name: Terraform Init
+        working-directory: infra/environments/${{ needs.plan.outputs.environment }}
+        run: terraform init -input=false
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: terraform-plan-${{ needs.plan.outputs.environment }}
+          path: infra/environments/${{ needs.plan.outputs.environment }}
+
+      - name: Terraform Apply
+        working-directory: infra/environments/${{ needs.plan.outputs.environment }}
+        run: terraform apply -input=false plan.tfplan

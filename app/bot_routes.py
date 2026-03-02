@@ -869,7 +869,7 @@ async def complete_onboarding(
              # Nota: A inscrição de webhook geralmente é automática no Embedded Signup,
              # mas em reconexões manuais pode ser bom reforçar. Fica como melhoria futura.
         except Exception:
-            pass
+            logger.error("Webhook subscription failed during onboarding", exc_info=True)
 
     clean_number = re.sub(r'\D', '', display_phone_number)
 

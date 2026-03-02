@@ -3,12 +3,14 @@ import base64
 import json
 import logging
 import os
+import time
 from typing import List, Dict
 from dotenv import load_dotenv
 from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 from app.tools_definition import tools_schema, tools_extraction
+from app.monitoring import record_llm_usage
 
 # Carrega as variáveis de ambiente do arquivo .env
 load_dotenv()
@@ -33,10 +35,21 @@ async def get_extraction_response(messages: List[Dict]) -> str:
             temperature=0.0,  # Zero criatividade para extração precisa
             response_format={"type": "json_object"}
         )
+    start = time.perf_counter_ns()
     try:
         response = await asyncio.to_thread(sync_call)
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        await record_llm_usage(
+            bot_id=None, operation="get_extraction_response",
+            model="gpt-4o", usage=response.usage, duration_ms=elapsed_ms,
+        )
         return response.choices[0].message.content.strip()
     except Exception as e:
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        await record_llm_usage(
+            bot_id=None, operation="get_extraction_response",
+            model="gpt-4o", usage=None, duration_ms=elapsed_ms, success=False,
+        )
         logger.error("Extraction model call failed: %s", e)
         return "[]"  # Retorna um array JSON vazio em caso de erro
 
@@ -55,10 +68,21 @@ async def get_chat_response_gpt(messages: List[Dict]) -> str:
             # 👇 A instrução crucial para garantir a fiabilidade
             response_format={"type": "json_object"}
         )
+    start = time.perf_counter_ns()
     try:
         response = await asyncio.to_thread(sync_call)
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        await record_llm_usage(
+            bot_id=None, operation="get_chat_response_gpt",
+            model="gpt-4o-mini", usage=response.usage, duration_ms=elapsed_ms,
+        )
         return response.choices[0].message.content.strip()
     except Exception as e:
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        await record_llm_usage(
+            bot_id=None, operation="get_chat_response_gpt",
+            model="gpt-4o-mini", usage=None, duration_ms=elapsed_ms, success=False,
+        )
         logger.error("Chat model call failed: %s", e)
         # Retorna um JSON de fallback em caso de erro
         return '{"action": "CONTINUE_CONVERSATION", "response_to_user": "Desculpe, ocorreu um erro. Pode tentar novamente?"}'
@@ -78,10 +102,21 @@ async def get_ai_decision(messages: List[Dict], tools: List[Dict], force_tool: b
             tool_choice=choice,
             temperature=0.1,
         )
+    start = time.perf_counter_ns()
     try:
         response = await asyncio.to_thread(sync_call)
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        await record_llm_usage(
+            bot_id=None, operation="get_ai_decision",
+            model="gpt-4o-mini", usage=response.usage, duration_ms=elapsed_ms,
+        )
         return response.choices[0].message
     except Exception as e:
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        await record_llm_usage(
+            bot_id=None, operation="get_ai_decision",
+            model="gpt-4o-mini", usage=None, duration_ms=elapsed_ms, success=False,
+        )
         logger.error("Tool-calling API request failed: %s", e)
         return None
 
@@ -138,14 +173,25 @@ async def extract_potential_items(user_query: str) -> List[str]:
             response_format={"type": "json_object"}
         )
     
+    start = time.perf_counter_ns()
     try:
         response = await asyncio.to_thread(sync_call)
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        await record_llm_usage(
+            bot_id=None, operation="extract_potential_items",
+            model="gpt-4o-mini", usage=response.usage, duration_ms=elapsed_ms,
+        )
         data = json.loads(response.choices[0].message.content)
         items = data.get("items", [])
         if isinstance(items, list):
             return items
         return []
     except (json.JSONDecodeError, KeyError, TypeError) as e:
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        await record_llm_usage(
+            bot_id=None, operation="extract_potential_items",
+            model="gpt-4o-mini", usage=None, duration_ms=elapsed_ms, success=False,
+        )
         logger.error("Failed to extract items from user query: %s", e)
         return []
 
@@ -197,12 +243,23 @@ async def classify_user_intent(user_query: str, cart_items: List[Dict]) -> str:
             response_format={"type": "json_object"}
         )
 
+    start = time.perf_counter_ns()
     try:
         response = await asyncio.to_thread(sync_call)
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        await record_llm_usage(
+            bot_id=None, operation="classify_user_intent",
+            model="gpt-4o-mini", usage=response.usage, duration_ms=elapsed_ms,
+        )
         data = json.loads(response.choices[0].message.content)
         intent = data.get("intent", "GREETING_OR_QUESTION")
         return intent if intent in possible_intents else "GREETING_OR_QUESTION"
     except Exception as e:
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        await record_llm_usage(
+            bot_id=None, operation="classify_user_intent",
+            model="gpt-4o-mini", usage=None, duration_ms=elapsed_ms, success=False,
+        )
         logger.error("Intent classification failed: %s", e)
         return "GREETING_OR_QUESTION"
 
@@ -252,9 +309,15 @@ async def extract_products_from_image(image_bytes: bytes, media_type: str) -> li
             temperature=0.2,
         )
 
+    start = time.perf_counter_ns()
     try:
         # 2. Executamos a função síncrona em uma thread para não travar o FastAPI
         response = await asyncio.to_thread(sync_call)
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        await record_llm_usage(
+            bot_id=None, operation="extract_products_from_image",
+            model="gpt-4o", usage=response.usage, duration_ms=elapsed_ms,
+        )
 
         tool_calls = response.choices[0].message.tool_calls
         if tool_calls:
@@ -263,5 +326,10 @@ async def extract_products_from_image(image_bytes: bytes, media_type: str) -> li
         return []
 
     except Exception as e:
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        await record_llm_usage(
+            bot_id=None, operation="extract_products_from_image",
+            model="gpt-4o", usage=None, duration_ms=elapsed_ms, success=False,
+        )
         logger.error("Vision AI extraction failed: %s", e)
         return []

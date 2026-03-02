@@ -1,10 +1,12 @@
 import logging
+import time
 import boto3
 import os
 from uuid import uuid4
 from fastapi import UploadFile, HTTPException
 from botocore.exceptions import NoCredentialsError
 import io
+from app.monitoring import record_api_usage
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +28,8 @@ def upload_bytes_to_s3(file_content: bytes, filename: str, content_type: str, fo
     """
     Faz upload de bytes brutos para o S3. Mais seguro para usar com asyncio.
     """
+    import asyncio
+    start = time.perf_counter_ns()
     try:
         # Gera nome único
         # Se filename for None ou vazio, usa .bin como fallback
@@ -43,11 +47,29 @@ def upload_bytes_to_s3(file_content: bytes, filename: str, content_type: str, fo
         )
 
         url = f"https://{BUCKET_NAME}.s3.{REGION}.amazonaws.com/{unique_filename}"
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(record_api_usage(
+                None, "aws_s3", "s3_put", cost_usd=0.000005,
+                quantity=len(file_content), duration_ms=elapsed_ms,
+            ))
+        except RuntimeError:
+            pass  # No running loop (called outside async context)
         return url
 
     except NoCredentialsError:
         raise HTTPException(status_code=500, detail="Credenciais AWS não encontradas")
     except Exception as e:
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(record_api_usage(
+                None, "aws_s3", "s3_put", cost_usd=0.0,
+                duration_ms=elapsed_ms, success=False,
+            ))
+        except RuntimeError:
+            pass
         logger.error("S3 upload failed: %s", e)
         raise HTTPException(status_code=500, detail="Falha ao fazer upload para S3")
 

@@ -30,9 +30,15 @@ if config.config_file_name is not None:
 # Define os metadados dos seus modelos para geração automática
 target_metadata = SQLModel.metadata
 
+
+def get_url():
+    """Use DATABASE_URL env var if available, else fall back to alembic.ini."""
+    return os.environ.get("DATABASE_URL", config.get_main_option("sqlalchemy.url"))
+
+
 def run_migrations_offline() -> None:
     """Roda migrações no modo 'offline' (sem conexão, apenas gera SQL)."""
-    url = config.get_main_option("sqlalchemy.url")
+    url = get_url()
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -51,10 +57,13 @@ def do_run_migrations(connection: Connection) -> None:
 
 async def run_migrations_online() -> None:
     """Roda migrações no modo 'online' (conectado ao banco)."""
-    
-    # Cria a engine Assíncrona baseada na URL do .ini
+
+    # Use DATABASE_URL env var if set, otherwise fall back to alembic.ini
+    configuration = config.get_section(config.config_ini_section, {})
+    configuration["sqlalchemy.url"] = get_url()
+
     connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )

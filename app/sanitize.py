@@ -6,7 +6,10 @@ Strips URLs, emails, phone numbers, and dangerous Unicode characters
 to prevent prompt-injection attacks from producing phishing content.
 """
 
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 MAX_LENGTH = 1000
 
@@ -55,12 +58,18 @@ def sanitize_llm_output(text: str) -> str:
     text = _DANGEROUS_UNICODE.sub("", text)
 
     # 2. Replace URLs
+    if _URL_PATTERN.search(text):
+        logger.info("Sanitized: stripped URL(s) from LLM output")
     text = _URL_PATTERN.sub("[link removido]", text)
 
     # 3. Replace emails
+    if _EMAIL_PATTERN.search(text):
+        logger.info("Sanitized: stripped email(s) from LLM output")
     text = _EMAIL_PATTERN.sub("[email removido]", text)
 
     # 4. Replace phone numbers (8+ digit sequences)
+    if _PHONE_PATTERN.search(text):
+        logger.info("Sanitized: stripped phone number(s) from LLM output")
     text = _PHONE_PATTERN.sub("[numero removido]", text)
 
     # 5. Collapse excess whitespace (keep single newlines)
