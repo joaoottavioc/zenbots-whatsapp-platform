@@ -21,7 +21,7 @@ resource "aws_appautoscaling_target" "worker" {
   service_namespace  = "ecs"
 }
 
-# --- Scale DOWN at 10 PM BRT (1 AM UTC) weekdays ---
+# --- Scale DOWN at 7 PM BRT (10 PM UTC) weekdays ---
 
 resource "aws_appautoscaling_scheduled_action" "scale_down_backend" {
   count              = var.enable_scheduling ? 1 : 0
@@ -29,7 +29,7 @@ resource "aws_appautoscaling_scheduled_action" "scale_down_backend" {
   service_namespace  = aws_appautoscaling_target.backend[0].service_namespace
   resource_id        = aws_appautoscaling_target.backend[0].resource_id
   scalable_dimension = aws_appautoscaling_target.backend[0].scalable_dimension
-  schedule           = "cron(0 1 ? * MON-FRI *)" # 1 AM UTC = 10 PM BRT
+  schedule           = "cron(0 22 ? * MON-FRI *)" # 10 PM UTC = 7 PM BRT
 
   scalable_target_action {
     min_capacity = 0
@@ -43,7 +43,7 @@ resource "aws_appautoscaling_scheduled_action" "scale_down_worker" {
   service_namespace  = aws_appautoscaling_target.worker[0].service_namespace
   resource_id        = aws_appautoscaling_target.worker[0].resource_id
   scalable_dimension = aws_appautoscaling_target.worker[0].scalable_dimension
-  schedule           = "cron(0 1 ? * MON-FRI *)"
+  schedule           = "cron(0 22 ? * MON-FRI *)"
 
   scalable_target_action {
     min_capacity = 0
@@ -51,7 +51,37 @@ resource "aws_appautoscaling_scheduled_action" "scale_down_worker" {
   }
 }
 
-# --- Scale UP at 8 AM BRT (11 AM UTC) weekdays ---
+# --- Scale DOWN for weekends (Friday 7 PM BRT = Friday 10 PM UTC, stays off until Monday) ---
+
+resource "aws_appautoscaling_scheduled_action" "scale_down_weekend_backend" {
+  count              = var.enable_scheduling ? 1 : 0
+  name               = "${var.project}-${var.environment}-backend-scale-down-weekend"
+  service_namespace  = aws_appautoscaling_target.backend[0].service_namespace
+  resource_id        = aws_appautoscaling_target.backend[0].resource_id
+  scalable_dimension = aws_appautoscaling_target.backend[0].scalable_dimension
+  schedule           = "cron(0 22 ? * FRI *)" # Friday 10 PM UTC = Friday 7 PM BRT
+
+  scalable_target_action {
+    min_capacity = 0
+    max_capacity = 0
+  }
+}
+
+resource "aws_appautoscaling_scheduled_action" "scale_down_weekend_worker" {
+  count              = var.enable_scheduling ? 1 : 0
+  name               = "${var.project}-${var.environment}-worker-scale-down-weekend"
+  service_namespace  = aws_appautoscaling_target.worker[0].service_namespace
+  resource_id        = aws_appautoscaling_target.worker[0].resource_id
+  scalable_dimension = aws_appautoscaling_target.worker[0].scalable_dimension
+  schedule           = "cron(0 22 ? * FRI *)"
+
+  scalable_target_action {
+    min_capacity = 0
+    max_capacity = 0
+  }
+}
+
+# --- Scale UP at 9 AM BRT (12 PM UTC) Monday–Friday ---
 
 resource "aws_appautoscaling_scheduled_action" "scale_up_backend" {
   count              = var.enable_scheduling ? 1 : 0
@@ -59,7 +89,7 @@ resource "aws_appautoscaling_scheduled_action" "scale_up_backend" {
   service_namespace  = aws_appautoscaling_target.backend[0].service_namespace
   resource_id        = aws_appautoscaling_target.backend[0].resource_id
   scalable_dimension = aws_appautoscaling_target.backend[0].scalable_dimension
-  schedule           = "cron(0 11 ? * MON-FRI *)" # 11 AM UTC = 8 AM BRT
+  schedule           = "cron(0 12 ? * MON-FRI *)" # 12 PM UTC = 9 AM BRT
 
   scalable_target_action {
     min_capacity = var.backend_desired_count
@@ -73,7 +103,7 @@ resource "aws_appautoscaling_scheduled_action" "scale_up_worker" {
   service_namespace  = aws_appautoscaling_target.worker[0].service_namespace
   resource_id        = aws_appautoscaling_target.worker[0].resource_id
   scalable_dimension = aws_appautoscaling_target.worker[0].scalable_dimension
-  schedule           = "cron(0 11 ? * MON-FRI *)"
+  schedule           = "cron(0 12 ? * MON-FRI *)"
 
   scalable_target_action {
     min_capacity = var.worker_desired_count
