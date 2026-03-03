@@ -2,7 +2,7 @@ locals {
   backend_image    = "${var.ecr_repository_url}:${var.image_tag}"
   worker_image     = "${var.ecr_repository_url}:${var.image_tag}-worker"
   migrations_image = "${var.ecr_repository_url}:${var.image_tag}-migrations"
-  domain_name      = "${var.domain_prefix}.zenbots.com.br"
+  domain_name      = "${var.domain_prefix}.zenbotz.com.br"
 }
 
 # ══════════════════════════ VPC ══════════════════════════
@@ -123,7 +123,7 @@ module "ecs" {
     { name = "REDIS_HOST", value = module.elasticache.redis_host },
     { name = "REDIS_PORT", value = "6379" },
     { name = "REDIS_URL", value = module.elasticache.redis_url },
-    { name = "CORS_ORIGINS", value = "https://app.zenbots.com.br" },
+    { name = "CORS_ORIGINS", value = "https://app.zenbotz.com.br" },
   ]
 
   backend_secrets = [

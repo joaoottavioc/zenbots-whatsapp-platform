@@ -215,7 +215,7 @@ module "scheduling" {
 resource "aws_route53_record" "dev_api" {
   count   = var.route53_zone_id != "" ? 1 : 0
   zone_id = var.route53_zone_id
-  name    = "${var.domain_prefix}.zenbots.com.br"
+  name    = "${var.domain_prefix}.zenbotz.com.br"
   type    = "A"
 
   alias {
