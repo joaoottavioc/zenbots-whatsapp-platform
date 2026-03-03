@@ -39,4 +39,4 @@ CMD ["arq", "app.worker.WorkerSettings"]
 # Migrations target — one-off alembic task
 # ============================================
 FROM base AS migrations
-CMD ["alembic", "upgrade", "head"]
+CMD ["python", "run_migrations.py"]
