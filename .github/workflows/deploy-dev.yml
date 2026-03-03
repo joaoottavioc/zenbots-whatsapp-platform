@@ -223,7 +223,7 @@ jobs:
           aws ecs wait services-stable \
             --cluster "$ECS_CLUSTER" \
             --services "$ECS_SERVICE_BACKEND" "$ECS_SERVICE_WORKER"
-        timeout-minutes: 5
+        timeout-minutes: 8
 
   # ── Smoke test ────────────────────────────────────────────────
   smoke-test:
