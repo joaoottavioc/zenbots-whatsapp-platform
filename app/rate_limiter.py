@@ -14,17 +14,22 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 # Lazy singleton — avoids creating a connection at import time
 _client = None
 
+
 def _get_client():
     global _client
     if _client is None:
         _client = redis.from_url(
-            REDIS_URL, decode_responses=True,
-            socket_timeout=2, socket_connect_timeout=2,
+            REDIS_URL,
+            decode_responses=True,
+            socket_timeout=2,
+            socket_connect_timeout=2,
         )
     return _client
 
 
-async def is_spamming(user_phone: str, limit: int = 15, window_seconds: int = 60) -> bool:
+async def is_spamming(
+    user_phone: str, limit: int = 15, window_seconds: int = 60
+) -> bool:
     """
     Verifica se o usuário excedeu o limite de mensagens na janela de tempo.
     Retorna True se for SPAM (deve bloquear).
@@ -39,7 +44,7 @@ async def is_spamming(user_phone: str, limit: int = 15, window_seconds: int = 60
         r = _get_client()
         # Pipelining agrupa comandos para ser mais rápido (1 viagem ao Redis)
         pipe = r.pipeline()
-        pipe.incr(key) # Incrementa contador
+        pipe.incr(key)  # Incrementa contador
         pipe.ttl(key)  # Pega quanto tempo falta para expirar
         result = await pipe.execute()
 
@@ -85,7 +90,9 @@ async def is_rate_limited(key: str, limit: int, window_seconds: int) -> bool:
         return current_count > limit
 
     except redis.RedisError as e:
-        logger.error("Redis rate limiter error in is_rate_limited for key=%s: %s", key, e)
+        logger.error(
+            "Redis rate limiter error in is_rate_limited for key=%s: %s", key, e
+        )
         return True
 
 

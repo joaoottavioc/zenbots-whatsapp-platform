@@ -5,13 +5,25 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select, update
 from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import timedelta
 from app.utils import normalize_phone, mask_phone
 from app.time import utcnow
 from sqlalchemy import func, desc
 from app.models import (
-    Bot, User, ConversationHistory, Product, Order, OrderItem, ProcessedMessage,
-    Contact, ShoppingCart, CartItem, Subscription, DeliveryMethod, OrderStatus, CartState
+    Bot,
+    User,
+    ConversationHistory,
+    Product,
+    Order,
+    OrderItem,
+    ProcessedMessage,
+    Contact,
+    ShoppingCart,
+    CartItem,
+    Subscription,
+    DeliveryMethod,
+    OrderStatus,
+    CartState,
 )
 from app.schemas import BotUpdate, ProductUpdate
 from app.embedding_service import embed_async
@@ -26,10 +38,16 @@ def escape_ilike(value: str) -> str:
 
 # --- Funções do Webhook (NÃO DEVEM FAZER COMMIT) ---
 
-async def get_bot_by_number(session: AsyncSession, whatsapp_number: str) -> Optional[Bot]:
+
+async def get_bot_by_number(
+    session: AsyncSession, whatsapp_number: str
+) -> Optional[Bot]:
     """Busca um bot pelo número. Usado internamente pelo webhook."""
-    result = await session.execute(select(Bot).where(Bot.whatsapp_number == whatsapp_number))
+    result = await session.execute(
+        select(Bot).where(Bot.whatsapp_number == whatsapp_number)
+    )
     return result.scalars().first()
+
 
 async def is_message_processed(session: AsyncSession, message_id: str) -> bool:
     result = await session.execute(
@@ -37,25 +55,34 @@ async def is_message_processed(session: AsyncSession, message_id: str) -> bool:
     )
     return result.scalar_one_or_none() is not None
 
+
 async def add_processed_message(session: AsyncSession, message_id: str):
     processed_message = ProcessedMessage(message_id=message_id)
     session.add(processed_message)
 
-async def get_or_create_contact(session: AsyncSession, bot_id: int, contact_number: str) -> Contact:
+
+async def get_or_create_contact(
+    session: AsyncSession, bot_id: int, contact_number: str
+) -> Contact:
     """Busca um contato pelo número ou o cria, sem commitar a sessão."""
-    contact_number = normalize_phone(contact_number) or re.sub(r"[^\d]", "", contact_number)
+    contact_number = normalize_phone(contact_number) or re.sub(
+        r"[^\d]", "", contact_number
+    )
     result = await session.execute(
-        select(Contact).where(Contact.phone_number == contact_number, Contact.bot_id == bot_id)
+        select(Contact).where(
+            Contact.phone_number == contact_number, Contact.bot_id == bot_id
+        )
     )
     contact = result.scalar_one_or_none()
-    
+
     if not contact:
         contact = Contact(phone_number=contact_number, bot_id=bot_id)
         session.add(contact)
         await session.flush()
         await session.refresh(contact)
-        
+
     return contact
+
 
 async def get_or_create_cart(session: AsyncSession, contact_id: int) -> ShoppingCart:
     """Busca o carrinho de um contato ou cria um novo, sem commitar a sessão."""
@@ -75,10 +102,17 @@ async def get_or_create_cart(session: AsyncSession, contact_id: int) -> Shopping
     return cart
 
 
-async def add_items_to_db_cart(session: AsyncSession, cart_id: int, items_to_add: List[Dict], bot_id: int | None = None) -> Optional[ShoppingCart]:
+async def add_items_to_db_cart(
+    session: AsyncSession,
+    cart_id: int,
+    items_to_add: List[Dict],
+    bot_id: int | None = None,
+) -> Optional[ShoppingCart]:
     """Adiciona itens ao carrinho, ignorando produtos indisponíveis."""
     # Carrega o carrinho e seus itens
-    cart = await session.get(ShoppingCart, cart_id, options=[selectinload(ShoppingCart.items)])
+    cart = await session.get(
+        ShoppingCart, cart_id, options=[selectinload(ShoppingCart.items)]
+    )
     if not cart:
         return None
 
@@ -100,35 +134,49 @@ async def add_items_to_db_cart(session: AsyncSession, cart_id: int, items_to_add
 
         # 3. SE bot_id FORNECIDO, VERIFICA SE O PRODUTO PERTENCE AO BOT CORRETO
         if bot_id is not None and product.bot_id != bot_id:
-            logger.warning("Product %s belongs to bot %s, expected bot %s", product_id, product.bot_id, bot_id)
+            logger.warning(
+                "Product %s belongs to bot %s, expected bot %s",
+                product_id,
+                product.bot_id,
+                bot_id,
+            )
             continue
 
-        existing_item = next((item for item in cart.items if item.product_id == product_id), None)
-        
+        existing_item = next(
+            (item for item in cart.items if item.product_id == product_id), None
+        )
+
         if existing_item:
             existing_item.quantity += quantity_to_add
             if notes_to_add:
                 existing_item.notes = notes_to_add
         else:
             new_item = CartItem(
-                product_id=product_id, 
-                quantity=quantity_to_add, 
+                product_id=product_id,
+                quantity=quantity_to_add,
                 cart_id=cart.id,
-                notes=notes_to_add 
+                notes=notes_to_add,
             )
             session.add(new_item)
-            
+
     await session.flush()
     return cart
 
-async def modify_item_quantity_in_db_cart(session: AsyncSession, cart_id: int, product_id: int, new_quantity: int) -> Optional[ShoppingCart]:
+
+async def modify_item_quantity_in_db_cart(
+    session: AsyncSession, cart_id: int, product_id: int, new_quantity: int
+) -> Optional[ShoppingCart]:
     """Modifica a quantidade de um item ou o remove. O commit é feito no final do fluxo."""
     # CORREÇÃO: Busca o carrinho pelo ID dentro da sessão atual
-    cart = await session.get(ShoppingCart, cart_id, options=[selectinload(ShoppingCart.items)])
+    cart = await session.get(
+        ShoppingCart, cart_id, options=[selectinload(ShoppingCart.items)]
+    )
     if not cart:
         return None
-        
-    item_to_modify = next((item for item in cart.items if item.product_id == product_id), None)
+
+    item_to_modify = next(
+        (item for item in cart.items if item.product_id == product_id), None
+    )
     if item_to_modify:
         if new_quantity > 0:
             item_to_modify.quantity = new_quantity
@@ -137,23 +185,26 @@ async def modify_item_quantity_in_db_cart(session: AsyncSession, cart_id: int, p
     await session.flush()
     return cart
 
+
 async def clear_db_cart(session: AsyncSession, cart_id: int) -> Optional[ShoppingCart]:
     """Limpa todos os itens de um carrinho e reseta o seu estado."""
-    cart = await session.get(ShoppingCart, cart_id, options=[selectinload(ShoppingCart.items)])
+    cart = await session.get(
+        ShoppingCart, cart_id, options=[selectinload(ShoppingCart.items)]
+    )
     if not cart:
         return None
 
     for item in cart.items:
         await session.delete(item)
-    
-    cart.items = [] # Limpa a lista na memória também
+
+    cart.items = []  # Limpa a lista na memória também
     cart.state = CartState.GREETING
 
     cart.customer_address = None
     # A linha que definia 'last_activity_at' foi REMOVIDA.
     # A responsabilidade de atualizar o timestamp é da função principal que orquestra a conversa.
-    
-     # ▼▼▼ higiene extra (importante!)
+
+    # ▼▼▼ higiene extra (importante!)
     cart.pending_action_tool = None
     cart.pending_action_args = None
     cart.pending_action_question = None
@@ -163,15 +214,22 @@ async def clear_db_cart(session: AsyncSession, cart_id: int) -> Optional[Shoppin
 
     # se você usa last_suggestions, pode limpar também:
     cart.last_suggestions = None
-    
+
     await session.flush()
     return cart
 
-async def get_history_for_contact(session: AsyncSession, bot_id: int, contact_number: str, limit: int = 20) -> List[ConversationHistory]:
+
+async def get_history_for_contact(
+    session: AsyncSession, bot_id: int, contact_number: str, limit: int = 20
+) -> List[ConversationHistory]:
     """Recupera o histórico de uma conversa. Retorna [] se o contato não existir."""
-    contact_number = normalize_phone(contact_number) or re.sub(r"[^\d]", "", contact_number)
+    contact_number = normalize_phone(contact_number) or re.sub(
+        r"[^\d]", "", contact_number
+    )
     result = await session.execute(
-        select(Contact).where(Contact.phone_number == contact_number, Contact.bot_id == bot_id)
+        select(Contact).where(
+            Contact.phone_number == contact_number, Contact.bot_id == bot_id
+        )
     )
     contact = result.scalar_one_or_none()
     if not contact:
@@ -186,15 +244,35 @@ async def get_history_for_contact(session: AsyncSession, bot_id: int, contact_nu
     # Retorna as mensagens em ordem cronológica (a mais antiga primeiro)
     return result.scalars().all()[::-1]
 
-async def add_interaction_to_history(session: AsyncSession, bot_id: int, contact_number: str, user_content: str, assistant_content: str):
+
+async def add_interaction_to_history(
+    session: AsyncSession,
+    bot_id: int,
+    contact_number: str,
+    user_content: str,
+    assistant_content: str,
+):
     """Salva a interação completa, ligando-a ao objeto Contact correto."""
     contact = await get_or_create_contact(session, bot_id, contact_number)
-    user_entry = ConversationHistory(bot_id=bot_id, contact_id=contact.id, role="user", content=user_content)
-    assistant_entry = ConversationHistory(bot_id=bot_id, contact_id=contact.id, role="assistant", content=assistant_content)
+    user_entry = ConversationHistory(
+        bot_id=bot_id, contact_id=contact.id, role="user", content=user_content
+    )
+    assistant_entry = ConversationHistory(
+        bot_id=bot_id,
+        contact_id=contact.id,
+        role="assistant",
+        content=assistant_content,
+    )
     session.add_all([user_entry, assistant_entry])
     await session.flush()
 
-async def find_relevant_products(session: AsyncSession, bot_id: int, extracted_items: List[str], limit_per_item: int = 3) -> List[Product]:
+
+async def find_relevant_products(
+    session: AsyncSession,
+    bot_id: int,
+    extracted_items: List[str],
+    limit_per_item: int = 3,
+) -> List[Product]:
     """
     Busca em camadas otimizada: 1. Nome > 2. Keywords > 3. Descrição > 4. Embedding.
     """
@@ -210,81 +288,109 @@ async def find_relevant_products(session: AsyncSession, bot_id: int, extracted_i
             break
 
         # 🔹 1. Busca por nome (correspondência exata/parcial forte)
-        name_query = select(Product).where(
-            Product.bot_id == bot_id,
-            Product.is_available == True,
-            Product.name.ilike(f"%{escape_ilike(item_name)}%", escape="\\")
-        ).limit(limit_per_item)
+        name_query = (
+            select(Product)
+            .where(
+                Product.bot_id == bot_id,
+                Product.is_available == True,
+                Product.name.ilike(f"%{escape_ilike(item_name)}%", escape="\\"),
+            )
+            .limit(limit_per_item)
+        )
         for p in (await session.execute(name_query)).scalars().all():
-            if p.id not in all_results_map: all_results_map[p.id] = p
+            if p.id not in all_results_map:
+                all_results_map[p.id] = p
 
         # 🔹 2. Busca por keywords (nova camada super importante!)
-        keywords_query = select(Product).where(
-            Product.bot_id == bot_id,
-            Product.is_available == True,
-            Product.keywords.ilike(f"%{escape_ilike(item_name)}%", escape="\\")
-        ).limit(limit_per_item)
+        keywords_query = (
+            select(Product)
+            .where(
+                Product.bot_id == bot_id,
+                Product.is_available == True,
+                Product.keywords.ilike(f"%{escape_ilike(item_name)}%", escape="\\"),
+            )
+            .limit(limit_per_item)
+        )
         for p in (await session.execute(keywords_query)).scalars().all():
-            if p.id not in all_results_map: all_results_map[p.id] = p
+            if p.id not in all_results_map:
+                all_results_map[p.id] = p
 
         # 🔹 3. Busca por descrição
-        desc_query = select(Product).where(
-            Product.bot_id == bot_id,
-            Product.is_available == True,
-            Product.description.is_not(None),
-            Product.description.ilike(f"%{escape_ilike(item_name)}%", escape="\\")
-        ).limit(limit_per_item)
+        desc_query = (
+            select(Product)
+            .where(
+                Product.bot_id == bot_id,
+                Product.is_available == True,
+                Product.description.is_not(None),
+                Product.description.ilike(f"%{escape_ilike(item_name)}%", escape="\\"),
+            )
+            .limit(limit_per_item)
+        )
         for p in (await session.execute(desc_query)).scalars().all():
-            if p.id not in all_results_map: all_results_map[p.id] = p
-            
+            if p.id not in all_results_map:
+                all_results_map[p.id] = p
+
         # 🔹 4. Fallback: busca semântica (RAG)
         text_to_embed = f"PRODUTO PRINCIPAL: {item_name}"
-        embeddings = await embed_async([text_to_embed], space="products", normalize=False)
+        embeddings = await embed_async(
+            [text_to_embed], space="products", normalize=False
+        )
         query_embedding = embeddings[0]
-        embedding_query = select(Product).where(Product.bot_id == bot_id, Product.is_available == True).order_by(
-            Product.embedding.cosine_distance(query_embedding) #
-        ).limit(limit_per_item) #
+        embedding_query = (
+            select(Product)
+            .where(Product.bot_id == bot_id, Product.is_available == True)
+            .order_by(
+                Product.embedding.cosine_distance(query_embedding)  #
+            )
+            .limit(limit_per_item)
+        )  #
         for p in (await session.execute(embedding_query)).scalars().all():
-             if p.id not in all_results_map: all_results_map[p.id] = p
+            if p.id not in all_results_map:
+                all_results_map[p.id] = p
 
     # Retorna apenas os valores do dicionário, garantindo produtos únicos
     return list(all_results_map.values())
+
 
 async def get_user_by_email(session: AsyncSession, email: str) -> Optional[User]:
     result = await session.execute(select(User).where(User.email == email))
     return result.scalars().first()
 
+
 async def get_user_by_id(session: AsyncSession, user_id: int) -> Optional[User]:
     result = await session.execute(select(User).where(User.id == user_id))
     return result.scalars().first()
 
+
 async def create_bot(
-    session: AsyncSession, 
-    user_id: int, 
-    whatsapp_number: str, 
-    restaurant_name: Optional[str], 
+    session: AsyncSession,
+    user_id: int,
+    whatsapp_number: str,
+    restaurant_name: Optional[str],
     pix_key: Optional[str],
     # ▼▼▼ NEW ARGUMENTS ▼▼▼
-    whatsapp_token: str = "", 
+    whatsapp_token: str = "",
     phone_number_id: str = "",
     delivery_fee: float = 0.0,
     min_order_value: float = 0.0,
     is_open: bool = True,
     closing_message: Optional[str] = None,
-    schedule: Optional[Dict[str, Any]] = None
+    schedule: Optional[Dict[str, Any]] = None,
     # ▲▲▲ END NEW ARGUMENTS ▲▲▲
 ) -> Optional[Bot]:
-    
+
     # Check if a bot with this number already exists
-    existing_bot_result = await session.execute(select(Bot).where(Bot.whatsapp_number == whatsapp_number))
-    if existing_bot_result.scalars().first(): 
+    existing_bot_result = await session.execute(
+        select(Bot).where(Bot.whatsapp_number == whatsapp_number)
+    )
+    if existing_bot_result.scalars().first():
         return None
-    
+
     # Create the new Bot object with all fields
     new_bot = Bot(
-        user_id=user_id, 
-        whatsapp_number=whatsapp_number, 
-        restaurant_name=restaurant_name, 
+        user_id=user_id,
+        whatsapp_number=whatsapp_number,
+        restaurant_name=restaurant_name,
         pix_key=pix_key,
         # ▼▼▼ ASSIGN NEW FIELDS ▼▼▼
         whatsapp_token=whatsapp_token,
@@ -293,19 +399,25 @@ async def create_bot(
         min_order_value=min_order_value,
         is_open=is_open,
         closing_message=closing_message or "Olá! No momento estamos fechados.",
-        schedule=schedule or {}
+        schedule=schedule or {},
     )
-    
+
     session.add(new_bot)
     await session.commit()
-    
+
     # Re-fetch to ensure relationships are loaded (consistent with previous logic)
     return await get_bot_by_id(session, bot_id=new_bot.id)
 
+
 async def get_bot_by_id(session: AsyncSession, bot_id: int) -> Optional[Bot]:
-    query = select(Bot).where(Bot.id == bot_id).options(selectinload(Bot.history), selectinload(Bot.products))
+    query = (
+        select(Bot)
+        .where(Bot.id == bot_id)
+        .options(selectinload(Bot.history), selectinload(Bot.products))
+    )
     result = await session.execute(query)
     return result.scalars().first()
+
 
 async def list_user_bots(session: AsyncSession, user_id: int) -> List[Bot]:
     """
@@ -314,19 +426,19 @@ async def list_user_bots(session: AsyncSession, user_id: int) -> List[Bot]:
     query = (
         select(Bot)
         .where(Bot.user_id == user_id)
-        .options(
-            selectinload(Bot.history), 
-            selectinload(Bot.products)
-        )
+        .options(selectinload(Bot.history), selectinload(Bot.products))
         # REMOVIDO: outerjoin(Order) e group_by (não precisamos mais calcular datas)
         # ADICIONADO: Ordenação simples por ID ascendente
-        .order_by(Bot.id.asc()) 
+        .order_by(Bot.id.asc())
     )
-    
+
     result = await session.execute(query)
     return result.unique().scalars().all()
 
-async def update_bot(session: AsyncSession, bot_id: int, update_data: BotUpdate) -> Optional[Bot]:
+
+async def update_bot(
+    session: AsyncSession, bot_id: int, update_data: BotUpdate
+) -> Optional[Bot]:
     """CORREÇÃO: A assinatura já estava recebendo bot_id, o que é ótimo."""
     db_bot = await session.get(Bot, bot_id)
     if not db_bot:
@@ -335,12 +447,13 @@ async def update_bot(session: AsyncSession, bot_id: int, update_data: BotUpdate)
     update_data_dict = update_data.model_dump(exclude_unset=True)
     for key, value in update_data_dict.items():
         setattr(db_bot, key, value)
-        
+
     session.add(db_bot)
     await session.commit()
-    
+
     # Chave da correção: Retorna o bot com as relações carregadas para o FastAPI.
     return await get_bot_by_id(session, bot_id=db_bot.id)
+
 
 async def delete_bot(session: AsyncSession, db_bot: Bot) -> bool:
     """
@@ -349,19 +462,20 @@ async def delete_bot(session: AsyncSession, db_bot: Bot) -> bool:
     """
     if not db_bot:
         return False
-        
+
     await session.delete(db_bot)
     await session.commit()
     return True
 
+
 async def create_product(
-    session: AsyncSession, 
-    bot_id: int, 
-    name: str, 
-    description: Optional[str], 
-    price: float, 
+    session: AsyncSession,
+    bot_id: int,
+    name: str,
+    description: Optional[str],
+    price: float,
     keywords: Optional[str] = None,
-    category: str = "Geral" # <--- Novo parâmetro com valor padrão
+    category: str = "Geral",  # <--- Novo parâmetro com valor padrão
 ) -> Product:
     # Incluímos a CATEGORIA no texto do embedding para ajudar na busca semântica
     text_to_embed = (
@@ -372,23 +486,26 @@ async def create_product(
     )
     embeddings = await embed_async([text_to_embed], space="products", normalize=False)
     embedding_vector = embeddings[0]
-    
+
     new_product = Product(
-        bot_id=bot_id, 
-        name=name, 
-        description=description, 
-        price=price, 
-        embedding=embedding_vector, 
+        bot_id=bot_id,
+        name=name,
+        description=description,
+        price=price,
+        embedding=embedding_vector,
         keywords=keywords,
-        category=category,      # <--- Salva no banco
-        is_available=True
+        category=category,  # <--- Salva no banco
+        is_available=True,
     )
     session.add(new_product)
     await session.commit()
     await session.refresh(new_product)
     return new_product
 
-async def update_product(session: AsyncSession, db_product: Product, update_data: ProductUpdate) -> Optional[Product]:
+
+async def update_product(
+    session: AsyncSession, db_product: Product, update_data: ProductUpdate
+) -> Optional[Product]:
     """
     Atualiza um objeto Product. Se nome, descrição, keywords OU CATEGORIA mudarem,
     o embedding é recalculado.
@@ -398,14 +515,14 @@ async def update_product(session: AsyncSession, db_product: Product, update_data
 
     update_data_dict = update_data.model_dump(exclude_unset=True)
     needs_re_embedding = False
-    
+
     for key, value in update_data_dict.items():
         setattr(db_product, key, value)
         # Verifica se um campo relevante para o significado do produto mudou
         # Adicionamos "category" a esta lista
         if key in ["name", "description", "keywords", "category"]:
             needs_re_embedding = True
-    
+
     if needs_re_embedding:
         # Recalcula o embedding com os dados novos (incluindo a categoria atualizada)
         text_to_embed = (
@@ -414,44 +531,49 @@ async def update_product(session: AsyncSession, db_product: Product, update_data
             f"DESCRIÇÃO E INGREDIENTES: {db_product.description or 'N/A'}. "
             f"CATEGORIAS E TAGS: {db_product.keywords or 'N/A'}."
         )
-        embeddings = await embed_async([text_to_embed], space="products", normalize=False)
+        embeddings = await embed_async(
+            [text_to_embed], space="products", normalize=False
+        )
         db_product.embedding = embeddings[0]
-        
+
     session.add(db_product)
     await session.commit()
     await session.refresh(db_product)
     return db_product
 
-async def bulk_create_products(session: AsyncSession, bot_id: int, products_data: List[Dict]) -> int:
+
+async def bulk_create_products(
+    session: AsyncSession, bot_id: int, products_data: List[Dict]
+) -> int:
     """
     Sincroniza o catálogo com PERFORMANCE MÁXIMA:
     1. Gera embeddings de todos os produtos em 1 única requisição (Batch).
     2. Faz Upsert (Atualiza ou Cria) dos dados no banco.
     3. Faz Soft Delete do que saiu do cardápio.
     """
-    
+
     # 1. Busca produtos existentes (para decidir entre Update ou Create)
     stmt = select(Product).where(Product.bot_id == bot_id)
     result = await session.execute(stmt)
     existing_products = result.scalars().all()
-    
+
     # Mapa para busca rápida: nome_normalizado -> Produto
     existing_map = {p.name.strip().lower(): p for p in existing_products}
-    
+
     # Listas preparatórias para o processamento em lote
     items_to_process = []
     texts_to_embed = []
-    
+
     processed_names_in_file = set()
 
     # 2. Pré-processamento: Monta os textos mas NÃO chama a IA ainda
     for item in products_data:
         raw_name = item.get("name", "").strip()
-        if not raw_name: 
+        if not raw_name:
             continue
-            
+
         name_key = raw_name.lower()
-        
+
         # Evita duplicatas no mesmo arquivo
         if name_key in processed_names_in_file:
             continue
@@ -461,7 +583,9 @@ async def bulk_create_products(session: AsyncSession, bot_id: int, products_data
         category = item.get("category", "Geral")
         description = item.get("description", "")
         keywords = item.get("keywords", [])
-        keywords_str = ", ".join(keywords) if isinstance(keywords, list) else str(keywords)
+        keywords_str = (
+            ", ".join(keywords) if isinstance(keywords, list) else str(keywords)
+        )
         price = float(item.get("price", 0.0))
 
         # Texto para o Embedding
@@ -471,22 +595,26 @@ async def bulk_create_products(session: AsyncSession, bot_id: int, products_data
             f"DESCRIÇÃO E INGREDIENTES: {description or 'N/A'}. "
             f"PALAVRAS-CHAVE: {keywords_str or 'N/A'}."
         )
-        
+
         # Guarda os dados limpos e o texto
-        items_to_process.append({
-            "raw_name": raw_name,
-            "name_key": name_key,
-            "description": description,
-            "price": price,
-            "keywords": keywords_str,
-            "category": category
-        })
+        items_to_process.append(
+            {
+                "raw_name": raw_name,
+                "name_key": name_key,
+                "description": description,
+                "price": price,
+                "keywords": keywords_str,
+                "category": category,
+            }
+        )
         texts_to_embed.append(text)
 
     # 🚀 3. A MÁGICA: Gera todos os embeddings de uma vez (1 Request apenas!)
     if texts_to_embed:
         # Isso transforma 30 segundos de espera em ~1 segundo
-        embeddings = await embed_async(texts_to_embed, space="products", normalize=False)
+        embeddings = await embed_async(
+            texts_to_embed, space="products", normalize=False
+        )
     else:
         embeddings = []
 
@@ -497,35 +625,35 @@ async def bulk_create_products(session: AsyncSession, bot_id: int, products_data
     # Itera sobre os dados e os vetores simultaneamente
     for item_data, embedding_vector in zip(items_to_process, embeddings):
         name_key = item_data["name_key"]
-        
+
         if name_key in existing_map:
             # --- ATUALIZAR (UPDATE) ---
             product = existing_map[name_key]
-            
+
             product.name = item_data["raw_name"]
             product.description = item_data["description"]
             product.price = item_data["price"]
             product.keywords = item_data["keywords"]
             product.category = item_data["category"]
-            product.embedding = embedding_vector # Vetor novo
-            
+            product.embedding = embedding_vector  # Vetor novo
+
             product.is_available = True
             product.is_deleted = False
-            
+
             session.add(product)
             processed_db_ids.add(product.id)
         else:
             # --- CRIAR (INSERT) ---
             new_product = Product(
-                bot_id=bot_id, 
-                name=item_data["raw_name"], 
+                bot_id=bot_id,
+                name=item_data["raw_name"],
                 description=item_data["description"],
-                price=item_data["price"], 
-                embedding=embedding_vector, # Vetor novo
+                price=item_data["price"],
+                embedding=embedding_vector,  # Vetor novo
                 keywords=item_data["keywords"],
                 category=item_data["category"],
                 is_available=True,
-                is_deleted=False
+                is_deleted=False,
             )
             products_to_add.append(new_product)
 
@@ -535,47 +663,66 @@ async def bulk_create_products(session: AsyncSession, bot_id: int, products_data
 
     for product in existing_products:
         if product.id not in processed_db_ids:
-            if not product.is_deleted: 
+            if not product.is_deleted:
                 product.is_available = False
                 product.is_deleted = True
                 session.add(product)
 
     await session.commit()
-        
+
     return len(processed_db_ids) + len(products_to_add)
+
 
 async def get_products_by_bot_id(
     session: AsyncSession, bot_id: int, limit: int = 50, offset: int = 0
 ) -> List[Product]:
-    statement = select(Product).where(
-        Product.bot_id == bot_id,
-        Product.is_deleted == False  # <--- FILTRO NOVO
-    ).order_by(Product.category, Product.name).offset(offset).limit(limit)
+    statement = (
+        select(Product)
+        .where(
+            Product.bot_id == bot_id,
+            Product.is_deleted == False,  # <--- FILTRO NOVO
+        )
+        .order_by(Product.category, Product.name)
+        .offset(offset)
+        .limit(limit)
+    )
     result = await session.execute(statement)
     return result.scalars().all()
 
-async def get_product_by_id(session: AsyncSession, product_id: int) -> Optional[Product]:
-    query = select(Product).where(Product.id == product_id).options(selectinload(Product.bot))
+
+async def get_product_by_id(
+    session: AsyncSession, product_id: int
+) -> Optional[Product]:
+    query = (
+        select(Product)
+        .where(Product.id == product_id)
+        .options(selectinload(Product.bot))
+    )
     result = await session.execute(query)
     return result.scalars().first()
 
-async def bulk_delete_products(session: AsyncSession, bot_id: int, product_ids: List[int]) -> int:
+
+async def bulk_delete_products(
+    session: AsyncSession, bot_id: int, product_ids: List[int]
+) -> int:
     # Em vez de delete(), usamos update()
     statement = (
         update(Product)
         .where(Product.bot_id == bot_id)
         .where(Product.id.in_(product_ids))
-        .values(is_deleted=True) # <--- MARCA COMO DELETADO
+        .values(is_deleted=True)  # <--- MARCA COMO DELETADO
     )
-    
+
     result = await session.execute(statement)
     await session.commit()
     return result.rowcount
 
+
 async def delete_product(session: AsyncSession, db_product: Product):
-    db_product.is_deleted = True # Soft Delete
+    db_product.is_deleted = True  # Soft Delete
     session.add(db_product)
     await session.commit()
+
 
 async def create_order(
     session: AsyncSession,
@@ -584,8 +731,8 @@ async def create_order(
     total_amount: float,
     delivery_method: DeliveryMethod,
     customer_address: str | None = None,
-    contact_id: int | None = None, # <-- 1. Novo parâmetro
-    payment_method: str | None = None
+    contact_id: int | None = None,  # <-- 1. Novo parâmetro
+    payment_method: str | None = None,
 ) -> Order | None:
     try:
         order_items_to_create: list[OrderItem] = []
@@ -593,19 +740,21 @@ async def create_order(
             product = await session.get(Product, item_data["product_id"])
             if not product:
                 raise ValueError(f"Produto {item_data['product_id']} não encontrado.")
-            order_items_to_create.append(OrderItem(
-                product_id=product.id, 
-                quantity=item_data["quantity"], 
-                price_at_time_of_order=product.price,
-                notes=item_data.get("notes") # Pega do dicionário passado
-            ))
+            order_items_to_create.append(
+                OrderItem(
+                    product_id=product.id,
+                    quantity=item_data["quantity"],
+                    price_at_time_of_order=product.price,
+                    notes=item_data.get("notes"),  # Pega do dicionário passado
+                )
+            )
 
         new_order = Order(
             bot_id=bot_id,
             total_amount=round(total_amount, 2),
             delivery_method=delivery_method,
             customer_address=customer_address,
-            contact_id=contact_id, # <-- 2. Salva o contato
+            contact_id=contact_id,  # <-- 2. Salva o contato
             payment_method=payment_method,
             items=order_items_to_create,
         )
@@ -620,47 +769,61 @@ async def create_order(
         logger.error("Failed to create order: %s", exc)
         return None
 
+
 # app/crud.py
 
-async def save_address_to_cart(session: AsyncSession, cart_id: int, address: str) -> Optional[ShoppingCart]:
+
+async def save_address_to_cart(
+    session: AsyncSession, cart_id: int, address: str
+) -> Optional[ShoppingCart]:
     """
     Apenas salva o endereço confirmado no objeto do carrinho para uso posterior.
     """
     cart = await session.get(ShoppingCart, cart_id)
     if not cart:
         return None
-    
+
     cart.customer_address = address
     session.add(cart)
     await session.flush()
     return cart
 
-async def save_customer_name_to_contact(session: AsyncSession, contact_id: int, name: str) -> Optional[Contact]:
+
+async def save_customer_name_to_contact(
+    session: AsyncSession, contact_id: int, name: str
+) -> Optional[Contact]:
     """
     Salva ou atualiza o nome de um contato no banco de dados.
     """
     contact = await session.get(Contact, contact_id)
     if not contact:
         return None
-    
+
     contact.name = name
     session.add(contact)
     await session.flush()
     await session.refresh(contact)
     return contact
 
-async def set_human_takeover_by_phone(session: AsyncSession, bot_id: int, phone_number: str, active: bool) -> bool:
+
+async def set_human_takeover_by_phone(
+    session: AsyncSession, bot_id: int, phone_number: str, active: bool
+) -> bool:
     """
     Encontra o carrinho de um cliente pelo número de telefone e ativa/desativa o modo de atendimento humano.
     """
     # Encontra o contato pelo número de telefone para o bot específico
     contact_result = await session.execute(
-        select(Contact).where(Contact.phone_number == phone_number, Contact.bot_id == bot_id)
+        select(Contact).where(
+            Contact.phone_number == phone_number, Contact.bot_id == bot_id
+        )
     )
     contact = contact_result.scalar_one_or_none()
 
     if not contact:
-        logger.warning("Contact not found for phone %s, bot %s", mask_phone(phone_number), bot_id)
+        logger.warning(
+            "Contact not found for phone %s, bot %s", mask_phone(phone_number), bot_id
+        )
         return False
 
     # Encontra o carrinho associado a esse contato
@@ -672,15 +835,16 @@ async def set_human_takeover_by_phone(session: AsyncSession, bot_id: int, phone_
     if not cart:
         logger.warning("Cart not found for contact %s", contact.id)
         return False
-    
+
     # Ativa ou desativa o interruptor
     cart.human_takeover_active = active
     session.add(cart)
     await session.commit()
-    
+
     status = "ATIVADO" if active else "DESATIVADO"
     logger.info("Human takeover %s for phone %s", status, mask_phone(phone_number))
     return True
+
 
 async def delete_order(session: AsyncSession, order_id: int) -> bool:
     """
@@ -688,17 +852,23 @@ async def delete_order(session: AsyncSession, order_id: int) -> bool:
     Útil para reverter a criação de um pedido se o pagamento falhar.
     """
     order_to_delete = await session.get(Order, order_id)
-    
+
     if not order_to_delete:
         logger.warning("Order %s not found for deletion", order_id)
         return False
-        
+
     await session.delete(order_to_delete)
     await session.commit()
     logger.info("Order %s deleted", order_id)
     return True
 
-async def update_order_status_by_id(session: AsyncSession, order_id: int, new_status: OrderStatus, psp_charge_id: Optional[str] = None) -> Optional[Order]:
+
+async def update_order_status_by_id(
+    session: AsyncSession,
+    order_id: int,
+    new_status: OrderStatus,
+    psp_charge_id: Optional[str] = None,
+) -> Optional[Order]:
     """
     Encontra um pedido pelo ID, atualiza seu status e o psp_charge_id.
     Retorna o objeto Order com o 'contact' e 'bot' carregados se for bem-sucedido
@@ -708,52 +878,64 @@ async def update_order_status_by_id(session: AsyncSession, order_id: int, new_st
     query = (
         select(Order)
         .where(Order.id == order_id)
-        .options(selectinload(Order.bot), selectinload(Order.items).selectinload(OrderItem.product))
+        .options(
+            selectinload(Order.bot),
+            selectinload(Order.items).selectinload(OrderItem.product),
+        )
     )
     result = await session.execute(query)
     order = result.scalars().first()
 
     if isinstance(new_status, str):
         new_status = OrderStatus(new_status.lower())
-    
 
     if not order:
         logger.warning("Order %s not found for status update", order_id)
         return None
-    
+
     # IMPORTANTE: Proteção de idempotência
     # Se o status já for o final, não fazemos nada e não retornamos o pedido.
     # Isso evita enviar 5 confirmações para o cliente se o MP enviar 5 webhooks.
-    if order.status == new_status or order.status in [OrderStatus.FAILED, OrderStatus.EXPIRED]:
-        logger.info("Order %s already in terminal state (%s), skipping", order_id, order.status)
+    if order.status == new_status or order.status in [
+        OrderStatus.FAILED,
+        OrderStatus.EXPIRED,
+    ]:
+        logger.info(
+            "Order %s already in terminal state (%s), skipping", order_id, order.status
+        )
         return None
-    
+
     order.status = new_status
     if psp_charge_id:
         order.psp_charge_id = psp_charge_id
-    
+
     session.add(order)
     await session.commit()
-    await session.refresh(order, attribute_names=["bot", "items"]) # Garante que os dados carregados estão frescos
-    
+    await session.refresh(
+        order, attribute_names=["bot", "items"]
+    )  # Garante que os dados carregados estão frescos
+
     logger.info("Order %s updated to %s", order_id, new_status)
     return order
 
-async def list_orders_by_bot(session: AsyncSession, bot_id: int, status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+
+async def list_orders_by_bot(
+    session: AsyncSession, bot_id: int, status_filter: Optional[str] = None
+) -> List[Dict[str, Any]]:
     query = (
         select(Order)
         .where(Order.bot_id == bot_id)
         # Agora podemos carregar o contato, pois o relacionamento existe!
         .options(
             selectinload(Order.items).selectinload(OrderItem.product),
-            selectinload(Order.contact).selectinload(Contact.cart) 
+            selectinload(Order.contact).selectinload(Contact.cart),
         )
         .order_by(Order.created_at.desc())
     )
-    
+
     if status_filter:
         query = query.where(Order.status == status_filter)
-        
+
     result = await session.execute(query)
     orders = result.scalars().all()
 
@@ -762,85 +944,117 @@ async def list_orders_by_bot(session: AsyncSession, bot_id: int, status_filter: 
         order_dict = order.model_dump()
 
         order_dict["payment_method"] = order.payment_method
-        order_dict["delivery_fee"] = order.bot.delivery_fee if order.delivery_method == DeliveryMethod.DELIVERY else 0.0
-        
+        order_dict["delivery_fee"] = (
+            order.bot.delivery_fee
+            if order.delivery_method == DeliveryMethod.DELIVERY
+            else 0.0
+        )
+
         order_dict["display_items"] = [
-            {"quantity": item.quantity, "product_name": item.product.name, "notes": item.notes, "price_at_time_of_order": item.price_at_time_of_order} 
+            {
+                "quantity": item.quantity,
+                "product_name": item.product.name,
+                "notes": item.notes,
+                "price_at_time_of_order": item.price_at_time_of_order,
+            }
             for item in order.items
         ]
-        
+
         # ▼▼▼ CORREÇÃO AQUI ▼▼▼
         if order.contact:
             order_dict["customer_phone"] = order.contact.phone_number
             # Adicionamos explicitamente o nome aqui:
-            order_dict["customer_name"] = order.contact.name 
-            
+            order_dict["customer_name"] = order.contact.name
+
             if order.contact.cart:
-                order_dict["human_takeover_active"] = order.contact.cart.human_takeover_active
+                order_dict["human_takeover_active"] = (
+                    order.contact.cart.human_takeover_active
+                )
             else:
                 order_dict["human_takeover_active"] = False
         else:
-             order_dict["customer_phone"] = "Desconhecido"
-             order_dict["customer_name"] = None # Garante que a chave exista
-             order_dict["human_takeover_active"] = False
+            order_dict["customer_phone"] = "Desconhecido"
+            order_dict["customer_name"] = None  # Garante que a chave exista
+            order_dict["human_takeover_active"] = False
         # ▲▲▲ FIM DA CORREÇÃO ▲▲▲
-        
+
         formatted_orders.append(order_dict)
-        
+
     return formatted_orders
+
 
 async def get_top_selling_products(session: AsyncSession, bot_id: int, limit: int = 5):
     query = (
         select(
-            Product.name, 
+            Product.name,
             func.sum(OrderItem.quantity).label("total_sold"),
-            func.sum(OrderItem.quantity * OrderItem.price_at_time_of_order).label("total_revenue")
+            func.sum(OrderItem.quantity * OrderItem.price_at_time_of_order).label(
+                "total_revenue"
+            ),
         )
         .join(OrderItem, Product.id == OrderItem.product_id)
         .join(Order, OrderItem.order_id == Order.id)
-        .where(Order.bot_id == bot_id) 
-        # .where(Order.status == 'COMPLETED') 
+        .where(Order.bot_id == bot_id)
+        # .where(Order.status == 'COMPLETED')
         .group_by(Product.id, Product.name)
         .order_by(desc("total_sold"))
         .limit(limit)
     )
-    
+
     result = await session.execute(query)
     return result.all()
 
-async def update_item_notes(session: AsyncSession, cart_id: int, product_id: int, notes: str) -> Optional[ShoppingCart]:
+
+async def update_item_notes(
+    session: AsyncSession, cart_id: int, product_id: int, notes: str
+) -> Optional[ShoppingCart]:
     """Atualiza apenas a observação de um item no carrinho."""
-    cart = await session.get(ShoppingCart, cart_id, options=[selectinload(ShoppingCart.items).selectinload(CartItem.product)])
+    cart = await session.get(
+        ShoppingCart,
+        cart_id,
+        options=[selectinload(ShoppingCart.items).selectinload(CartItem.product)],
+    )
     if not cart:
         return None
-        
-    item_to_modify = next((item for item in cart.items if item.product_id == product_id), None)
-    
+
+    item_to_modify = next(
+        (item for item in cart.items if item.product_id == product_id), None
+    )
+
     if item_to_modify:
         item_to_modify.notes = notes
         session.add(item_to_modify)
         await session.flush()
         return cart
-    
+
     return None
 
 
-async def get_subscription_by_mp_id(session: AsyncSession, mp_id: str) -> Optional[Subscription]:
+async def get_subscription_by_mp_id(
+    session: AsyncSession, mp_id: str
+) -> Optional[Subscription]:
     stmt = select(Subscription).where(Subscription.mp_subscription_id == mp_id)
     result = await session.execute(stmt)
     return result.scalars().first()
 
+
 # ▼▼▼ NOVA FUNÇÃO PARA BUSCAR ASSINATURA POR BOT ▼▼▼
-async def get_subscription_by_bot(session: AsyncSession, bot_id: int) -> Optional[Subscription]:
+async def get_subscription_by_bot(
+    session: AsyncSession, bot_id: int
+) -> Optional[Subscription]:
     stmt = select(Subscription).where(Subscription.bot_id == bot_id)
     result = await session.execute(stmt)
     return result.scalars().first()
 
+
 # (Esta função fica deprecada, mas mantida por segurança)
-async def get_subscription_by_user(session: AsyncSession, user_id: int) -> Optional[Subscription]:
+async def get_subscription_by_user(
+    session: AsyncSession, user_id: int
+) -> Optional[Subscription]:
     stmt = select(Subscription).where(Subscription.user_id == user_id)
     result = await session.execute(stmt)
     return result.scalars().first()
+
 
 # ▼▼▼ FUNÇÃO UPSERT ATUALIZADA ▼▼▼
 async def upsert_subscription(
@@ -867,26 +1081,27 @@ async def upsert_subscription(
     await session.refresh(sub)
     return sub
 
+
 async def cancel_expired_pix_orders(session: AsyncSession):
     """Cancela pedidos PIX pendentes há mais de 15 minutos."""
     limit_time = utcnow() - timedelta(minutes=15)
-    
+
     query = select(Order).where(
         Order.status == OrderStatus.PENDING,
         Order.payment_method == "pix",
-        Order.created_at < limit_time
+        Order.created_at < limit_time,
     )
-    
+
     result = await session.execute(query)
     expired_orders = result.scalars().all()
-    
+
     count = 0
     for order in expired_orders:
         order.status = OrderStatus.CANCELED
         session.add(order)
         count += 1
         logger.info("Order #%s expired (PIX > 15min), auto-canceled", order.id)
-        
+
     if count > 0:
         await session.commit()
     return count

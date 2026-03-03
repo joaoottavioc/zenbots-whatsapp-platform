@@ -5,8 +5,6 @@ bot_routes which requires fitz (PyMuPDF, only available in Docker).
 Instead we replicate the build_cors_kwargs logic here and test it
 to ensure the production guard works correctly.
 """
-import os
-from unittest.mock import patch
 
 
 def _build_cors_kwargs_isolated(env_overrides: dict) -> dict:
@@ -25,7 +23,9 @@ def _build_cors_kwargs_isolated(env_overrides: dict) -> dict:
     )
 
     if origins_raw:
-        kwargs["allow_origins"] = [o.strip() for o in origins_raw.split(",") if o.strip()]
+        kwargs["allow_origins"] = [
+            o.strip() for o in origins_raw.split(",") if o.strip()
+        ]
     elif origin_regex:
         kwargs["allow_origin_regex"] = origin_regex
     elif environment == "development":
@@ -38,16 +38,23 @@ def _build_cors_kwargs_isolated(env_overrides: dict) -> dict:
 
 class TestBuildCorsKwargs:
     def test_explicit_origins(self):
-        result = _build_cors_kwargs_isolated({
-            "CORS_ORIGINS": "https://app.zen.com, https://admin.zen.com",
-        })
-        assert result["allow_origins"] == ["https://app.zen.com", "https://admin.zen.com"]
+        result = _build_cors_kwargs_isolated(
+            {
+                "CORS_ORIGINS": "https://app.zen.com, https://admin.zen.com",
+            }
+        )
+        assert result["allow_origins"] == [
+            "https://app.zen.com",
+            "https://admin.zen.com",
+        ]
         assert "allow_origin_regex" not in result
 
     def test_explicit_regex(self):
-        result = _build_cors_kwargs_isolated({
-            "CORS_ORIGIN_REGEX": r"https://.*\.zen\.com",
-        })
+        result = _build_cors_kwargs_isolated(
+            {
+                "CORS_ORIGIN_REGEX": r"https://.*\.zen\.com",
+            }
+        )
         assert result["allow_origin_regex"] == r"https://.*\.zen\.com"
         assert "allow_origins" not in result
 
@@ -61,10 +68,12 @@ class TestBuildCorsKwargs:
         assert "allow_origin_regex" not in result
 
     def test_production_with_origins_works(self):
-        result = _build_cors_kwargs_isolated({
-            "ENVIRONMENT": "production",
-            "CORS_ORIGINS": "https://myapp.com",
-        })
+        result = _build_cors_kwargs_isolated(
+            {
+                "ENVIRONMENT": "production",
+                "CORS_ORIGINS": "https://myapp.com",
+            }
+        )
         assert result["allow_origins"] == ["https://myapp.com"]
 
     def test_always_has_credentials(self):
@@ -72,9 +81,11 @@ class TestBuildCorsKwargs:
         assert result["allow_credentials"] is True
 
     def test_origins_take_priority_over_regex(self):
-        result = _build_cors_kwargs_isolated({
-            "CORS_ORIGINS": "https://app.com",
-            "CORS_ORIGIN_REGEX": "https://.*",
-        })
+        result = _build_cors_kwargs_isolated(
+            {
+                "CORS_ORIGINS": "https://app.com",
+                "CORS_ORIGIN_REGEX": "https://.*",
+            }
+        )
         assert "allow_origins" in result
         assert "allow_origin_regex" not in result

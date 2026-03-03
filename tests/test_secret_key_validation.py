@@ -1,5 +1,6 @@
 # tests/test_secret_key_validation.py
 """Verify SECRET_KEY startup validation in app/auth.py."""
+
 import ast
 import pathlib
 
@@ -18,13 +19,19 @@ class TestSecretKeyValidation:
                 # Check for `not SECRET_KEY` test
                 test = node.test
                 if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
-                    if isinstance(test.operand, ast.Name) and test.operand.id == "SECRET_KEY":
+                    if (
+                        isinstance(test.operand, ast.Name)
+                        and test.operand.id == "SECRET_KEY"
+                    ):
                         # Check the body has a Raise with RuntimeError
                         for stmt in node.body:
                             if isinstance(stmt, ast.Raise) and stmt.exc is not None:
                                 if isinstance(stmt.exc, ast.Call):
                                     func = stmt.exc.func
-                                    if isinstance(func, ast.Name) and func.id == "RuntimeError":
+                                    if (
+                                        isinstance(func, ast.Name)
+                                        and func.id == "RuntimeError"
+                                    ):
                                         found_guard = True
 
         assert found_guard, (
@@ -44,7 +51,10 @@ class TestSecretKeyValidation:
             if isinstance(node, ast.If):
                 test = node.test
                 if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
-                    if isinstance(test.operand, ast.Name) and test.operand.id == "SECRET_KEY":
+                    if (
+                        isinstance(test.operand, ast.Name)
+                        and test.operand.id == "SECRET_KEY"
+                    ):
                         guard_line = node.lineno
 
         for node in ast.iter_child_nodes(tree):

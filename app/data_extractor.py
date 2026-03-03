@@ -7,12 +7,13 @@ from app.openai_client import get_extraction_response
 
 logger = logging.getLogger(__name__)
 
+
 def _create_extraction_prompt(menu_text: str) -> List[Dict]:
     """
     Cria um prompt otimizado que força a IA a extrair produtos e também
     a gerar palavras-chave relevantes para cada um.
     """
-    
+
     prompt = f"""Sua tarefa é analisar o texto de um cardápio e extrair TODOS os itens.
 O resultado final DEVE SER um único objeto JSON com uma única chave chamada "products".
 O valor da chave "products" deve ser um array de objetos, onde cada objeto representa um item do cardápio.
@@ -37,8 +38,11 @@ CARDÁPIO PARA EXTRAÇÃO:
 ---
 """
     return [
-        {"role": "system", "content": "Você é um especialista em extrair dados de cardápios e formatá-los em um objeto JSON válido com uma chave 'products', onde cada produto inclui um campo 'keywords'."},
-        {"role": "user", "content": prompt}
+        {
+            "role": "system",
+            "content": "Você é um especialista em extrair dados de cardápios e formatá-los em um objeto JSON válido com uma chave 'products', onde cada produto inclui um campo 'keywords'.",
+        },
+        {"role": "user", "content": prompt},
     ]
 
 
@@ -56,7 +60,11 @@ async def extract_products_from_text(menu_text: str) -> List[Dict]:
     try:
         data = json.loads(json_string_response)
 
-        if isinstance(data, dict) and "products" in data and isinstance(data["products"], list):
+        if (
+            isinstance(data, dict)
+            and "products" in data
+            and isinstance(data["products"], list)
+        ):
             logger.info("Extracted %d products from menu text", len(data["products"]))
             return data["products"]
         else:

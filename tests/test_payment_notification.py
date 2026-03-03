@@ -6,8 +6,8 @@ Validates that the phone_dest is derived from order.contact.phone_number
 (not from the fragile email-split hack) and that a missing contact
 does not crash.
 """
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+
+from unittest.mock import AsyncMock, MagicMock
 
 
 class TestPaymentNotificationPhoneDest:

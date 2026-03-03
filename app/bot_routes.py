@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, status, Request, Query
-from fastapi.responses import RedirectResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 from typing import List, Dict, Any
 
@@ -8,19 +7,16 @@ from app import crud, schemas, data_extractor
 from app.database import get_session
 from app.models import User
 from app.auth import get_current_user
-from app.schemas import WhatsAppAuthRequest, EmbeddedSignupPayload, ForgotPasswordRequest
-from app.auth import get_current_user
+from app.schemas import WhatsAppAuthRequest
 import re
 import logging
 
-from fastapi import UploadFile, File, Form
+from fastapi import UploadFile, File
 from app.openai_client import extract_products_from_image
 import fitz  # PyMuPDF (Necessário para ler PDFs)
 
 import os
 import httpx
-from pydantic import BaseModel
-from urllib.parse import urlparse
 from arq import ArqRedis
 import asyncio
 from app.menu_storage import upload_bytes_to_s3
@@ -35,11 +31,12 @@ MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 
 # --- Rotas para Gerenciamento de Bots ---
 
+
 @router.post("/bots", response_model=schemas.BotResponse, status_code=201)
 async def create_new_bot(
     bot_data: schemas.BotCreate,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     """Cria um novo bot 'casca' para o usuário logado."""
 
@@ -52,18 +49,21 @@ async def create_new_bot(
         delivery_fee=bot_data.delivery_fee,
         min_order_value=bot_data.min_order_value,
         whatsapp_token=bot_data.whatsapp_token,
-        phone_number_id=bot_data.phone_number_id
+        phone_number_id=bot_data.phone_number_id,
     )
 
     if not bot_created:
-        raise HTTPException(status_code=400, detail="Um bot com este número de WhatsApp já existe.")
+        raise HTTPException(
+            status_code=400, detail="Um bot com este número de WhatsApp já existe."
+        )
 
     return bot_created
+
 
 @router.get("/bots", response_model=List[schemas.BotResponse])
 async def get_user_bots(
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     """Lista todos os bots pertencentes ao usuário logado."""
     bots = await crud.list_user_bots(session, user_id=current_user.id)
@@ -75,7 +75,7 @@ async def update_user_bot(
     bot_id: int,
     bot_update_data: schemas.BotUpdate,
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
     Atualiza os dados de configuração de um bot (nome, número, chave pix).
@@ -94,20 +94,24 @@ async def update_user_bot(
     updated_bot = await crud.update_bot(
         session=session,
         bot_id=bot_id,  # Passa o ID que a função espera
-        update_data=bot_update_data
+        update_data=bot_update_data,
     )
     # ▲▲▲ FIM DA CORREÇÃO ▲▲▲
 
     return updated_bot
 
+
 # --- Rotas para Gerenciamento de Catálogo/Produtos ---
 
-@router.post("/bots/{bot_id}/products", response_model=schemas.ProductResponse, status_code=201)
+
+@router.post(
+    "/bots/{bot_id}/products", response_model=schemas.ProductResponse, status_code=201
+)
 async def create_product_for_bot(
     bot_id: int,
     product_data: schemas.ProductCreate,
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Cria um novo produto (item de cardápio) para um bot específico."""
     db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
@@ -121,7 +125,7 @@ async def create_product_for_bot(
         description=product_data.description,
         price=product_data.price,
         # ▼▼▼ CORREÇÃO: ADICIONE ESTA LINHA ▼▼▼
-        category=product_data.category # Agora passamos a categoria recebida!
+        category=product_data.category,  # Agora passamos a categoria recebida!
     )
 
     return new_product
@@ -131,12 +135,13 @@ async def create_product_for_bot(
 
 # Em app/bot_routes.py
 
+
 @router.post("/bots/{bot_id}/catalog/upload", status_code=201)
 async def upload_catalog_from_text(
     bot_id: int,
     request_data: schemas.CatalogUploadRequest,
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """Recebe um texto de cardápio, extrai os produtos e salva em lote."""
     db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
@@ -144,10 +149,14 @@ async def upload_catalog_from_text(
         raise HTTPException(status_code=403, detail="Acesso negado.")
 
     # 1. Extrai os produtos do texto usando o LLM (como antes)
-    extracted_products = await data_extractor.extract_products_from_text(request_data.catalog_text)
+    extracted_products = await data_extractor.extract_products_from_text(
+        request_data.catalog_text
+    )
 
     if not extracted_products:
-        raise HTTPException(status_code=400, detail="Não foi possível extrair itens do cardápio.")
+        raise HTTPException(
+            status_code=400, detail="Não foi possível extrair itens do cardápio."
+        )
 
     # ▼▼▼ PASSO NOVO E CRUCIAL: ENRIQUECER OS DADOS EXTRAÍDOS ▼▼▼
 
@@ -159,7 +168,7 @@ async def upload_catalog_from_text(
 
         # Combina, remove caracteres especiais e cria uma lista de palavras únicas
         full_text = name_words + " " + desc_words
-        words = set(re.findall(r'\b\w+\b', full_text)) # Extrai palavras
+        words = set(re.findall(r"\b\w+\b", full_text))  # Extrai palavras
 
         # Adiciona a nova chave "keywords" ao dicionário do produto
         product["keywords"] = list(words)
@@ -171,16 +180,19 @@ async def upload_catalog_from_text(
     products_added_count = await crud.bulk_create_products(
         session=session,
         bot_id=bot_id,
-        products_data=enriched_products  # 👈 Usa a lista enriquecida
+        products_data=enriched_products,  # 👈 Usa a lista enriquecida
     )
 
-    return {"message": f"{products_added_count} produtos adicionados com sucesso ao bot {bot_id}."}
+    return {
+        "message": f"{products_added_count} produtos adicionados com sucesso ao bot {bot_id}."
+    }
+
 
 @router.delete("/bots/{bot_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user_bot(
     bot_id: int,
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Exclui um bot, garantindo que apenas o seu dono possa fazê-lo."""
     db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
@@ -199,29 +211,35 @@ async def delete_user_bot(
     # Respostas 204 (No Content) não devem ter corpo
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
+
 @router.get("/bots/{bot_id}/products", response_model=List[schemas.ProductResponse])
 async def list_products_for_bot(
     bot_id: int,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Lista todos os produtos de um bot específico, verificando a permissão do usuário."""
     db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
     if not db_bot or db_bot.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Acesso negado.")
 
-    products = await crud.get_products_by_bot_id(session, bot_id=bot_id, limit=limit, offset=offset)
+    products = await crud.get_products_by_bot_id(
+        session, bot_id=bot_id, limit=limit, offset=offset
+    )
     return products
 
-@router.put("/bots/{bot_id}/products/{product_id}", response_model=schemas.ProductResponse)
+
+@router.put(
+    "/bots/{bot_id}/products/{product_id}", response_model=schemas.ProductResponse
+)
 async def update_product_endpoint(
     bot_id: int,
     product_id: int,
     product_data: schemas.ProductUpdate,
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Atualiza um produto, verificando a propriedade do bot e do produto."""
 
@@ -240,16 +258,20 @@ async def update_product_endpoint(
         raise HTTPException(status_code=403, detail="Produto não pertence a este bot.")
 
     # 4. Chama a função CRUD (agora corrigida)
-    return await crud.update_product(session, db_product=db_product, update_data=product_data)
+    return await crud.update_product(
+        session, db_product=db_product, update_data=product_data
+    )
+
 
 # No seu arquivo de rotas (ex: app/bot_routes.py)
+
 
 @router.delete("/bots/{bot_id}/products/{product_id}", status_code=204)
 async def delete_product_endpoint(
     bot_id: int,
     product_id: int,
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Exclui um produto, verificando a propriedade do bot e do produto."""
 
@@ -270,14 +292,16 @@ async def delete_product_endpoint(
     await crud.delete_product(session, db_product=db_product)
     return
 
+
 # No seu arquivo de rotas (ex: app/bot_routes.py)
+
 
 @router.post("/bots/{bot_id}/products/bulk-delete")
 async def bulk_delete_products_endpoint(
-    bot_id: int, # <-- 1. Adiciona o bot_id
+    bot_id: int,  # <-- 1. Adiciona o bot_id
     delete_data: schemas.ProductBulkDeleteRequest,
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Exclui uma lista de produtos de um bot específico em uma única operação."""
 
@@ -289,22 +313,26 @@ async def bulk_delete_products_endpoint(
     # 3. Chama a nova função CRUD simplificada
     deleted_count = await crud.bulk_delete_products(
         session=session,
-        bot_id=bot_id, # <-- Passa o bot_id validado
-        product_ids=delete_data.product_ids
+        bot_id=bot_id,  # <-- Passa o bot_id validado
+        product_ids=delete_data.product_ids,
     )
 
     if deleted_count == 0 and len(delete_data.product_ids) > 0:
         # A mensagem de erro agora é mais específica
-        raise HTTPException(status_code=403, detail="Nenhum produto foi deletado. Verifique se os IDs pertencem a este bot.")
+        raise HTTPException(
+            status_code=403,
+            detail="Nenhum produto foi deletado. Verifique se os IDs pertencem a este bot.",
+        )
 
     return {"message": f"{deleted_count} produtos foram excluídos com sucesso."}
+
 
 @router.post("/bots/{bot_id}/catalog/upload-from-file", status_code=201)
 async def upload_catalog_from_file_endpoint(
     bot_id: int,
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
 
     # 1. Validação de Segurança
@@ -337,7 +365,7 @@ async def upload_catalog_from_file_endpoint(
                 contents,
                 file.filename,
                 file.content_type,
-                f"menus/bot_{bot_id}"
+                f"menus/bot_{bot_id}",
             )
             logger.info("S3 upload successful: %s", s3_url)
 
@@ -387,7 +415,9 @@ async def upload_catalog_from_file_endpoint(
                         all_extracted_products.extend(page_products)
 
                 doc.close()
-                logger.info("PDF processed, items found: %d", len(all_extracted_products))
+                logger.info(
+                    "PDF processed, items found: %d", len(all_extracted_products)
+                )
 
             except Exception as e:
                 logger.error("Critical error reading PDF: %s", e)
@@ -395,7 +425,9 @@ async def upload_catalog_from_file_endpoint(
 
         else:
             logger.info("Single image mode activated")
-            all_extracted_products = await extract_products_from_image(contents, file.content_type)
+            all_extracted_products = await extract_products_from_image(
+                contents, file.content_type
+            )
 
         # 5. Validação Final
         if not all_extracted_products:
@@ -409,19 +441,19 @@ async def upload_catalog_from_file_endpoint(
             name_words = product.get("name", "").lower()
             desc_words = product.get("description", "").lower()
             full_text = name_words + " " + desc_words
-            words = set(re.findall(r'\b\w+\b', full_text))
+            words = set(re.findall(r"\b\w+\b", full_text))
 
             product["keywords"] = list(words)
             product["is_available"] = True
             enriched_products.append(product)
 
         count = await crud.bulk_create_products(
-            session=session,
-            bot_id=bot_id,
-            products_data=enriched_products
+            session=session, bot_id=bot_id, products_data=enriched_products
         )
 
-        return {"message": f"Sucesso! {count} produtos cadastrados a partir do cardápio."}
+        return {
+            "message": f"Sucesso! {count} produtos cadastrados a partir do cardápio."
+        }
 
     except HTTPException as he:
         raise he
@@ -429,14 +461,16 @@ async def upload_catalog_from_file_endpoint(
         logger.error("Unhandled error in upload route: %s", e)
         raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
 
+
 # --- Rotas de Pedidos (KDS) ---
+
 
 @router.get("/bots/{bot_id}/orders", response_model=List[schemas.OrderResponse])
 async def list_bot_orders(
     bot_id: int,
-    status: str | None = None, # Ex: ?status=paid
+    status: str | None = None,  # Ex: ?status=paid
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Lista os pedidos do bot. Útil para o painel da cozinha."""
     # 1. Validação de segurança (Obrigatória em SaaS multi-tenant)
@@ -448,13 +482,14 @@ async def list_bot_orders(
     orders = await crud.list_orders_by_bot(session, bot_id=bot_id, status_filter=status)
     return orders
 
+
 @router.patch("/bots/{bot_id}/orders/{order_id}", response_model=schemas.OrderResponse)
 async def update_order_status(
     bot_id: int,
     order_id: int,
     status_data: schemas.OrderStatusUpdate,
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Atualiza o status do pedido e desativa automaticamente o atendimento humano se finalizado."""
     # 1. Segurança: Verifica se o bot pertence ao usuário
@@ -464,9 +499,7 @@ async def update_order_status(
 
     # 2. Atualização do Status do Pedido (Ex: de PAID para COMPLETED)
     updated_order = await crud.update_order_status_by_id(
-        session,
-        order_id=order_id,
-        new_status=status_data.status
+        session, order_id=order_id, new_status=status_data.status
     )
 
     if not updated_order:
@@ -493,12 +526,19 @@ async def update_order_status(
 
                 # 4. Se estiver em modo manual, desliga
                 if cart and cart.human_takeover_active:
-                    logger.info("Auto-switch: order %s, reactivating bot for %s", incoming_status, updated_order.contact.name)
+                    logger.info(
+                        "Auto-switch: order %s, reactivating bot for %s",
+                        incoming_status,
+                        updated_order.contact.name,
+                    )
                     cart.human_takeover_active = False
                     session.add(cart)
                     await session.commit()
                 else:
-                    logger.info("Auto-switch: bot already active for %s", updated_order.contact.name)
+                    logger.info(
+                        "Auto-switch: bot already active for %s",
+                        updated_order.contact.name,
+                    )
             else:
                 logger.warning("Auto-switch: order has no associated contact")
 
@@ -515,15 +555,15 @@ async def update_order_status(
         "preparing": "👨‍🍳 Seu pedido está sendo preparado! Em breve ficará pronto.",
         "ready": (
             "🛵 Seu pedido está pronto e em breve sairá para entrega!"
-            if is_delivery else
-            "✅ Seu pedido está pronto e disponível para coleta no restaurante, obrigado pela preferência!"
+            if is_delivery
+            else "✅ Seu pedido está pronto e disponível para coleta no restaurante, obrigado pela preferência!"
         ),
         "completed": (
             "🎉 Seu pedido saiu para entrega e logo chegará até você! Obrigado pela preferência!"
-            if is_delivery else
-            None
+            if is_delivery
+            else None
         ),
-        "canceled":  "❌ Infelizmente seu pedido foi cancelado. Entre em contato para mais informações.",
+        "canceled": "❌ Infelizmente seu pedido foi cancelado. Entre em contato para mais informações.",
     }
 
     notify_msg = STATUS_MESSAGES.get(incoming_status)
@@ -542,7 +582,11 @@ async def update_order_status(
                     token=bot.whatsapp_token,
                     phone_id=bot.phone_number_id,
                 )
-                logger.info("WhatsApp notification sent to %s: %s", contact.phone_number, incoming_status)
+                logger.info(
+                    "WhatsApp notification sent to %s: %s",
+                    contact.phone_number,
+                    incoming_status,
+                )
         except Exception as e:
             logger.warning("Failed to send WhatsApp notification: %s", e)
 
@@ -556,12 +600,13 @@ async def update_order_status(
 
     return order_dict
 
+
 @router.get("/bots/{bot_id}/analytics/best-sellers")
 async def get_best_sellers(
     bot_id: int,
     session: AsyncSession = Depends(get_session),
     # Adicione current_user para garantir segurança
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     # 1. Validação de Propriedade (Segurança Básica)
     db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
@@ -574,7 +619,9 @@ async def get_best_sellers(
 
     # Regra: Se não tiver assinatura, ou se o status não for ativo/authorized, bloqueia.
     # Você pode refinar isso para verificar "plan_type" também (ex: if sub.plan_type == 'basic')
-    is_pro = sub and sub.status == "authorized" and sub.plan_type in ["pro", "enterprise"]
+    is_pro = (
+        sub and sub.status == "authorized" and sub.plan_type in ["pro", "enterprise"]
+    )
 
     # Se você quiser retornar um erro 403 para o front tratar:
     if not is_pro:
@@ -583,20 +630,14 @@ async def get_best_sellers(
     # 3. Busca os dados (Se passou no gate)
     results = await crud.get_top_selling_products(session, bot_id)
 
-    return [
-        {
-            "name": row[0],
-            "quantity": row[1],
-            "revenue": row[2]
-        }
-        for row in results
-    ]
+    return [{"name": row[0], "quantity": row[1], "revenue": row[2]} for row in results]
+
 
 @router.post("/bots/whatsapp/auth", status_code=201)
 async def authenticate_whatsapp_bot(
     auth_data: WhatsAppAuthRequest,
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
     Fluxo Sandbox/Live: Code -> Token -> WABA Direta -> Phone -> Save
@@ -613,15 +654,17 @@ async def authenticate_whatsapp_bot(
             "client_id": app_id,
             "client_secret": app_secret,
             "code": auth_data.code,
-            "redirect_uri": auth_data.redirect_uri
+            "redirect_uri": auth_data.redirect_uri,
         }
 
         resp = await client.get(token_url, params=params)
         data = resp.json()
 
         if "error" in data:
-            logger.error("OAuth error: %s", data.get("error", {}).get("message", "unknown"))
-            raise HTTPException(status_code=400, detail=data['error']['message'])
+            logger.error(
+                "OAuth error: %s", data.get("error", {}).get("message", "unknown")
+            )
+            raise HTTPException(status_code=400, detail=data["error"]["message"])
 
         access_token = data["access_token"]
         logger.info("Access token obtained successfully")
@@ -635,14 +678,17 @@ async def authenticate_whatsapp_bot(
         waba_data = waba_resp.json()
 
         if "error" in waba_data:
-            logger.error("Graph API error: %s", waba_data.get("error", {}).get("message", "unknown"))
-            raise HTTPException(status_code=400, detail=waba_data['error']['message'])
+            logger.error(
+                "Graph API error: %s",
+                waba_data.get("error", {}).get("message", "unknown"),
+            )
+            raise HTTPException(status_code=400, detail=waba_data["error"]["message"])
 
         if not waba_data.get("data"):
             logger.warning("No WABA found in /me/whatsapp_business_accounts")
             raise HTTPException(
                 status_code=400,
-                detail="Nenhuma conta de WhatsApp Business encontrada. Verifique se o cadastro no Facebook foi concluído."
+                detail="Nenhuma conta de WhatsApp Business encontrada. Verifique se o cadastro no Facebook foi concluído.",
             )
 
         # No Embedded Signup, o token geralmente dá acesso a apenas uma WABA recém-criada/selecionada
@@ -664,9 +710,14 @@ async def authenticate_whatsapp_bot(
             num_obj = phone_data["data"][0]
             phone_number_id = num_obj["id"]
             display_number = num_obj["display_phone_number"]
-            logger.info("Phone number found: %s (ID: %s)", display_number, phone_number_id)
+            logger.info(
+                "Phone number found: %s (ID: %s)", display_number, phone_number_id
+            )
         else:
-            raise HTTPException(status_code=400, detail="WABA encontrada, mas sem número de telefone associado.")
+            raise HTTPException(
+                status_code=400,
+                detail="WABA encontrada, mas sem número de telefone associado.",
+            )
 
         # ⚠️ Passo 4: Inscrever Webhook Automaticamente
         try:
@@ -680,21 +731,28 @@ async def authenticate_whatsapp_bot(
             logger.warning("Error subscribing webhook: %s", e)
 
         # ⚠️ Passo 5: Limpeza e Salvamento no Banco
-        clean_number = re.sub(r'\D', '', display_number)
+        clean_number = re.sub(r"\D", "", display_number)
 
         # Tenta achar um bot existente por número (Lógica original mantida)
         existing_bot = await crud.get_bot_by_number(session, clean_number)
 
         if existing_bot:
-             if existing_bot.user_id == current_user.id:
-                 existing_bot.whatsapp_token = access_token
-                 existing_bot.phone_number_id = phone_number_id
-                 session.add(existing_bot)
-                 await session.commit()
-                 return {"status": "success", "number": clean_number, "message": "Bot reconectado e token atualizado"}
-             else:
-                 # Se o número existe mas é de outro usuário
-                 raise HTTPException(status_code=400, detail="Este número já está em uso por outra conta.")
+            if existing_bot.user_id == current_user.id:
+                existing_bot.whatsapp_token = access_token
+                existing_bot.phone_number_id = phone_number_id
+                session.add(existing_bot)
+                await session.commit()
+                return {
+                    "status": "success",
+                    "number": clean_number,
+                    "message": "Bot reconectado e token atualizado",
+                }
+            else:
+                # Se o número existe mas é de outro usuário
+                raise HTTPException(
+                    status_code=400,
+                    detail="Este número já está em uso por outra conta.",
+                )
 
         # Se não existe, cria novo bot
         await crud.create_bot(
@@ -706,20 +764,26 @@ async def authenticate_whatsapp_bot(
             phone_number_id=phone_number_id,
             pix_key=None,
             delivery_fee=0,
-            min_order_value=0
+            min_order_value=0,
         )
 
-        return {"status": "success", "number": clean_number, "message": "Novo bot criado e conectado"}
+        return {
+            "status": "success",
+            "number": clean_number,
+            "message": "Novo bot criado e conectado",
+        }
+
 
 # ==========================================
 # 🚀 ROTA DE ONBOARDING ENTERPRISE-GRADE
 # ==========================================
 
+
 @router.post("/bots/whatsapp/complete-onboarding", status_code=201)
 async def complete_onboarding(
     data: schemas.EmbeddedSignupPayload,
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
     Onboarding Definitivo (Enterprise-Grade):
@@ -735,7 +799,6 @@ async def complete_onboarding(
 
     # --- FASE 1: OBTENÇÃO DE TOKEN CONFIÁVEL ---
     async with httpx.AsyncClient(timeout=30.0) as client:
-
         # CASO A: Veio Code (Cadastro novo via SDK)
         if data.code:
             token_url = "https://graph.facebook.com/v19.0/oauth/access_token"
@@ -752,12 +815,16 @@ async def complete_onboarding(
                     final_token = resp_data["access_token"]
                 else:
                     logger.error("Code exchange failed: %s", resp_data)
-                    raise HTTPException(status_code=400, detail="Falha na validação do login.")
+                    raise HTTPException(
+                        status_code=400, detail="Falha na validação do login."
+                    )
             except HTTPException:
                 raise
             except Exception as e:
                 logger.error("Meta communication error: %s", e)
-                raise HTTPException(status_code=500, detail="Erro de comunicação com a Meta.")
+                raise HTTPException(
+                    status_code=500, detail="Erro de comunicação com a Meta."
+                )
 
         # CASO B: Veio Token Curto (Fallback/Reconnect)
         elif data.access_token:
@@ -767,7 +834,7 @@ async def complete_onboarding(
                 "grant_type": "fb_exchange_token",
                 "client_id": app_id,
                 "client_secret": app_secret,
-                "fb_exchange_token": data.access_token
+                "fb_exchange_token": data.access_token,
             }
             try:
                 resp = await client.get(exchange_url, params=params)
@@ -778,7 +845,9 @@ async def complete_onboarding(
                     logger.info("Long-lived token obtained")
                 else:
                     logger.error("Token exchange failed: %s", resp_data)
-                    raise HTTPException(status_code=400, detail="Sessão expirada. Tente novamente.")
+                    raise HTTPException(
+                        status_code=400, detail="Sessão expirada. Tente novamente."
+                    )
             except HTTPException:
                 raise
             except Exception as e:
@@ -802,22 +871,25 @@ async def complete_onboarding(
                 # O endpoint /me/whatsapp_business_accounts é instável. Usamos /me/businesses primeiro.
                 biz_resp = await client.get(
                     "https://graph.facebook.com/v19.0/me/businesses",
-                    params={"access_token": final_token}
+                    params={"access_token": final_token},
                 )
                 biz_data = biz_resp.json()
 
                 if not biz_data.get("data"):
-                     # Edge case: Usuário pode ter acesso direto sem business (raro, mas possível via tasks)
-                     # Nesse caso tentamos o endpoint direto como último recurso
-                     fallback_waba = await client.get(
+                    # Edge case: Usuário pode ter acesso direto sem business (raro, mas possível via tasks)
+                    # Nesse caso tentamos o endpoint direto como último recurso
+                    fallback_waba = await client.get(
                         "https://graph.facebook.com/v19.0/me/whatsapp_business_accounts",
-                        params={"access_token": final_token}
-                     )
-                     if fallback_waba.json().get("data"):
-                         waba_data = fallback_waba.json()
-                         logger.warning("WABA found outside of Business")
-                     else:
-                         raise HTTPException(status_code=400, detail="Nenhuma empresa ou conta WhatsApp encontrada.")
+                        params={"access_token": final_token},
+                    )
+                    if fallback_waba.json().get("data"):
+                        waba_data = fallback_waba.json()
+                        logger.warning("WABA found outside of Business")
+                    else:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Nenhuma empresa ou conta WhatsApp encontrada.",
+                        )
                 else:
                     # Pega o primeiro Business (Assumimos fluxo simplificado)
                     target_biz_id = biz_data["data"][0]["id"]
@@ -825,60 +897,73 @@ async def complete_onboarding(
                     # 2. Buscar WABAs desse Business
                     waba_resp = await client.get(
                         f"https://graph.facebook.com/v19.0/{target_biz_id}/owned_whatsapp_business_accounts",
-                        params={"access_token": final_token}
+                        params={"access_token": final_token},
                     )
                     waba_data = waba_resp.json()
 
                 if not waba_data.get("data"):
-                     raise HTTPException(status_code=400, detail="Empresa encontrada, mas sem conta WhatsApp.")
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Empresa encontrada, mas sem conta WhatsApp.",
+                    )
 
                 target_waba_id = waba_data["data"][0]["id"]
 
                 # 3. Buscar Números da WABA
                 phones_resp = await client.get(
                     f"https://graph.facebook.com/v19.0/{target_waba_id}/phone_numbers",
-                    params={"access_token": final_token}
+                    params={"access_token": final_token},
                 )
                 phones_data = phones_resp.json()
 
                 if not phones_data.get("data"):
-                     raise HTTPException(status_code=400, detail="Conta WhatsApp sem número cadastrado.")
+                    raise HTTPException(
+                        status_code=400, detail="Conta WhatsApp sem número cadastrado."
+                    )
 
                 # Pega o primeiro número disponível
                 target_phone = phones_data["data"][0]
                 phone_number_id = target_phone["id"]
                 display_phone_number = target_phone["display_phone_number"]
 
-                logger.info("Discovery success: %s (ID: %s)", display_phone_number, phone_number_id)
+                logger.info(
+                    "Discovery success: %s (ID: %s)",
+                    display_phone_number,
+                    phone_number_id,
+                )
 
             except HTTPException as he:
                 raise he
             except Exception as e:
                 logger.error("Discovery error: %s", e)
-                raise HTTPException(status_code=500, detail="Erro ao identificar sua conta WhatsApp.")
+                raise HTTPException(
+                    status_code=500, detail="Erro ao identificar sua conta WhatsApp."
+                )
 
     # --- FASE 3: PERSISTÊNCIA E INSCRIÇÃO ---
 
     # Inscrever Webhook (Importante para garantir recebimento de mensagens)
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
-             # Precisamos do WABA ID. Se veio do frontend, ok. Se não, pegamos do Discovery ou deduzimos.
-             # Para simplificar a inscrição, usamos o phone_number_id para achar a WABA se necessário,
-             # mas o ideal é ter o waba_id. Se veio do discovery, já temos target_waba_id.
-             pass
-             # Nota: A inscrição de webhook geralmente é automática no Embedded Signup,
-             # mas em reconexões manuais pode ser bom reforçar. Fica como melhoria futura.
+            # Precisamos do WABA ID. Se veio do frontend, ok. Se não, pegamos do Discovery ou deduzimos.
+            # Para simplificar a inscrição, usamos o phone_number_id para achar a WABA se necessário,
+            # mas o ideal é ter o waba_id. Se veio do discovery, já temos target_waba_id.
+            pass
+            # Nota: A inscrição de webhook geralmente é automática no Embedded Signup,
+            # mas em reconexões manuais pode ser bom reforçar. Fica como melhoria futura.
         except Exception:
             logger.error("Webhook subscription failed during onboarding", exc_info=True)
 
-    clean_number = re.sub(r'\D', '', display_phone_number)
+    clean_number = re.sub(r"\D", "", display_phone_number)
 
     # Verifica duplicidade
     existing_bot = await crud.get_bot_by_number(session, clean_number)
 
     if existing_bot:
         if existing_bot.user_id != current_user.id:
-             raise HTTPException(status_code=400, detail="Número já pertence a outro usuário.")
+            raise HTTPException(
+                status_code=400, detail="Número já pertence a outro usuário."
+            )
 
         # Atualiza bot existente
         existing_bot.whatsapp_token = final_token
@@ -890,31 +975,33 @@ async def complete_onboarding(
         target_bot = await crud.get_bot_by_id(session, data.bot_id)
 
         if not target_bot or target_bot.user_id != current_user.id:
-             raise HTTPException(status_code=403, detail="Acesso negado ao bot.")
+            raise HTTPException(status_code=403, detail="Acesso negado ao bot.")
 
         target_bot.whatsapp_number = clean_number
         target_bot.phone_number_id = phone_number_id
         target_bot.whatsapp_token = final_token
 
         if "Loja" in target_bot.restaurant_name or not target_bot.restaurant_name:
-             target_bot.restaurant_name = f"Loja {clean_number}"
+            target_bot.restaurant_name = f"Loja {clean_number}"
 
         session.add(target_bot)
         await session.commit()
 
     return {"status": "connected", "number": clean_number}
 
+
 # 1. ROTA DE VERIFICAÇÃO (GET)
 @router.get("/bots/whatsapp/webhook")
 async def verify_webhook(
     mode: str = Query(alias="hub.mode"),
     token: str = Query(alias="hub.verify_token"),
-    challenge: str = Query(alias="hub.challenge")
+    challenge: str = Query(alias="hub.challenge"),
 ):
     if mode == "subscribe" and token == WEBHOOK_VERIFY_TOKEN:
         logger.info("Webhook verified by Meta")
         return int(challenge)
     raise HTTPException(status_code=403, detail="Token inválido.")
+
 
 # 2. ROTA DE RECEBIMENTO (POST)
 @router.post("/bots/whatsapp/webhook")
@@ -926,7 +1013,9 @@ async def receive_whatsapp_message(request: Request):
         payload = await request.json()
 
         # Validação básica: é um evento de mensagem de WhatsApp?
-        if payload.get("object") == "whatsapp_business_account" and payload.get("entry"):
+        if payload.get("object") == "whatsapp_business_account" and payload.get(
+            "entry"
+        ):
             entry = payload["entry"][0]
             changes = entry.get("changes", [])
 
@@ -935,16 +1024,17 @@ async def receive_whatsapp_message(request: Request):
 
                 # Se tiver mensagens ou status, enviamos para a fila
                 if "messages" in value or "statuses" in value:
-
                     # 1. Recupera o pool do Redis que foi criado no main.py
                     redis_queue: ArqRedis = request.app.state.arq_redis
 
                     # 2. Enfileira o job 'process_whatsapp_message'
                     # O Worker vai pegar isso aqui e rodar a IA
-                    await redis_queue.enqueue_job('process_whatsapp_message', payload)
+                    await redis_queue.enqueue_job("process_whatsapp_message", payload)
 
                     # Debug leve (opcional)
-                    waba_id = value.get("metadata", {}).get("phone_number_id", "Unknown")
+                    waba_id = value.get("metadata", {}).get(
+                        "phone_number_id", "Unknown"
+                    )
                     logger.info("WABA event %s enqueued to Redis", waba_id)
 
     except Exception as e:

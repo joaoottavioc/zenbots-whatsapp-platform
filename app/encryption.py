@@ -6,6 +6,7 @@ Fernet symmetric encryption for sensitive values stored at rest
 Requires the ENCRYPTION_KEY environment variable to be a valid Fernet key.
 Generate one with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 """
+
 import logging
 import os
 
@@ -24,7 +25,7 @@ def _get_fernet() -> Fernet:
         if not key:
             raise RuntimeError(
                 "ENCRYPTION_KEY environment variable is not set. "
-                "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+                'Generate one with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
             )
         _fernet = Fernet(key.encode() if isinstance(key, str) else key)
     return _fernet
@@ -55,5 +56,8 @@ def decrypt_value(ciphertext: str) -> str:
         # Legacy plaintext token — return as-is.
         # This path will disappear once all tokens are re-encrypted
         # (e.g. after the merchant re-authenticates with Mercado Pago).
-        logger.warning("Decryption failed for value (length=%d), returning as legacy plaintext", len(ciphertext))
+        logger.warning(
+            "Decryption failed for value (length=%d), returning as legacy plaintext",
+            len(ciphertext),
+        )
         return ciphertext

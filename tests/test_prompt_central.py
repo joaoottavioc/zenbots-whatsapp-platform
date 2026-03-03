@@ -14,7 +14,7 @@ Covered:
 - empty cart displays an "empty" indicator
 - absent search_results displays a "no items found" indicator
 """
-import pytest
+
 from unittest.mock import MagicMock
 
 from app.prompt_central import create_central_prompt
@@ -23,6 +23,7 @@ from app.prompt_central import create_central_prompt
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_product(product_id: int, name: str, description: str = "") -> MagicMock:
     """Create a lightweight Product mock with the attributes read by create_central_prompt."""
@@ -42,8 +43,8 @@ def _system_content(messages: list) -> str:
 # Test cases
 # ---------------------------------------------------------------------------
 
-class TestCreateCentralPrompt:
 
+class TestCreateCentralPrompt:
     # 1 -----------------------------------------------------------------------
     def test_system_prompt_contains_restaurant_name(self):
         """The first message must be the system role and include the restaurant name."""
@@ -108,7 +109,9 @@ class TestCreateCentralPrompt:
     # 5 -----------------------------------------------------------------------
     def test_search_results_in_system_prompt(self):
         """Product names from search_results (RAG) must appear in the system message."""
-        products = [_make_product(product_id=5, name="Coca-Cola", description="Refrigerante")]
+        products = [
+            _make_product(product_id=5, name="Coca-Cola", description="Refrigerante")
+        ]
         messages = create_central_prompt(
             user_query="quero uma coca",
             history=[],
@@ -150,13 +153,18 @@ class TestCreateCentralPrompt:
 # Phantom tool removal tests
 # ---------------------------------------------------------------------------
 
-class TestPhantomToolsRemoved:
 
-    PHANTOM_NAMES = {"request_customer_address", "process_order_with_address", "process_payment_choice"}
+class TestPhantomToolsRemoved:
+    PHANTOM_NAMES = {
+        "request_customer_address",
+        "process_order_with_address",
+        "process_payment_choice",
+    }
 
     def test_phantom_tools_absent_from_schema(self):
         """Phantom tool names must not appear in the tools_schema list."""
         from app.tools_definition import tools_schema
+
         schema_names = {t["function"]["name"] for t in tools_schema}
         assert self.PHANTOM_NAMES.isdisjoint(schema_names), (
             f"Phantom tools still in schema: {self.PHANTOM_NAMES & schema_names}"

@@ -1,4 +1,5 @@
 """Tests for the escape_ilike helper in crud.py."""
+
 from app.crud import escape_ilike
 
 

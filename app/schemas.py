@@ -6,15 +6,18 @@ import pytz
 # --- Schemas de Produto ---
 # Usados para criar e retornar itens do cardápio
 
+
 class ProductBase(BaseModel):
     name: str = Field(max_length=150)
     description: Optional[str] = Field(default=None, max_length=500)
     price: float = Field(gt=0)
     category: str = Field(max_length=100)
 
+
 class ProductCreate(ProductBase):
     category: str
     pass
+
 
 class ProductResponse(ProductBase):
     id: int
@@ -23,22 +26,29 @@ class ProductResponse(ProductBase):
     model_config = ConfigDict(from_attributes=True)
     category: str
 
+
 class ProductUpdate(BaseModel):
     """
     Schema para atualização. Todos os campos devem ser opcionais
     para permitir atualizações parciais (ex: mudar só o preço ou só a disponibilidade).
     """
+
     name: Optional[str] = None
     description: Optional[str] = None
     price: Optional[float] = Field(default=None, gt=0)
-    category: Optional[str] = None  # <--- MUDANÇA CRÍTICA: De 'str' para 'Optional[str] = None'
+    category: Optional[str] = (
+        None  # <--- MUDANÇA CRÍTICA: De 'str' para 'Optional[str] = None'
+    )
     is_available: Optional[bool] = None
+
 
 class ProductBulkDeleteRequest(BaseModel):
     product_ids: List[int]
 
+
 # --- Schemas de Histórico ---
 # Usado para exibir o histórico de conversas
+
 
 class ConversationHistoryResponse(BaseModel):
     role: str
@@ -46,11 +56,14 @@ class ConversationHistoryResponse(BaseModel):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
+
 # --- Schemas de Bot ---
 # O coração da nossa aplicação
 
+
 class BotCreate(BaseModel):
     """Schema para criar um bot 'casca', apenas com os dados essenciais."""
+
     restaurant_name: str = Field(max_length=150)
     whatsapp_number: str = Field(max_length=20)
     pix_key: Optional[str] = Field(default=None, max_length=100)
@@ -65,16 +78,18 @@ class BotCreate(BaseModel):
     cep: Optional[str] = Field(default=None, max_length=10)
     address: Optional[str] = Field(default=None, max_length=300)
     latitude: Optional[float] = None  # Essencial para o cálculo
-    longitude: Optional[float] = None # Essencial para o cálculo
+    longitude: Optional[float] = None  # Essencial para o cálculo
 
-    @validator('timezone')
+    @validator("timezone")
     def validate_timezone(cls, v):
         if v not in pytz.all_timezones:
-            raise ValueError(f'Timezone inválido: {v}')
+            raise ValueError(f"Timezone inválido: {v}")
         return v
+
 
 class BotUpdate(BaseModel):
     """Schema para atualizar os dados de um bot."""
+
     restaurant_name: Optional[str] = Field(default=None, max_length=150)
     whatsapp_number: Optional[str] = Field(default=None, max_length=20)
     pix_key: Optional[str] = Field(default=None, max_length=100)
@@ -94,17 +109,19 @@ class BotUpdate(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
-    @validator('timezone')
+    @validator("timezone")
     def validate_timezone(cls, v):
         if v is not None and v not in pytz.all_timezones:
-            raise ValueError(f'Timezone inválido: {v}')
+            raise ValueError(f"Timezone inválido: {v}")
         return v
+
 
 class BotResponse(BaseModel):
     """
     Schema completo para retornar os dados de um bot, incluindo
     seu catálogo de produtos e seu histórico de conversas.
     """
+
     id: int
     user_id: int
     restaurant_name: Optional[str] = None
@@ -122,7 +139,7 @@ class BotResponse(BaseModel):
     address: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
-    
+
     # O bot agora retorna a lista de produtos e de histórico associados a ele
     products: List[ProductResponse] = []
     history: List[ConversationHistoryResponse] = []
@@ -135,39 +152,48 @@ class BotResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
 # --- Schemas de Autenticação e Usuário ---
+
 
 class UserCreate(BaseModel):
     email: str
     password: str
+
 
 class UserResponse(BaseModel):
     id: int
     email: str
     model_config = ConfigDict(from_attributes=True)
 
+
 class Token(BaseModel):
     access_token: str
     token_type: str
 
+
 # --- Schema para Upload de Catálogo ---
+
 
 class CatalogUploadRequest(BaseModel):
     """Schema para o endpoint que recebe o texto bruto do cardápio."""
+
     catalog_text: str
+
 
 class OrderItemResponse(BaseModel):
     quantity: int
     notes: Optional[str] = None
-    product_name: str  
+    product_name: str
     model_config = ConfigDict(from_attributes=True)
     price_at_time_of_order: Optional[float] = None
+
 
 class OrderResponse(BaseModel):
     id: int
     total_amount: float
     delivery_fee: float = 0.0
-    status: str 
+    status: str
     customer_address: Optional[str] = None
     created_at: datetime
     display_items: List[OrderItemResponse] = []
@@ -177,16 +203,19 @@ class OrderResponse(BaseModel):
 
     customer_phone: Optional[str] = None
     human_takeover_active: bool = False
-     
+
     model_config = ConfigDict(from_attributes=True)
+
 
 class OrderStatusUpdate(BaseModel):
     status: str
 
+
 class WhatsAppAuthRequest(BaseModel):
     code: str = None  # Agora é opcional
     redirect_uri: str = None
-    access_token: str = None # Novo campo
+    access_token: str = None  # Novo campo
+
 
 class EmbeddedSignupPayload(BaseModel):
     bot_id: int
@@ -203,11 +232,14 @@ class EmbeddedSignupPayload(BaseModel):
     code: Optional[str] = None
     access_token: Optional[str] = None
 
+
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
+
 class CheckoutResponse(BaseModel):
     checkout_url: str
+
 
 class SubscriptionStatusResponse(BaseModel):
     status: str
@@ -216,9 +248,11 @@ class SubscriptionStatusResponse(BaseModel):
     next_payment: datetime
     plan_type: str
 
+
 class CheckoutRequest(BaseModel):
     plan_key: str = "pro"
     bot_id: int
+
 
 class CepResponse(BaseModel):
     address: str

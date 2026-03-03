@@ -1,8 +1,8 @@
 # tests/test_webhook_token.py
 """Tests for the webhook token on orders (P3 fix)."""
+
 import inspect
 import re
-import pytest
 from app.models import Order
 
 
@@ -25,7 +25,7 @@ class TestWebhookTokenGeneration:
     def test_token_is_url_safe(self):
         """Token must contain only URL-safe characters."""
         o = Order(total_amount=10.0, bot_id=1)
-        assert re.match(r'^[A-Za-z0-9_-]+$', o.webhook_token)
+        assert re.match(r"^[A-Za-z0-9_-]+$", o.webhook_token)
 
 
 class TestPaymentServiceWebhookUrl:
@@ -33,12 +33,15 @@ class TestPaymentServiceWebhookUrl:
 
     def test_notification_url_includes_token_param(self):
         """payment_service.create_pix_payment must build URL with ?token=."""
-        source = inspect.getsource(__import__("app.payment_service", fromlist=["create_pix_payment"]))
+        source = inspect.getsource(
+            __import__("app.payment_service", fromlist=["create_pix_payment"])
+        )
         assert "?token={webhook_token}" in source or "token=" in source
 
     def test_create_pix_payment_accepts_webhook_token_param(self):
         """create_pix_payment signature must include webhook_token."""
         from app.payment_service import create_pix_payment
+
         sig = inspect.signature(create_pix_payment)
         assert "webhook_token" in sig.parameters
 
@@ -49,6 +52,11 @@ class TestWebhookTokenValidation:
     def test_handler_checks_token_query_param(self):
         """handle_payment_notification source must use compare_digest on token."""
         import app.whatsapp as mod
+
         source = inspect.getsource(mod.handle_payment_notification)
-        assert "compare_digest" in source, "Webhook handler must use compare_digest for token validation"
-        assert "webhook_token" in source, "Webhook handler must reference order.webhook_token"
+        assert "compare_digest" in source, (
+            "Webhook handler must use compare_digest for token validation"
+        )
+        assert "webhook_token" in source, (
+            "Webhook handler must reference order.webhook_token"
+        )

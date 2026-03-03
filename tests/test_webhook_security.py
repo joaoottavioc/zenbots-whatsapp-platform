@@ -58,6 +58,7 @@ def test_malformed_header_returns_false():
 
 # ---------- require_mp_signature ----------
 
+
 @pytest.mark.asyncio
 async def test_require_raises_403_on_bad_signature():
     mock_request = AsyncMock()

@@ -11,7 +11,9 @@ from uuid import uuid4
 
 trace_id_var: ContextVar[str] = ContextVar("trace_id", default="")
 current_bot_id: ContextVar[int | None] = ContextVar("current_bot_id", default=None)
-current_contact_id: ContextVar[int | None] = ContextVar("current_contact_id", default=None)
+current_contact_id: ContextVar[int | None] = ContextVar(
+    "current_contact_id", default=None
+)
 
 
 def new_trace_id() -> str:

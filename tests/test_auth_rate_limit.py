@@ -2,6 +2,7 @@
 """
 Tests for the generic is_rate_limited function and the auth rate-limit dependencies.
 """
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 import redis.asyncio as redis
@@ -11,6 +12,7 @@ from fastapi import HTTPException
 # ===========================================================================
 # is_rate_limited
 # ===========================================================================
+
 
 @pytest.fixture()
 def mock_redis():
@@ -29,6 +31,7 @@ def mock_redis():
 
 async def test_under_limit_returns_false(mock_redis):
     from app.rate_limiter import is_rate_limited
+
     _, mock_pipe = mock_redis
     mock_pipe.execute.return_value = [3, 200]
 
@@ -38,6 +41,7 @@ async def test_under_limit_returns_false(mock_redis):
 
 async def test_over_limit_returns_true(mock_redis):
     from app.rate_limiter import is_rate_limited
+
     _, mock_pipe = mock_redis
     mock_pipe.execute.return_value = [6, 200]
 
@@ -48,6 +52,7 @@ async def test_over_limit_returns_true(mock_redis):
 async def test_redis_failure_returns_true_fail_closed(mock_redis):
     """Redis failure must fail closed (return True = block)."""
     from app.rate_limiter import is_rate_limited
+
     _, mock_pipe = mock_redis
     mock_pipe.execute.side_effect = redis.RedisError("connection refused")
 
@@ -58,6 +63,7 @@ async def test_redis_failure_returns_true_fail_closed(mock_redis):
 # ===========================================================================
 # Auth rate limit dependencies
 # ===========================================================================
+
 
 def _make_request(ip="127.0.0.1"):
     req = MagicMock()

@@ -11,6 +11,7 @@ Strategy:
     2. The new cart.state after execution
     3. Which CRUD functions were called
 """
+
 import json
 import pytest
 from contextlib import asynccontextmanager
@@ -21,7 +22,6 @@ from tests.conftest import (
     build_whatsapp_payload,
     get_sent_message,
     make_cart_item,
-    make_product,
     PATCH_SEND,
     PATCH_MARK_READ,
     PATCH_IS_SPAMMING,
@@ -32,18 +32,21 @@ from tests.conftest import (
     PATCH_ASYNC_SESSION,
     PATCH_CONTACT_LOCK,
 )
-from app.models import DeliveryMethod, OrderStatus
+from app.models import DeliveryMethod
 
 
 # ---------------------------------------------------------------------------
 # Shared async context-manager helper for async_session
 # ---------------------------------------------------------------------------
 
+
 def make_session_ctx(mock_session):
     """Returns a context manager that yields mock_session."""
+
     @asynccontextmanager
     async def _ctx():
         yield mock_session
+
     return _ctx
 
 
@@ -62,6 +65,7 @@ def _noop_lock_factory(*args, **kwargs):
 # Base class with common patching boilerplate
 # ---------------------------------------------------------------------------
 
+
 class BaseConversationTest:
     """
     Subclasses get self.send_mock, self.crud_mock auto-patched.
@@ -69,7 +73,9 @@ class BaseConversationTest:
     """
 
     @pytest.fixture(autouse=True)
-    def _common_patches(self, mock_bot, mock_cart, mock_contact, active_subscription, mock_session):
+    def _common_patches(
+        self, mock_bot, mock_cart, mock_contact, active_subscription, mock_session
+    ):
         self.bot = mock_bot
         self.cart = mock_cart
         self.contact = mock_contact
@@ -130,14 +136,30 @@ class BaseConversationTest:
 # 1. GATE TESTS — things that block execution before any state logic
 # ===========================================================================
 
-class TestGates(BaseConversationTest):
 
+class TestGates(BaseConversationTest):
     @pytest.mark.asyncio
     async def test_status_update_ignored(self):
         """Webhook payloads without 'messages' key (status updates) are silently ignored."""
         from app.whatsapp import process_whatsapp_message
 
-        payload = {"entry": [{"changes": [{"value": {"metadata": {"phone_number_id": "fake-phone-id", "display_phone_number": "5511999999999"}, "statuses": [{"status": "delivered"}]}}]}]}
+        payload = {
+            "entry": [
+                {
+                    "changes": [
+                        {
+                            "value": {
+                                "metadata": {
+                                    "phone_number_id": "fake-phone-id",
+                                    "display_phone_number": "5511999999999",
+                                },
+                                "statuses": [{"status": "delivered"}],
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
         await process_whatsapp_message({}, payload)
         self.send_mock.assert_not_called()
 
@@ -167,7 +189,9 @@ class TestGates(BaseConversationTest):
         self.send_mock.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_expired_subscription_sends_maintenance_message(self, expired_subscription):
+    async def test_expired_subscription_sends_maintenance_message(
+        self, expired_subscription
+    ):
         """Bot with expired subscription sends a maintenance notice and stops."""
         from app.whatsapp import process_whatsapp_message
 
@@ -218,15 +242,19 @@ class TestGates(BaseConversationTest):
 
         self.send_mock.assert_called_once()
         msg = get_sent_message(self.send_mock)
-        assert "fechados" in msg.lower() or "indispon" in msg.lower() or "atendendo" in msg.lower()
+        assert (
+            "fechados" in msg.lower()
+            or "indispon" in msg.lower()
+            or "atendendo" in msg.lower()
+        )
 
 
 # ===========================================================================
 # 2. GREETING STATE
 # ===========================================================================
 
-class TestGreetingState(BaseConversationTest):
 
+class TestGreetingState(BaseConversationTest):
     @pytest.mark.asyncio
     async def test_greeting_sends_menu_and_transitions_to_shopping(self):
         """GREETING state + GREETING_OR_QUESTION intent → sends menu, state becomes SHOPPING."""
@@ -235,7 +263,9 @@ class TestGreetingState(BaseConversationTest):
         self.cart.state = "GREETING"
         self.bot.menu_url = "https://example.com/menu.jpg"
 
-        with patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="GREETING_OR_QUESTION")):
+        with patch(
+            PATCH_RESOLVE_INTENT, AsyncMock(return_value="GREETING_OR_QUESTION")
+        ):
             await process_whatsapp_message({}, build_whatsapp_payload(text="oi"))
 
         self.send_mock.assert_called_once()
@@ -252,7 +282,9 @@ class TestGreetingState(BaseConversationTest):
         self.cart.state = "GREETING"
         self.bot.menu_url = "https://example.com/cardapio.pdf"
 
-        with patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="GREETING_OR_QUESTION")):
+        with patch(
+            PATCH_RESOLVE_INTENT, AsyncMock(return_value="GREETING_OR_QUESTION")
+        ):
             await process_whatsapp_message({}, build_whatsapp_payload(text="oi"))
 
         call_kwargs = self.send_mock.call_args.kwargs
@@ -263,8 +295,8 @@ class TestGreetingState(BaseConversationTest):
 # 3. AWAITING_DELIVERY_METHOD STATE
 # ===========================================================================
 
-class TestDeliveryMethodState(BaseConversationTest):
 
+class TestDeliveryMethodState(BaseConversationTest):
     @pytest.fixture(autouse=True)
     def set_state(self):
         self.cart.state = "AWAITING_DELIVERY_METHOD"
@@ -272,6 +304,7 @@ class TestDeliveryMethodState(BaseConversationTest):
     @pytest.mark.asyncio
     async def test_choose_delivery_transitions_to_awaiting_cep(self):
         from app.whatsapp import process_whatsapp_message
+
         await process_whatsapp_message({}, build_whatsapp_payload(text="Entrega"))
         assert self.cart.state == "AWAITING_CEP"
         assert self.cart.delivery_method == DeliveryMethod.DELIVERY
@@ -279,6 +312,7 @@ class TestDeliveryMethodState(BaseConversationTest):
     @pytest.mark.asyncio
     async def test_choose_delivery_by_number(self):
         from app.whatsapp import process_whatsapp_message
+
         await process_whatsapp_message({}, build_whatsapp_payload(text="1"))
         assert self.cart.state == "AWAITING_CEP"
 
@@ -308,6 +342,7 @@ class TestDeliveryMethodState(BaseConversationTest):
     @pytest.mark.asyncio
     async def test_invalid_response_asks_again(self):
         from app.whatsapp import process_whatsapp_message
+
         await process_whatsapp_message({}, build_whatsapp_payload(text="talvez"))
         assert self.cart.state == "AWAITING_DELIVERY_METHOD"
         msg = get_sent_message(self.send_mock)
@@ -318,8 +353,8 @@ class TestDeliveryMethodState(BaseConversationTest):
 # 4. AWAITING_CEP STATE
 # ===========================================================================
 
-class TestCepState(BaseConversationTest):
 
+class TestCepState(BaseConversationTest):
     @pytest.fixture(autouse=True)
     def set_state(self):
         self.cart.state = "AWAITING_CEP"
@@ -327,12 +362,14 @@ class TestCepState(BaseConversationTest):
     @pytest.mark.asyncio
     async def test_cancel_keyword_resets_to_greeting(self):
         from app.whatsapp import process_whatsapp_message
+
         await process_whatsapp_message({}, build_whatsapp_payload(text="cancelar"))
         assert self.cart.state == "GREETING"
 
     @pytest.mark.asyncio
     async def test_pickup_keyword_switches_to_pix_only_payment(self):
         from app.whatsapp import process_whatsapp_message
+
         await process_whatsapp_message({}, build_whatsapp_payload(text="retirada"))
         assert self.cart.state == "AWAITING_PAYMENT_METHOD"
         assert self.cart.delivery_method == "pickup"
@@ -346,6 +383,7 @@ class TestCepState(BaseConversationTest):
     @pytest.mark.asyncio
     async def test_pickup_keyword_in_cep_without_name_requests_name(self):
         from app.whatsapp import process_whatsapp_message
+
         self.contact.name = None
         await process_whatsapp_message({}, build_whatsapp_payload(text="retirada"))
         assert self.cart.state == "AWAITING_CUSTOMER_NAME"
@@ -358,7 +396,9 @@ class TestCepState(BaseConversationTest):
     async def test_invalid_cep_sends_error(self):
         from app.whatsapp import process_whatsapp_message
 
-        with patch("app.whatsapp.app.utils.get_address_from_cep", AsyncMock(return_value=None)):
+        with patch(
+            "app.whatsapp.app.utils.get_address_from_cep", AsyncMock(return_value=None)
+        ):
             await process_whatsapp_message({}, build_whatsapp_payload(text="00000000"))
 
         assert self.cart.state == "AWAITING_CEP"
@@ -379,7 +419,10 @@ class TestCepState(BaseConversationTest):
             "lng": -46.63,
         }
         with (
-            patch("app.whatsapp.app.utils.get_address_from_cep", AsyncMock(return_value=address_data)),
+            patch(
+                "app.whatsapp.app.utils.get_address_from_cep",
+                AsyncMock(return_value=address_data),
+            ),
             patch("app.whatsapp.app.utils.calculate_distance", return_value=2.0),
         ):
             await process_whatsapp_message({}, build_whatsapp_payload(text="01001000"))
@@ -391,9 +434,20 @@ class TestCepState(BaseConversationTest):
     async def test_valid_cep_outside_radius_blocks_and_offers_pickup(self):
         from app.whatsapp import process_whatsapp_message
 
-        address_data = {"street": "Rua Longe", "neighborhood": "Bairro", "city": "SP", "state": "SP", "cep": "99999999", "lat": -25.0, "lng": -50.0}
+        address_data = {
+            "street": "Rua Longe",
+            "neighborhood": "Bairro",
+            "city": "SP",
+            "state": "SP",
+            "cep": "99999999",
+            "lat": -25.0,
+            "lng": -50.0,
+        }
         with (
-            patch("app.whatsapp.app.utils.get_address_from_cep", AsyncMock(return_value=address_data)),
+            patch(
+                "app.whatsapp.app.utils.get_address_from_cep",
+                AsyncMock(return_value=address_data),
+            ),
             patch("app.whatsapp.app.utils.calculate_distance", return_value=50.0),
         ):
             await process_whatsapp_message({}, build_whatsapp_payload(text="99999999"))
@@ -401,17 +455,28 @@ class TestCepState(BaseConversationTest):
         assert self.cart.state == "AWAITING_CEP"
         assert self.cart.partial_address is None
         msg = get_sent_message(self.send_mock)
-        assert "área" in msg.lower() or "entrega" in msg.lower() or "raio" in msg.lower()
+        assert (
+            "área" in msg.lower() or "entrega" in msg.lower() or "raio" in msg.lower()
+        )
 
     @pytest.mark.asyncio
     async def test_cep_with_no_coordinates_blocks(self):
         """CEP found but without lat/lng (geocoding failed) should block."""
         from app.whatsapp import process_whatsapp_message
 
-        address_data = {"street": "Rua X", "neighborhood": "Y", "city": "SP", "state": "SP", "cep": "01001000"}
+        address_data = {
+            "street": "Rua X",
+            "neighborhood": "Y",
+            "city": "SP",
+            "state": "SP",
+            "cep": "01001000",
+        }
         self.bot.latitude = -23.55
         self.bot.longitude = -46.63
-        with patch("app.whatsapp.app.utils.get_address_from_cep", AsyncMock(return_value=address_data)):
+        with patch(
+            "app.whatsapp.app.utils.get_address_from_cep",
+            AsyncMock(return_value=address_data),
+        ):
             await process_whatsapp_message({}, build_whatsapp_payload(text="01001000"))
 
         assert self.cart.state == "AWAITING_CEP"
@@ -421,8 +486,8 @@ class TestCepState(BaseConversationTest):
 # 5. AWAITING_NUMBER_COMPLEMENT STATE
 # ===========================================================================
 
-class TestNumberComplementState(BaseConversationTest):
 
+class TestNumberComplementState(BaseConversationTest):
     @pytest.fixture(autouse=True)
     def set_state(self):
         self.cart.state = "AWAITING_NUMBER_COMPLEMENT"
@@ -437,6 +502,7 @@ class TestNumberComplementState(BaseConversationTest):
     @pytest.mark.asyncio
     async def test_saves_full_address_and_asks_confirmation(self):
         from app.whatsapp import process_whatsapp_message
+
         await process_whatsapp_message({}, build_whatsapp_payload(text="123, Apto 4"))
 
         assert self.cart.state == "AWAITING_ADDRESS_CONFIRMATION"
@@ -452,12 +518,14 @@ class TestNumberComplementState(BaseConversationTest):
 # 6. AWAITING_ADDRESS_CONFIRMATION STATE
 # ===========================================================================
 
-class TestAddressConfirmationState(BaseConversationTest):
 
+class TestAddressConfirmationState(BaseConversationTest):
     @pytest.fixture(autouse=True)
     def set_state(self):
         self.cart.state = "AWAITING_ADDRESS_CONFIRMATION"
-        self.cart.pending_address = "Rua das Flores, 123\nCentro - São Paulo/SP\nCEP: 01001000"
+        self.cart.pending_address = (
+            "Rua das Flores, 123\nCentro - São Paulo/SP\nCEP: 01001000"
+        )
 
     @pytest.mark.asyncio
     async def test_confirm_saves_address_and_requests_name(self):
@@ -484,7 +552,9 @@ class TestAddressConfirmationState(BaseConversationTest):
     async def test_ambiguous_response_asks_again(self):
         from app.whatsapp import process_whatsapp_message
 
-        with patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="GREETING_OR_QUESTION")):
+        with patch(
+            PATCH_RESOLVE_INTENT, AsyncMock(return_value="GREETING_OR_QUESTION")
+        ):
             await process_whatsapp_message({}, build_whatsapp_payload(text="talvez"))
 
         assert self.cart.state == "AWAITING_ADDRESS_CONFIRMATION"
@@ -496,8 +566,8 @@ class TestAddressConfirmationState(BaseConversationTest):
 # 7. AWAITING_CUSTOMER_NAME STATE
 # ===========================================================================
 
-class TestCustomerNameState(BaseConversationTest):
 
+class TestCustomerNameState(BaseConversationTest):
     @pytest.fixture(autouse=True)
     def set_state(self):
         self.cart.state = "AWAITING_CUSTOMER_NAME"
@@ -506,6 +576,7 @@ class TestCustomerNameState(BaseConversationTest):
     @pytest.mark.asyncio
     async def test_saves_name_and_shows_summary_then_asks_payment(self):
         from app.whatsapp import process_whatsapp_message
+
         await process_whatsapp_message({}, build_whatsapp_payload(text="Maria Souza"))
 
         self.crud_mock.save_customer_name_to_contact.assert_called_once()
@@ -518,6 +589,7 @@ class TestCustomerNameState(BaseConversationTest):
     @pytest.mark.asyncio
     async def test_saves_name_pix_only_shows_only_pix(self):
         from app.whatsapp import process_whatsapp_message
+
         self.cart.pix_only = True
         await process_whatsapp_message({}, build_whatsapp_payload(text="Maria Souza"))
 
@@ -532,8 +604,8 @@ class TestCustomerNameState(BaseConversationTest):
 # 8. AWAITING_PAYMENT_METHOD STATE
 # ===========================================================================
 
-class TestPaymentMethodState(BaseConversationTest):
 
+class TestPaymentMethodState(BaseConversationTest):
     @pytest.fixture(autouse=True)
     def set_state(self):
         self.cart.state = "AWAITING_PAYMENT_METHOD"
@@ -551,6 +623,7 @@ class TestPaymentMethodState(BaseConversationTest):
     @pytest.mark.asyncio
     async def test_invalid_method_asks_again(self):
         from app.whatsapp import process_whatsapp_message
+
         with patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="ADD")):
             await process_whatsapp_message({}, build_whatsapp_payload(text="boleto"))
         assert self.cart.state == "AWAITING_PAYMENT_METHOD"
@@ -560,6 +633,7 @@ class TestPaymentMethodState(BaseConversationTest):
     @pytest.mark.asyncio
     async def test_pix_only_rejects_card(self):
         from app.whatsapp import process_whatsapp_message
+
         self.cart.pix_only = True
         with patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="ADD")):
             await process_whatsapp_message({}, build_whatsapp_payload(text="cartão"))
@@ -571,6 +645,7 @@ class TestPaymentMethodState(BaseConversationTest):
     @pytest.mark.asyncio
     async def test_pix_only_rejects_money(self):
         from app.whatsapp import process_whatsapp_message
+
         self.cart.pix_only = True
         with patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="ADD")):
             await process_whatsapp_message({}, build_whatsapp_payload(text="dinheiro"))
@@ -582,6 +657,7 @@ class TestPaymentMethodState(BaseConversationTest):
     @pytest.mark.asyncio
     async def test_card_delivery_confirms_order_and_clears_cart(self):
         from app.whatsapp import process_whatsapp_message
+
         with patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="ADD")):
             await process_whatsapp_message({}, build_whatsapp_payload(text="cartão"))
 
@@ -594,6 +670,7 @@ class TestPaymentMethodState(BaseConversationTest):
     @pytest.mark.asyncio
     async def test_money_confirms_order_with_total(self):
         from app.whatsapp import process_whatsapp_message
+
         with patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="ADD")):
             await process_whatsapp_message({}, build_whatsapp_payload(text="dinheiro"))
 
@@ -626,10 +703,15 @@ class TestPaymentMethodState(BaseConversationTest):
         payment_config.access_token = "mp-test-token"
         self.bot.payment_config = payment_config
 
-        pix_result = {"pix_copy_paste": "00020126580014br.gov.bcb.pix...", "qr_code_base64": "base64..."}
+        pix_result = {
+            "pix_copy_paste": "00020126580014br.gov.bcb.pix...",
+            "qr_code_base64": "base64...",
+        }
 
-        with patch(PATCH_CREATE_PIX, AsyncMock(return_value=pix_result)), \
-             patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="ADD")):
+        with (
+            patch(PATCH_CREATE_PIX, AsyncMock(return_value=pix_result)),
+            patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="ADD")),
+        ):
             await process_whatsapp_message({}, build_whatsapp_payload(text="pix"))
 
         assert self.send_mock.call_count == 2
@@ -646,11 +728,15 @@ class TestPaymentMethodState(BaseConversationTest):
         payment_config.access_token = "mp-test-token"
         self.bot.payment_config = payment_config
 
-        with patch(PATCH_CREATE_PIX, AsyncMock(return_value=None)), \
-             patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="ADD")):
+        with (
+            patch(PATCH_CREATE_PIX, AsyncMock(return_value=None)),
+            patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="ADD")),
+        ):
             await process_whatsapp_message({}, build_whatsapp_payload(text="pix"))
 
-        self.crud_mock.delete_order.assert_called_once_with(self.session, self.mock_order.id)
+        self.crud_mock.delete_order.assert_called_once_with(
+            self.session, self.mock_order.id
+        )
         msg = get_sent_message(self.send_mock)
         assert "problema" in msg.lower() or "erro" in msg.lower()
 
@@ -659,8 +745,8 @@ class TestPaymentMethodState(BaseConversationTest):
 # 9. SESSION TIMEOUT TESTS
 # ===========================================================================
 
-class TestSessionTimeout(BaseConversationTest):
 
+class TestSessionTimeout(BaseConversationTest):
     @pytest.mark.asyncio
     async def test_short_inactivity_clears_cart_and_notifies(self):
         """10+ min inactivity sends warning and resets."""
@@ -670,7 +756,9 @@ class TestSessionTimeout(BaseConversationTest):
         self.cart.last_activity_at = datetime.now(timezone.utc) - timedelta(minutes=15)
 
         with patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="ADD")):
-            await process_whatsapp_message({}, build_whatsapp_payload(text="quero pizza"))
+            await process_whatsapp_message(
+                {}, build_whatsapp_payload(text="quero pizza")
+            )
 
         self.crud_mock.clear_db_cart.assert_called_once()
         msg = get_sent_message(self.send_mock)
@@ -697,8 +785,8 @@ class TestSessionTimeout(BaseConversationTest):
 # 10. FINISH_ORDER INTENT TESTS
 # ===========================================================================
 
-class TestFinishOrderIntent(BaseConversationTest):
 
+class TestFinishOrderIntent(BaseConversationTest):
     @pytest.fixture(autouse=True)
     def set_state(self):
         self.cart.state = "SHOPPING"
@@ -778,7 +866,6 @@ def _make_tool_call_message(tool_name: str, arguments: dict):
 
 
 class TestUpdateItemObservation(BaseConversationTest):
-
     @pytest.fixture(autouse=True)
     def set_state(self):
         self.cart.state = "SHOPPING"
@@ -793,14 +880,18 @@ class TestUpdateItemObservation(BaseConversationTest):
         """LLM returns update_item_observation → crud.update_item_notes is called, user gets confirmation."""
         from app.whatsapp import process_whatsapp_message
 
-        ai_msg = _make_tool_call_message("update_item_observation", {"product_id": 10, "notes": "sem cebola"})
+        ai_msg = _make_tool_call_message(
+            "update_item_observation", {"product_id": 10, "notes": "sem cebola"}
+        )
 
         with (
             patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="MODIFY")),
             patch(PATCH_GET_AI, AsyncMock(return_value=ai_msg)),
             patch(PATCH_EXTRACT_ITEMS, AsyncMock(return_value=["johns paranaense"])),
         ):
-            await process_whatsapp_message({}, build_whatsapp_payload(text="o johns paranaense é sem cebola"))
+            await process_whatsapp_message(
+                {}, build_whatsapp_payload(text="o johns paranaense é sem cebola")
+            )
 
         self.crud_mock.update_item_notes.assert_called_once_with(
             self.session, self.cart.id, 10, "sem cebola"
@@ -813,14 +904,18 @@ class TestUpdateItemObservation(BaseConversationTest):
         """update_item_observation with a product_id not in the cart → user gets helpful error."""
         from app.whatsapp import process_whatsapp_message
 
-        ai_msg = _make_tool_call_message("update_item_observation", {"product_id": 999, "notes": "sem cebola"})
+        ai_msg = _make_tool_call_message(
+            "update_item_observation", {"product_id": 999, "notes": "sem cebola"}
+        )
 
         with (
             patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="MODIFY")),
             patch(PATCH_GET_AI, AsyncMock(return_value=ai_msg)),
             patch(PATCH_EXTRACT_ITEMS, AsyncMock(return_value=["johns paranaense"])),
         ):
-            await process_whatsapp_message({}, build_whatsapp_payload(text="o johns paranaense é sem cebola"))
+            await process_whatsapp_message(
+                {}, build_whatsapp_payload(text="o johns paranaense é sem cebola")
+            )
 
         self.crud_mock.update_item_notes.assert_not_called()
         msg = get_sent_message(self.send_mock)
@@ -838,7 +933,9 @@ class TestUpdateItemObservation(BaseConversationTest):
             patch(PATCH_GET_AI, AsyncMock(return_value=ai_msg)),
             patch(PATCH_EXTRACT_ITEMS, AsyncMock(return_value=["johns paranaense"])),
         ):
-            await process_whatsapp_message({}, build_whatsapp_payload(text="o johns paranaense precisa de algo"))
+            await process_whatsapp_message(
+                {}, build_whatsapp_payload(text="o johns paranaense precisa de algo")
+            )
 
         self.crud_mock.update_item_notes.assert_not_called()
         msg = get_sent_message(self.send_mock)
@@ -849,8 +946,8 @@ class TestUpdateItemObservation(BaseConversationTest):
 # 11. CART MANAGEMENT INTENTS
 # ===========================================================================
 
-class TestCartManagementIntents(BaseConversationTest):
 
+class TestCartManagementIntents(BaseConversationTest):
     @pytest.fixture(autouse=True)
     def set_state(self):
         self.cart.state = "SHOPPING"
@@ -872,7 +969,9 @@ class TestCartManagementIntents(BaseConversationTest):
 
         self.cart.items = [make_cart_item(1, "Pizza", 30.0)]
         with patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="SHOW_CART")):
-            await process_whatsapp_message({}, build_whatsapp_payload(text="ver carrinho"))
+            await process_whatsapp_message(
+                {}, build_whatsapp_payload(text="ver carrinho")
+            )
 
         msg = get_sent_message(self.send_mock)
         assert "Pizza" in msg or "Pedido" in msg
@@ -881,6 +980,7 @@ class TestCartManagementIntents(BaseConversationTest):
 # ===========================================================================
 # DISTRIBUTED LOCK BEHAVIOR TESTS
 # ===========================================================================
+
 
 class TestDistributedLock(BaseConversationTest):
     """Tests that the distributed lock integrates correctly with the message pipeline."""
@@ -912,7 +1012,9 @@ class TestDistributedLock(BaseConversationTest):
         ):
             await process_whatsapp_message({}, build_whatsapp_payload(text="Oi"))
 
-        assert call_order.index("lock_acquired") < call_order.index("get_or_create_cart")
+        assert call_order.index("lock_acquired") < call_order.index(
+            "get_or_create_cart"
+        )
 
     @pytest.mark.asyncio
     async def test_lock_released_after_commit(self):
@@ -956,7 +1058,9 @@ class TestDistributedLock(BaseConversationTest):
             yield  # pragma: no cover
 
         with patch(PATCH_CONTACT_LOCK, return_value=_lock_that_fails()):
-            await process_whatsapp_message({}, build_whatsapp_payload(text="Quero pizza"))
+            await process_whatsapp_message(
+                {}, build_whatsapp_payload(text="Quero pizza")
+            )
 
         msg = get_sent_message(self.send_mock)
         assert "processando" in msg.lower()
@@ -976,7 +1080,9 @@ class TestDistributedLock(BaseConversationTest):
             finally:
                 lock_released.append(True)
 
-        self.crud_mock.get_or_create_cart = AsyncMock(side_effect=RuntimeError("DB exploded"))
+        self.crud_mock.get_or_create_cart = AsyncMock(
+            side_effect=RuntimeError("DB exploded")
+        )
 
         with patch(PATCH_CONTACT_LOCK, return_value=_tracking_lock()):
             await process_whatsapp_message({}, build_whatsapp_payload(text="Oi"))

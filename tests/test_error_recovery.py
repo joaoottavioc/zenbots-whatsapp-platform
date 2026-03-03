@@ -3,14 +3,13 @@
 Tests for _classify_error_message — ensures specific error types
 produce user-friendly messages instead of a single generic one.
 """
+
 import httpx
-import pytest
 
 from app.whatsapp import _classify_error_message
 
 
 class TestClassifyErrorMessage:
-
     def test_timeout_error_returns_connection_message(self):
         """httpx.TimeoutException → connection difficulty message."""
         exc = httpx.TimeoutException("read timed out")
@@ -43,17 +42,21 @@ class TestClassifyErrorMessage:
 
     def test_sqlalchemy_error_returns_system_message(self):
         """Exception whose type name contains 'sqlalchemy' → system unavailable message."""
+
         # Simulate a SQLAlchemy-like exception
         class SQLAlchemyOperationalError(Exception):
             pass
+
         exc = SQLAlchemyOperationalError("connection refused")
         msg = _classify_error_message(exc)
         assert "sistema" in msg.lower()
 
     def test_openai_error_returns_assistant_message(self):
         """Exception whose type name contains 'openai' → assistant difficulty message."""
+
         class OpenAIAPIError(Exception):
             pass
+
         exc = OpenAIAPIError("rate limit exceeded")
         msg = _classify_error_message(exc)
         assert "assistente" in msg.lower()
@@ -93,6 +96,9 @@ class TestClassifyErrorMessage:
         ]
         for exc in test_cases:
             msg = _classify_error_message(exc)
-            assert any(w in msg.lower() for w in ["por favor", "tente", "no momento", "instantes"]), (
+            assert any(
+                w in msg.lower()
+                for w in ["por favor", "tente", "no momento", "instantes"]
+            ), (
                 f"Message for {type(exc).__name__} doesn't seem to be in Portuguese: {msg}"
             )

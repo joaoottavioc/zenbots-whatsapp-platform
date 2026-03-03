@@ -99,6 +99,7 @@ class TestSetupLogging:
         handler = root.handlers[0]
         # Should NOT be JsonFormatter
         from pythonjsonlogger import jsonlogger
+
         assert not isinstance(handler.formatter, jsonlogger.JsonFormatter)
 
     def test_suppresses_noisy_loggers(self):

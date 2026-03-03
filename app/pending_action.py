@@ -17,11 +17,14 @@ def _to_naive_utc(dt: datetime) -> datetime:
 
 
 def save_pending(cart, tool: str, args: Dict[str, Any], question: str) -> None:
-    logger.debug("Saving pending action: tool=%s cart_id=%s", tool, getattr(cart, "id", None))
+    logger.debug(
+        "Saving pending action: tool=%s cart_id=%s", tool, getattr(cart, "id", None)
+    )
     cart.pending_action_tool = tool
     cart.pending_action_args = args
     cart.pending_action_question = question
     cart.pending_action_expires_at = utcnow() + timedelta(minutes=_TTL_MINUTES)
+
 
 def clear_pending(cart) -> None:
     logger.debug("Clearing pending action for cart_id=%s", getattr(cart, "id", None))
@@ -30,6 +33,7 @@ def clear_pending(cart) -> None:
     cart.pending_action_question = None
     cart.pending_action_expires_at = None
 
+
 def has_valid_pending(cart) -> bool:
     return (
         cart.pending_action_tool is not None
@@ -37,7 +41,12 @@ def has_valid_pending(cart) -> bool:
         and utcnow() <= _to_naive_utc(cart.pending_action_expires_at)
     )
 
+
 def expire_if_needed(cart) -> None:
-    if cart.pending_action_expires_at and utcnow() > _to_naive_utc(cart.pending_action_expires_at):
-        logger.debug("Expiring pending action for cart_id=%s", getattr(cart, "id", None))
+    if cart.pending_action_expires_at and utcnow() > _to_naive_utc(
+        cart.pending_action_expires_at
+    ):
+        logger.debug(
+            "Expiring pending action for cart_id=%s", getattr(cart, "id", None)
+        )
         clear_pending(cart)

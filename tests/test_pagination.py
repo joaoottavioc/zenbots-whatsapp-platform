@@ -1,6 +1,7 @@
 """Tests for product list pagination (V9)."""
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from app.crud import get_products_by_bot_id
 

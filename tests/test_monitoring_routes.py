@@ -1,14 +1,13 @@
 """Tests for app/monitoring_routes.py — monitoring API endpoints."""
 
-from datetime import date, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.monitoring_routes import router, _get_user_bot_ids
-from app.models import User, Bot, DailyCostSummary
+from app.monitoring_routes import router
+from app.models import User
 
 
 @pytest.fixture
@@ -29,6 +28,7 @@ def client(mock_user):
         return mock_user
 
     from app.auth import get_current_user
+
     app.dependency_overrides[get_current_user] = override_user
 
     return TestClient(app)
@@ -46,6 +46,7 @@ class TestOverview:
         mock_session.execute = AsyncMock(side_effect=[mock_bot_result, mock_agg_result])
 
         from app.database import get_session
+
         async def override_session():
             yield mock_session
 
@@ -66,6 +67,7 @@ class TestOverview:
         mock_session.execute = AsyncMock(return_value=mock_bot_result)
 
         from app.database import get_session
+
         async def override_session():
             yield mock_session
 
@@ -86,6 +88,7 @@ class TestBotDetail:
         mock_session.execute = AsyncMock(return_value=mock_bot_result)
 
         from app.database import get_session
+
         async def override_session():
             yield mock_session
 
@@ -105,6 +108,7 @@ class TestLeaderboard:
         mock_session.execute = AsyncMock(side_effect=[mock_bot_result, mock_agg_result])
 
         from app.database import get_session
+
         async def override_session():
             yield mock_session
 
@@ -123,6 +127,7 @@ class TestLeaderboard:
         mock_session.execute = AsyncMock(return_value=mock_bot_result)
 
         from app.database import get_session
+
         async def override_session():
             yield mock_session
 

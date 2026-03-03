@@ -7,17 +7,18 @@ Key design decisions:
 - External HTTP calls (WhatsApp, Mercado Pago) are patched at the call site.
 - Fixtures return MagicMock objects that mimic SQLModel model instances.
 """
-import json
+
 import pytest
 from datetime import datetime, timezone, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock
 
-from app.models import DeliveryMethod, OrderStatus, CartState
+from app.models import CartState
 
 
 # ---------------------------------------------------------------------------
 # Time helpers
 # ---------------------------------------------------------------------------
+
 
 def utcnow():
     return datetime.now(timezone.utc)
@@ -26,6 +27,7 @@ def utcnow():
 # ---------------------------------------------------------------------------
 # Model fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def mock_bot():
@@ -105,6 +107,7 @@ def expired_subscription():
 # Cart item / product helpers
 # ---------------------------------------------------------------------------
 
+
 def make_product(product_id: int, name: str, price: float, bot_id: int = 1):
     p = MagicMock()
     p.id = product_id
@@ -117,7 +120,9 @@ def make_product(product_id: int, name: str, price: float, bot_id: int = 1):
     return p
 
 
-def make_cart_item(product_id: int, name: str, price: float, quantity: int = 1, notes: str = None):
+def make_cart_item(
+    product_id: int, name: str, price: float, quantity: int = 1, notes: str = None
+):
     item = MagicMock()
     item.product_id = product_id
     item.quantity = quantity
@@ -129,6 +134,7 @@ def make_cart_item(product_id: int, name: str, price: float, quantity: int = 1, 
 # ---------------------------------------------------------------------------
 # WhatsApp webhook payload builder
 # ---------------------------------------------------------------------------
+
 
 def build_whatsapp_payload(
     from_number: str = "5511888888888",
@@ -167,6 +173,7 @@ def build_whatsapp_payload(
 # ---------------------------------------------------------------------------
 # Async session mock
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def mock_session():
@@ -208,6 +215,7 @@ PATCH_CONTACT_LOCK = "app.whatsapp.contact_lock"
 # ---------------------------------------------------------------------------
 # Message extraction helper
 # ---------------------------------------------------------------------------
+
 
 def get_sent_message(send_mock, call_index: int = -1) -> str:
     """

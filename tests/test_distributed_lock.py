@@ -2,7 +2,7 @@
 """
 Unit tests for the distributed lock module.
 """
-import pytest
+
 from unittest.mock import patch, MagicMock
 
 
@@ -20,6 +20,7 @@ class TestContactLock:
 
         with patch("app.distributed_lock._get_client", return_value=mock_client):
             from app.distributed_lock import contact_lock
+
             contact_lock(42)
 
         mock_client.lock.assert_called_once()
@@ -32,6 +33,7 @@ class TestContactLock:
 
         with patch("app.distributed_lock._get_client", return_value=mock_client):
             from app.distributed_lock import contact_lock
+
             contact_lock(1)
 
         kwargs = mock_client.lock.call_args.kwargs
@@ -42,6 +44,7 @@ class TestContactLock:
     def test_singleton_client_reused(self):
         """_get_client() returns the same instance on subsequent calls."""
         import app.distributed_lock as dl
+
         dl._client = None  # Reset singleton
 
         with patch("app.distributed_lock.redis") as mock_redis:
@@ -63,6 +66,7 @@ class TestContactLock:
 
         with patch("app.distributed_lock._get_client", return_value=mock_client):
             from app.distributed_lock import contact_lock
+
             contact_lock(10)
             contact_lock(20)
 

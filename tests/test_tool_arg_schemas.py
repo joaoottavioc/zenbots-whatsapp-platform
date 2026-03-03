@@ -1,15 +1,13 @@
 """Tests for LLM tool argument validation schemas (V3)."""
+
 import pytest
 from pydantic import ValidationError
 
 from app.tool_arg_schemas import (
     AddItemsArgs,
     AnswerArgs,
-    BulkModifyArgs,
     CartItemInput,
-    FoundProductsArgs,
     ModifyQuantityArgs,
-    ProposeConfirmArgs,
     RemoveItemsArgs,
     SearchCatalogArgs,
     UpdateObservationArgs,

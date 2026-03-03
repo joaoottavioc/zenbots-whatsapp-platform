@@ -6,6 +6,7 @@ Covered:
 - cos_sim          (pure sync function)
 - semantic_intent  (async, embed_router mocked)
 """
+
 import pytest
 from unittest.mock import AsyncMock, patch
 
@@ -17,6 +18,7 @@ from app.semantic_router import cos_sim, semantic_intent, PROTOS
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _unit_vec(*components):
     """Return a list of floats from the given components (no normalisation needed
     in tests — we control the dot products directly)."""
@@ -26,6 +28,7 @@ def _unit_vec(*components):
 # ---------------------------------------------------------------------------
 # cos_sim (pure, sync)
 # ---------------------------------------------------------------------------
+
 
 class TestCosSim:
     def test_identical_vectors(self):
@@ -44,6 +47,7 @@ class TestCosSim:
 # ---------------------------------------------------------------------------
 # semantic_intent (async)
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def clear_emb_cache():
@@ -64,8 +68,8 @@ class TestSemanticIntent:
 
         Expected: semantic_intent returns "SHOW_CART" with score 1.0.
         """
-        n_show_cart = len(PROTOS["SHOW_CART"])
-        other_intents = [k for k in PROTOS if k != "SHOW_CART"]
+        len(PROTOS["SHOW_CART"])
+        [k for k in PROTOS if k != "SHOW_CART"]
 
         # The call sequence is:
         #   Phase 1 — _ensure_proto_embeddings calls embed_router once per intent

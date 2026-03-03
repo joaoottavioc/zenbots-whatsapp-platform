@@ -11,12 +11,11 @@ import json
 import logging
 import os
 from datetime import date, datetime, timedelta, timezone
-from typing import Optional
 
 import redis.asyncio as redis
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy import func, and_
+from fastapi.responses import StreamingResponse
+from sqlalchemy import func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -80,15 +79,17 @@ async def monitoring_overview(
     for row in rows:
         cost = float(row.total_cost_usd or 0)
         total_cost += cost
-        services.append({
-            "service": row.service,
-            "total_cost_usd": round(cost, 6),
-            "total_input_tokens": int(row.total_input_tokens or 0),
-            "total_output_tokens": int(row.total_output_tokens or 0),
-            "total_api_calls": int(row.total_api_calls or 0),
-            "total_failed_calls": int(row.total_failed_calls or 0),
-            "total_duration_ms": int(row.total_duration_ms or 0),
-        })
+        services.append(
+            {
+                "service": row.service,
+                "total_cost_usd": round(cost, 6),
+                "total_input_tokens": int(row.total_input_tokens or 0),
+                "total_output_tokens": int(row.total_output_tokens or 0),
+                "total_api_calls": int(row.total_api_calls or 0),
+                "total_failed_calls": int(row.total_failed_calls or 0),
+                "total_duration_ms": int(row.total_duration_ms or 0),
+            }
+        )
 
     return {
         "days": days,
@@ -145,25 +146,29 @@ async def monitoring_bot_detail(
     for row in rows:
         cost = float(row.total_cost_usd or 0)
         total_cost += cost
-        daily_data.append({
-            "date": str(row.date),
-            "service": row.service,
-            "total_cost_usd": round(cost, 6),
-            "total_input_tokens": int(row.total_input_tokens or 0),
-            "total_output_tokens": int(row.total_output_tokens or 0),
-            "total_api_calls": int(row.total_api_calls or 0),
-            "total_failed_calls": int(row.total_failed_calls or 0),
-            "total_duration_ms": int(row.total_duration_ms or 0),
-            "avg_cost_per_call": round(float(row.avg_cost_per_call or 0), 8),
-            "max_cost_single_call": round(float(row.max_cost_single_call or 0), 8),
-        })
+        daily_data.append(
+            {
+                "date": str(row.date),
+                "service": row.service,
+                "total_cost_usd": round(cost, 6),
+                "total_input_tokens": int(row.total_input_tokens or 0),
+                "total_output_tokens": int(row.total_output_tokens or 0),
+                "total_api_calls": int(row.total_api_calls or 0),
+                "total_failed_calls": int(row.total_failed_calls or 0),
+                "total_duration_ms": int(row.total_duration_ms or 0),
+                "avg_cost_per_call": round(float(row.avg_cost_per_call or 0), 8),
+                "max_cost_single_call": round(float(row.max_cost_single_call or 0), 8),
+            }
+        )
 
     # Get today's real-time data from Redis
     today_realtime = {}
     try:
         r = redis.from_url(
             f"redis://{REDIS_HOST}:{REDIS_PORT}/2",
-            decode_responses=True, socket_timeout=2, socket_connect_timeout=2,
+            decode_responses=True,
+            socket_timeout=2,
+            socket_connect_timeout=2,
         )
         try:
             hour_key = datetime.now(timezone.utc).strftime("%Y%m%d")
@@ -226,20 +231,24 @@ async def monitoring_leaderboard(
     bot_names = {}
     if rows:
         name_result = await session.execute(
-            select(Bot.id, Bot.restaurant_name).where(Bot.id.in_([r.bot_id for r in rows]))
+            select(Bot.id, Bot.restaurant_name).where(
+                Bot.id.in_([r.bot_id for r in rows])
+            )
         )
         bot_names = {row[0]: row[1] for row in name_result.all()}
 
     bots = []
     for rank, row in enumerate(rows, 1):
-        bots.append({
-            "rank": rank,
-            "bot_id": row.bot_id,
-            "restaurant_name": bot_names.get(row.bot_id, "Unknown"),
-            "total_cost_usd": round(float(row.total_cost_usd or 0), 6),
-            "total_api_calls": int(row.total_api_calls or 0),
-            "total_failed_calls": int(row.total_failed_calls or 0),
-        })
+        bots.append(
+            {
+                "rank": rank,
+                "bot_id": row.bot_id,
+                "restaurant_name": bot_names.get(row.bot_id, "Unknown"),
+                "total_cost_usd": round(float(row.total_cost_usd or 0), 6),
+                "total_api_calls": int(row.total_api_calls or 0),
+                "total_failed_calls": int(row.total_failed_calls or 0),
+            }
+        )
 
     return {"days": days, "bots": bots}
 
@@ -252,11 +261,13 @@ async def monitoring_alerts_stream(
     SSE stream for real-time monitoring alerts (anomaly detection).
     Subscribes to Redis PubSub channel 'monitoring_alerts'.
     """
+
     async def event_generator():
         r = redis.from_url(
             f"redis://{REDIS_HOST}:{REDIS_PORT}/2",
             decode_responses=True,
-            socket_timeout=2, socket_connect_timeout=2,
+            socket_timeout=2,
+            socket_connect_timeout=2,
         )
         pubsub = r.pubsub()
         await pubsub.subscribe("monitoring_alerts")
@@ -265,7 +276,9 @@ async def monitoring_alerts_stream(
             yield f"data: {json.dumps({'type': 'connected', 'message': 'Monitoring alerts stream active'})}\n\n"
 
             while True:
-                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                message = await pubsub.get_message(
+                    ignore_subscribe_messages=True, timeout=1.0
+                )
                 if message:
                     yield f"data: {message['data']}\n\n"
                 else:

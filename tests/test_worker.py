@@ -4,11 +4,11 @@ Unit tests for ARQ WorkerSettings in app/worker.py.
 
 Verifies that retry, timeout, and error-handling settings are configured.
 """
+
 from app.worker import WorkerSettings
 
 
 class TestWorkerSettings:
-
     def test_max_tries_is_at_least_two(self):
         assert WorkerSettings.max_tries >= 2
 

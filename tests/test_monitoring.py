@@ -1,6 +1,5 @@
 """Tests for app/monitoring.py — core instrumentation module."""
 
-import asyncio
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -15,7 +14,6 @@ from app.monitoring import (
     record_llm_usage,
     record_api_usage,
     flush_buffer,
-    _buffer_append,
     _update_redis_counters,
     get_buffer_size,
 )
@@ -52,8 +50,10 @@ class TestRecordLlmUsage:
 
         assert len(_event_buffer) == 1
         event = _event_buffer[0]
-        expected_cost = 1_000_000 * PRICING["gpt-4o-mini"]["input"] + \
-                        1_000_000 * PRICING["gpt-4o-mini"]["output"]
+        expected_cost = (
+            1_000_000 * PRICING["gpt-4o-mini"]["input"]
+            + 1_000_000 * PRICING["gpt-4o-mini"]["output"]
+        )
         assert abs(event.cost_usd - expected_cost) < 0.0001
 
     @pytest.mark.asyncio
@@ -164,8 +164,10 @@ class TestBufferManagement:
         mock_session_ctx.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session_ctx.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("app.monitoring._update_redis_counters", new_callable=AsyncMock), \
-             patch("app.database.async_session", return_value=mock_session_ctx):
+        with (
+            patch("app.monitoring._update_redis_counters", new_callable=AsyncMock),
+            patch("app.database.async_session", return_value=mock_session_ctx),
+        ):
             for i in range(_FLUSH_THRESHOLD):
                 await record_api_usage(
                     bot_id=1,
@@ -181,12 +183,16 @@ class TestBufferManagement:
     @pytest.mark.asyncio
     async def test_buffer_hard_cap_drops_oldest(self):
         """Buffer should not grow beyond _BUFFER_HARD_CAP."""
-        with patch("app.monitoring._update_redis_counters", new_callable=AsyncMock), \
-             patch("app.monitoring.flush_buffer", new_callable=AsyncMock):
+        with (
+            patch("app.monitoring._update_redis_counters", new_callable=AsyncMock),
+            patch("app.monitoring.flush_buffer", new_callable=AsyncMock),
+        ):
             # Override _FLUSH_THRESHOLD temporarily by patching flush_buffer
             for i in range(_BUFFER_HARD_CAP + 10):
                 event = UsageEvent(
-                    bot_id=1, service="test", operation=f"op_{i}",
+                    bot_id=1,
+                    service="test",
+                    operation=f"op_{i}",
                     created_at=datetime.now(timezone.utc),
                 )
                 async with _buffer_lock:
@@ -209,10 +215,14 @@ class TestFlushBuffer:
         # Populate buffer directly
         async with _buffer_lock:
             for i in range(5):
-                _event_buffer.append(UsageEvent(
-                    bot_id=1, service="test", operation=f"op_{i}",
-                    created_at=datetime.now(timezone.utc),
-                ))
+                _event_buffer.append(
+                    UsageEvent(
+                        bot_id=1,
+                        service="test",
+                        operation=f"op_{i}",
+                        created_at=datetime.now(timezone.utc),
+                    )
+                )
 
         mock_session = AsyncMock()
         mock_session.add_all = MagicMock()

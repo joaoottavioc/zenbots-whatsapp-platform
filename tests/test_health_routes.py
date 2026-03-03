@@ -1,6 +1,6 @@
 """Tests for app/health_routes.py — liveness and readiness probes."""
 
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -35,8 +35,10 @@ class TestReadiness:
         mock_redis.zcard = AsyncMock(return_value=5)
         mock_redis.aclose = AsyncMock()
 
-        with patch("app.health_routes.async_session", return_value=mock_session), \
-             patch("app.health_routes.redis") as mock_redis_module:
+        with (
+            patch("app.health_routes.async_session", return_value=mock_session),
+            patch("app.health_routes.redis") as mock_redis_module,
+        ):
             mock_redis_module.from_url.return_value = mock_redis
             resp = client.get("/health/ready")
 
@@ -59,8 +61,10 @@ class TestReadiness:
         mock_redis.zcard = AsyncMock(return_value=0)
         mock_redis.aclose = AsyncMock()
 
-        with patch("app.health_routes.async_session", return_value=mock_session), \
-             patch("app.health_routes.redis") as mock_redis_module:
+        with (
+            patch("app.health_routes.async_session", return_value=mock_session),
+            patch("app.health_routes.redis") as mock_redis_module,
+        ):
             mock_redis_module.from_url.return_value = mock_redis
             resp = client.get("/health/ready")
 
@@ -77,8 +81,10 @@ class TestReadiness:
         mock_session.__aexit__ = AsyncMock(return_value=False)
         mock_session.execute = AsyncMock()
 
-        with patch("app.health_routes.async_session", return_value=mock_session), \
-             patch("app.health_routes.redis") as mock_redis_module:
+        with (
+            patch("app.health_routes.async_session", return_value=mock_session),
+            patch("app.health_routes.redis") as mock_redis_module,
+        ):
             mock_redis_module.from_url.side_effect = ConnectionError("Redis down")
             resp = client.get("/health/ready")
 
@@ -99,8 +105,10 @@ class TestReadiness:
         mock_redis.zcard = AsyncMock(return_value=0)
         mock_redis.aclose = AsyncMock()
 
-        with patch("app.health_routes.async_session", return_value=mock_session), \
-             patch("app.health_routes.redis") as mock_redis_module:
+        with (
+            patch("app.health_routes.async_session", return_value=mock_session),
+            patch("app.health_routes.redis") as mock_redis_module,
+        ):
             mock_redis_module.from_url.return_value = mock_redis
             resp = client.get("/health/ready")
 

@@ -18,17 +18,21 @@ REGION = os.getenv("AWS_REGION", "us-east-1")
 
 # Cria o cliente S3 uma única vez
 s3_client = boto3.client(
-    's3',
+    "s3",
     aws_access_key_id=AWS_ACCESS_KEY,
     aws_secret_access_key=AWS_SECRET_KEY,
-    region_name=REGION
+    region_name=REGION,
 )
 
-def upload_bytes_to_s3(file_content: bytes, filename: str, content_type: str, folder: str = "uploads") -> str:
+
+def upload_bytes_to_s3(
+    file_content: bytes, filename: str, content_type: str, folder: str = "uploads"
+) -> str:
     """
     Faz upload de bytes brutos para o S3. Mais seguro para usar com asyncio.
     """
     import asyncio
+
     start = time.perf_counter_ns()
     try:
         # Gera nome único
@@ -43,17 +47,23 @@ def upload_bytes_to_s3(file_content: bytes, filename: str, content_type: str, fo
             file_obj,
             BUCKET_NAME,
             unique_filename,
-            ExtraArgs={'ContentType': content_type or "application/octet-stream"}
+            ExtraArgs={"ContentType": content_type or "application/octet-stream"},
         )
 
         url = f"https://{BUCKET_NAME}.s3.{REGION}.amazonaws.com/{unique_filename}"
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(record_api_usage(
-                None, "aws_s3", "s3_put", cost_usd=0.000005,
-                quantity=len(file_content), duration_ms=elapsed_ms,
-            ))
+            loop.create_task(
+                record_api_usage(
+                    None,
+                    "aws_s3",
+                    "s3_put",
+                    cost_usd=0.000005,
+                    quantity=len(file_content),
+                    duration_ms=elapsed_ms,
+                )
+            )
         except RuntimeError:
             pass  # No running loop (called outside async context)
         return url
@@ -64,15 +74,24 @@ def upload_bytes_to_s3(file_content: bytes, filename: str, content_type: str, fo
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
         try:
             loop = asyncio.get_running_loop()
-            loop.create_task(record_api_usage(
-                None, "aws_s3", "s3_put", cost_usd=0.0,
-                duration_ms=elapsed_ms, success=False,
-            ))
+            loop.create_task(
+                record_api_usage(
+                    None,
+                    "aws_s3",
+                    "s3_put",
+                    cost_usd=0.0,
+                    duration_ms=elapsed_ms,
+                    success=False,
+                )
+            )
         except RuntimeError:
             pass
         logger.error("S3 upload failed: %s", e)
         raise HTTPException(status_code=500, detail="Falha ao fazer upload para S3")
 
+
 # Mantemos a antiga para compatibilidade se usada em outros lugares
 def upload_file_to_s3(file: UploadFile, folder: str = "uploads") -> str:
-    return upload_bytes_to_s3(file.file.read(), file.filename, file.content_type, folder)
+    return upload_bytes_to_s3(
+        file.file.read(), file.filename, file.content_type, folder
+    )

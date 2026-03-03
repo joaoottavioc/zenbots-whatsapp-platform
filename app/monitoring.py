@@ -15,7 +15,6 @@ import asyncio
 import json
 import logging
 import os
-import time
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -33,30 +32,30 @@ logger = logging.getLogger(__name__)
 
 PRICING: dict[str, dict[str, float]] = {
     "gpt-4o-mini": {
-        "input": 0.15 / 1_000_000,    # $0.15 per 1M input tokens
-        "output": 0.60 / 1_000_000,   # $0.60 per 1M output tokens
+        "input": 0.15 / 1_000_000,  # $0.15 per 1M input tokens
+        "output": 0.60 / 1_000_000,  # $0.60 per 1M output tokens
     },
     "gpt-4o": {
-        "input": 2.50 / 1_000_000,    # $2.50 per 1M input tokens
-        "output": 10.0 / 1_000_000,   # $10.00 per 1M output tokens
+        "input": 2.50 / 1_000_000,  # $2.50 per 1M input tokens
+        "output": 10.0 / 1_000_000,  # $10.00 per 1M output tokens
     },
 }
 
 # Fixed costs per API call
 API_COSTS: dict[str, float] = {
-    "google_maps_geocode": 0.005,      # ~$5 per 1K requests
-    "s3_put": 0.000005,                # $0.005 per 1K PUTs
+    "google_maps_geocode": 0.005,  # ~$5 per 1K requests
+    "s3_put": 0.000005,  # $0.005 per 1K PUTs
     "s3_storage_gb": 0.023 / (1024**3),
-    "whatsapp_message": 0.05,          # ~$0.05 per conversation window
+    "whatsapp_message": 0.05,  # ~$0.05 per conversation window
 }
 
 # ────────────────────────────────────────────────────────────────
 # Buffer configuration
 # ────────────────────────────────────────────────────────────────
 
-_FLUSH_THRESHOLD = 50    # Flush after this many buffered events
-_FLUSH_INTERVAL = 10.0   # Flush every N seconds
-_BUFFER_HARD_CAP = 500   # Drop oldest events beyond this
+_FLUSH_THRESHOLD = 50  # Flush after this many buffered events
+_FLUSH_INTERVAL = 10.0  # Flush every N seconds
+_BUFFER_HARD_CAP = 500  # Drop oldest events beyond this
 
 _event_buffer: list[UsageEvent] = []
 _buffer_lock = asyncio.Lock()
@@ -88,6 +87,7 @@ async def _get_redis_monitor() -> redis.Redis:
 # ────────────────────────────────────────────────────────────────
 # Public API
 # ────────────────────────────────────────────────────────────────
+
 
 async def record_llm_usage(
     bot_id: int | None,
@@ -166,6 +166,7 @@ async def record_api_usage(
 # Buffer management
 # ────────────────────────────────────────────────────────────────
 
+
 async def _buffer_append(event: UsageEvent) -> None:
     """Thread-safe append to the event buffer; flushes when threshold reached."""
     async with _buffer_lock:
@@ -173,7 +174,9 @@ async def _buffer_append(event: UsageEvent) -> None:
         if len(_event_buffer) >= _BUFFER_HARD_CAP:
             dropped = len(_event_buffer) - _BUFFER_HARD_CAP + 1
             del _event_buffer[:dropped]
-            logger.warning("Monitoring buffer overflow: dropped %d oldest events", dropped)
+            logger.warning(
+                "Monitoring buffer overflow: dropped %d oldest events", dropped
+            )
         _event_buffer.append(event)
         should_flush = len(_event_buffer) >= _FLUSH_THRESHOLD
 
@@ -198,6 +201,7 @@ async def flush_buffer(session=None) -> int:
     try:
         if session is None:
             from app.database import async_session
+
             async with async_session() as session:
                 session.add_all(batch)
                 await session.commit()
@@ -220,6 +224,7 @@ async def flush_buffer(session=None) -> int:
 # ────────────────────────────────────────────────────────────────
 # Redis real-time counters
 # ────────────────────────────────────────────────────────────────
+
 
 async def _update_redis_counters(event: UsageEvent) -> None:
     """Update hourly and daily counters in Redis DB 2."""
@@ -300,7 +305,12 @@ async def _check_anomaly(event: UsageEvent, r: redis.Redis) -> None:
         "ratio": round(ratio, 1),
         "hour": hour_key,
     }
-    logger.warning("Cost anomaly detected: bot_id=%s severity=%s ratio=%.1fx", event.bot_id, severity, ratio)
+    logger.warning(
+        "Cost anomaly detected: bot_id=%s severity=%s ratio=%.1fx",
+        event.bot_id,
+        severity,
+        ratio,
+    )
     await r.publish("monitoring_alerts", json.dumps(alert))
 
 
@@ -308,7 +318,10 @@ async def _check_anomaly(event: UsageEvent, r: redis.Redis) -> None:
 # Business & operational metrics (Redis counters)
 # ────────────────────────────────────────────────────────────────
 
-async def record_business_event(event_name: str, bot_id: int | None = None, increment: int = 1) -> None:
+
+async def record_business_event(
+    event_name: str, bot_id: int | None = None, increment: int = 1
+) -> None:
     """
     Increment a Redis counter for a business/operational event.
 
@@ -365,7 +378,9 @@ async def track_sse_connection(delta: int) -> None:
         pass
 
 
-async def record_worker_job(function_name: str, duration_ms: int, success: bool) -> None:
+async def record_worker_job(
+    function_name: str, duration_ms: int, success: bool
+) -> None:
     """Track worker job execution metrics."""
     try:
         r = await _get_redis_monitor()
@@ -391,7 +406,9 @@ async def check_queue_depth() -> dict:
     try:
         r = redis.from_url(
             f"redis://{REDIS_HOST}:{REDIS_PORT}/1",
-            decode_responses=True, socket_timeout=2, socket_connect_timeout=2,
+            decode_responses=True,
+            socket_timeout=2,
+            socket_connect_timeout=2,
         )
         try:
             depth = await r.zcard("arq:queue")
@@ -405,6 +422,7 @@ async def check_queue_depth() -> dict:
 # ────────────────────────────────────────────────────────────────
 # Background flush task
 # ────────────────────────────────────────────────────────────────
+
 
 async def _periodic_flush():
     """Background task that flushes the buffer every _FLUSH_INTERVAL seconds."""
@@ -426,7 +444,9 @@ def start_flush_task() -> None:
     if _flush_task is not None:
         return
     _flush_task = asyncio.create_task(_periodic_flush())
-    logger.info("Monitoring: periodic flush task started (interval=%ss)", _FLUSH_INTERVAL)
+    logger.info(
+        "Monitoring: periodic flush task started (interval=%ss)", _FLUSH_INTERVAL
+    )
 
 
 async def stop_flush_task() -> None:
@@ -457,6 +477,7 @@ def get_buffer_size() -> int:
 # Daily aggregation
 # ────────────────────────────────────────────────────────────────
 
+
 async def aggregate_daily_costs(target_date=None) -> int:
     """
     Aggregate usage_events for a given date into daily_cost_summary.
@@ -464,7 +485,7 @@ async def aggregate_daily_costs(target_date=None) -> int:
     Called by the worker cron job (typically for yesterday).
     Returns the number of rows upserted.
     """
-    from datetime import date as date_type, timedelta
+    from datetime import timedelta
     from sqlalchemy import func, case, and_
     from sqlmodel import select
     from app.models import DailyCostSummary
@@ -473,9 +494,12 @@ async def aggregate_daily_costs(target_date=None) -> int:
         target_date = (datetime.now(timezone.utc) - timedelta(days=1)).date()
 
     from app.database import async_session
+
     async with async_session() as session:
         # 1. Aggregate usage_events for the target date
-        day_start = datetime.combine(target_date, datetime.min.time()).replace(tzinfo=timezone.utc)
+        day_start = datetime.combine(target_date, datetime.min.time()).replace(
+            tzinfo=timezone.utc
+        )
         day_end = day_start + timedelta(days=1)
 
         stmt = (
@@ -486,12 +510,18 @@ async def aggregate_daily_costs(target_date=None) -> int:
                 func.sum(UsageEvent.input_tokens).label("total_input_tokens"),
                 func.sum(UsageEvent.output_tokens).label("total_output_tokens"),
                 func.count().label("total_api_calls"),
-                func.sum(case((UsageEvent.success == False, 1), else_=0)).label("total_failed_calls"),
+                func.sum(case((UsageEvent.success == False, 1), else_=0)).label(
+                    "total_failed_calls"
+                ),
                 func.sum(UsageEvent.duration_ms).label("total_duration_ms"),
                 func.avg(UsageEvent.cost_usd).label("avg_cost_per_call"),
                 func.max(UsageEvent.cost_usd).label("max_cost_single_call"),
             )
-            .where(and_(UsageEvent.created_at >= day_start, UsageEvent.created_at < day_end))
+            .where(
+                and_(
+                    UsageEvent.created_at >= day_start, UsageEvent.created_at < day_end
+                )
+            )
             .group_by(UsageEvent.bot_id, UsageEvent.service)
         )
 
@@ -546,13 +576,10 @@ async def aggregate_daily_costs(target_date=None) -> int:
             for bot_id in bot_ids:
                 # Get last 7 days total cost
                 seven_days_ago = target_date - timedelta(days=7)
-                cost_stmt = (
-                    select(func.sum(DailyCostSummary.total_cost_usd))
-                    .where(
-                        DailyCostSummary.bot_id == bot_id,
-                        DailyCostSummary.date >= seven_days_ago,
-                        DailyCostSummary.date <= target_date,
-                    )
+                cost_stmt = select(func.sum(DailyCostSummary.total_cost_usd)).where(
+                    DailyCostSummary.bot_id == bot_id,
+                    DailyCostSummary.date >= seven_days_ago,
+                    DailyCostSummary.date <= target_date,
                 )
                 cost_result = await session.execute(cost_stmt)
                 total_7d = cost_result.scalar() or 0.0
@@ -565,16 +592,23 @@ async def aggregate_daily_costs(target_date=None) -> int:
         try:
             cutoff = datetime.now(timezone.utc) - timedelta(days=90)
             from sqlalchemy import delete
+
             deleted = await session.execute(
                 delete(UsageEvent).where(UsageEvent.created_at < cutoff)
             )
             await session.commit()
             if deleted.rowcount:
-                logger.info("Purged %d usage events older than 90 days", deleted.rowcount)
+                logger.info(
+                    "Purged %d usage events older than 90 days", deleted.rowcount
+                )
         except Exception as e:
             logger.error("Failed to purge old usage events: %s", e)
 
-        logger.info("Daily cost aggregation complete: %d summaries upserted for %s", upserted, target_date)
+        logger.info(
+            "Daily cost aggregation complete: %d summaries upserted for %s",
+            upserted,
+            target_date,
+        )
         return upserted
 
 

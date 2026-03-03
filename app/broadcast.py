@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 # Usa o banco 0 (mesmo do Rate Limit) ou outro, tanto faz para Pub/Sub
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 
+
 async def broadcast_order_update(type: str, data: dict, bot_id: int = None):
     """
     Envia um sinal para o Redis avisando que algo mudou.
@@ -20,12 +21,10 @@ async def broadcast_order_update(type: str, data: dict, bot_id: int = None):
         # Conexão rápida apenas para publicar
         r = redis.from_url(
             REDIS_URL,
-            socket_timeout=2, socket_connect_timeout=2,
+            socket_timeout=2,
+            socket_connect_timeout=2,
         )
-        message = {
-            "type": type,
-            "payload": data
-        }
+        message = {"type": type, "payload": data}
         channel = f"dashboard_events:{bot_id}" if bot_id else "dashboard_events"
         await r.publish(channel, json.dumps(message))
         logger.info("Broadcast sent: type=%s, channel=%s", type, channel)

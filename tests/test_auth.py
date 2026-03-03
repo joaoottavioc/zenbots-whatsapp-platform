@@ -9,6 +9,7 @@ Covered:
 
 NOT covered here: HTTP endpoints (register, login, etc.)
 """
+
 import pytest
 from datetime import timedelta
 from unittest.mock import patch
@@ -20,7 +21,6 @@ from app.auth import (
     RegisterRequest,
     ResetPasswordRequest,
     ChangePasswordRequest,
-    validate_password_strength,
     create_access_token,
     get_password_hash,
     verify_password,
@@ -39,6 +39,7 @@ VALID_PASSWORD = "StrongPass1!"
 # ===========================================================================
 # RegisterRequest — password_complexity validator
 # ===========================================================================
+
 
 class TestPasswordComplexityValidator:
     """Each test exercises exactly one failing rule so failures are unambiguous."""
@@ -144,6 +145,7 @@ class TestPasswordComplexityValidator:
 # create_access_token and jwt.decode round-trip
 # ===========================================================================
 
+
 class TestCreateAccessToken:
     """Tests the JWT creation function with a deterministic secret."""
 
@@ -164,11 +166,13 @@ class TestCreateAccessToken:
     @patch("app.auth.SECRET_KEY", TEST_SECRET)
     def test_custom_expires_delta_is_respected(self):
         """When a custom timedelta is supplied, the exp claim must reflect it."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         delta = timedelta(minutes=15)
         before = datetime.utcnow()
-        token = create_access_token(data={"sub": "user@example.com"}, expires_delta=delta)
+        token = create_access_token(
+            data={"sub": "user@example.com"}, expires_delta=delta
+        )
         after = datetime.utcnow()
 
         payload = jwt.decode(token, TEST_SECRET, algorithms=[ALGORITHM])
@@ -214,6 +218,7 @@ class TestCreateAccessToken:
 # ===========================================================================
 # verify_password / get_password_hash
 # ===========================================================================
+
 
 class TestPasswordHashing:
     """Tests the bcrypt hashing and verification utilities."""

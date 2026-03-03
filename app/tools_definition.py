@@ -25,8 +25,8 @@ tools_schema = [
                                     "description": "O ID do produto.",
                                 },
                                 "notes": {
-                                    "type": "string", 
-                                    "description": "Observações do cliente para este item. Ex: 'Sem cebola', 'Ponto da carne'."
+                                    "type": "string",
+                                    "description": "Observações do cliente para este item. Ex: 'Sem cebola', 'Ponto da carne'.",
                                 },
                                 "quantity": {
                                     "type": "integer",
@@ -168,7 +168,7 @@ tools_schema = [
             },
         },
     },
-        {
+    {
         "type": "function",
         "function": {
             "name": "search_catalog_for_suggestions",
@@ -178,12 +178,12 @@ tools_schema = [
                 "properties": {
                     "search_concept": {
                         "type": "string",
-                        "description": "O conceito principal e limpo da busca. Ex: 'sobremesa', 'peixe', 'vinho', 'pato', 'massa com frutos do mar'."
+                        "description": "O conceito principal e limpo da busca. Ex: 'sobremesa', 'peixe', 'vinho', 'pato', 'massa com frutos do mar'.",
                     }
                 },
-                "required": ["search_concept"]
-            }
-        }
+                "required": ["search_concept"],
+            },
+        },
     },
     {
         "type": "function",
@@ -193,18 +193,24 @@ tools_schema = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "product_id": {"type": "integer", "description": "ID do produto para adicionar a nota"},
-                    "notes": {"type": "string", "description": "A nova observação completa. Ex: 'Sem maionese'"}
+                    "product_id": {
+                        "type": "integer",
+                        "description": "ID do produto para adicionar a nota",
+                    },
+                    "notes": {
+                        "type": "string",
+                        "description": "A nova observação completa. Ex: 'Sem maionese'",
+                    },
                 },
-                "required": ["product_id", "notes"]
-            }
-        }
+                "required": ["product_id", "notes"],
+            },
+        },
     },
 ]
 
 # Ferramenta específica para a IA de Visão (Extração de Cardápio)
 tools_extraction = [
-   {
+    {
         "type": "function",
         "function": {
             "name": "save_extracted_products",
@@ -223,16 +229,20 @@ tools_extraction = [
                                 # ▼▼▼ NOVO CAMPO PARA A IA PREENCHER ▼▼▼
                                 "category": {
                                     "type": "string",
-                                    "description": "Categoria curta e lógica do item. Ex: 'Bebidas', 'Lanches', 'Pizzas', 'Sobremesas', 'Porções'."
-                                }
+                                    "description": "Categoria curta e lógica do item. Ex: 'Bebidas', 'Lanches', 'Pizzas', 'Sobremesas', 'Porções'.",
+                                },
                                 # ▲▲▲ FIM DA ADIÇÃO ▲▲▲
                             },
-                            "required": ["name", "price", "category"] # Tornamos obrigatório
-                        }
+                            "required": [
+                                "name",
+                                "price",
+                                "category",
+                            ],  # Tornamos obrigatório
+                        },
                     }
                 },
-                "required": ["products"]
-            }
-        }
+                "required": ["products"],
+            },
+        },
     }
 ]

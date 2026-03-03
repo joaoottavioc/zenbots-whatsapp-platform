@@ -6,6 +6,7 @@ Covers:
 - POST /auth/sse-ticket endpoint
 - GET /stream ticket integration
 """
+
 import asyncio
 import json
 import pytest
@@ -16,6 +17,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 # Redis layer tests
 # ===================================================================
 
+
 @pytest.mark.asyncio
 async def test_create_stores_ticket_in_redis():
     """create_sse_ticket stores ticket in Redis with correct key, value, and TTL."""
@@ -23,6 +25,7 @@ async def test_create_stores_ticket_in_redis():
 
     with patch("app.rate_limiter._get_client", return_value=mock_redis):
         from app.rate_limiter import create_sse_ticket
+
         ticket = await create_sse_ticket(user_id=42)
 
     assert isinstance(ticket, str)
@@ -54,6 +57,7 @@ async def test_consume_returns_user_id():
 
     with patch("app.rate_limiter._get_client", return_value=mock_redis):
         from app.rate_limiter import create_sse_ticket, consume_sse_ticket
+
         ticket = await create_sse_ticket(user_id=7)
         user_id = await consume_sse_ticket(ticket)
 
@@ -68,6 +72,7 @@ async def test_consume_invalid_ticket_returns_none():
 
     with patch("app.rate_limiter._get_client", return_value=mock_redis):
         from app.rate_limiter import consume_sse_ticket
+
         result = await consume_sse_ticket("nonexistent-ticket")
 
     assert result is None
@@ -80,6 +85,7 @@ async def test_consume_empty_ticket_returns_none():
 
     with patch("app.rate_limiter._get_client", return_value=mock_redis):
         from app.rate_limiter import consume_sse_ticket
+
         result = await consume_sse_ticket("")
 
     assert result is None
@@ -94,6 +100,7 @@ async def test_consume_corrupted_json_returns_none():
 
     with patch("app.rate_limiter._get_client", return_value=mock_redis):
         from app.rate_limiter import consume_sse_ticket
+
         result = await consume_sse_ticket("some-ticket")
 
     assert result is None
@@ -105,6 +112,7 @@ async def test_consume_corrupted_json_returns_none():
 
 try:
     from app.main import app as _app
+
     _HAS_FULL_APP = True
 except ImportError:
     _HAS_FULL_APP = False
@@ -136,7 +144,9 @@ async def test_sse_ticket_endpoint_returns_ticket():
     try:
         with patch("app.auth.create_sse_ticket", return_value="fake-ticket-abc"):
             transport = ASGITransport(app=_app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
                 response = await client.post(
                     "/auth/sse-ticket",
                     headers={"Authorization": "Bearer fake-jwt"},
@@ -154,12 +164,12 @@ async def test_sse_ticket_endpoint_returns_ticket():
 # GET /stream ticket integration tests
 # ===================================================================
 
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(not _HAS_FULL_APP, reason="Full app dependencies not installed")
 async def test_stream_with_valid_ticket():
     """GET /stream?ticket=valid returns 200 SSE stream."""
     from httpx import AsyncClient, ASGITransport
-    import redis.asyncio as aioredis
 
     fake_user = MagicMock(id=1)
     fake_bot = MagicMock(id=10)
@@ -175,10 +185,12 @@ async def test_stream_with_valid_ticket():
     mock_redis_conn.pubsub.return_value = mock_pubsub
     mock_redis_conn.aclose = AsyncMock()
 
-    with patch("app.main.consume_sse_ticket", return_value=1) as mock_consume, \
-         patch("app.main.crud.get_user_by_id", return_value=fake_user), \
-         patch("app.main.crud.list_user_bots", return_value=[fake_bot]), \
-         patch("app.main.redis.from_url", return_value=mock_redis_conn):
+    with (
+        patch("app.main.consume_sse_ticket", return_value=1) as mock_consume,
+        patch("app.main.crud.get_user_by_id", return_value=fake_user),
+        patch("app.main.crud.list_user_bots", return_value=[fake_bot]),
+        patch("app.main.redis.from_url", return_value=mock_redis_conn),
+    ):
         transport = ASGITransport(app=_app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/stream?ticket=valid-ticket")
@@ -233,11 +245,13 @@ async def test_stream_ticket_takes_priority_over_token():
     mock_redis_conn.pubsub.return_value = mock_pubsub
     mock_redis_conn.aclose = AsyncMock()
 
-    with patch("app.main.consume_sse_ticket", return_value=1) as mock_consume, \
-         patch("app.main.crud.get_user_by_id", return_value=fake_user), \
-         patch("app.main.crud.list_user_bots", return_value=[fake_bot]), \
-         patch("app.main.get_user_from_token") as mock_jwt, \
-         patch("app.main.redis.from_url", return_value=mock_redis_conn):
+    with (
+        patch("app.main.consume_sse_ticket", return_value=1) as mock_consume,
+        patch("app.main.crud.get_user_by_id", return_value=fake_user),
+        patch("app.main.crud.list_user_bots", return_value=[fake_bot]),
+        patch("app.main.get_user_from_token") as mock_jwt,
+        patch("app.main.redis.from_url", return_value=mock_redis_conn),
+    ):
         transport = ASGITransport(app=_app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/stream?ticket=valid-ticket&token=some-jwt")
@@ -265,9 +279,11 @@ async def test_stream_with_authorization_header():
     mock_redis_conn.pubsub.return_value = mock_pubsub
     mock_redis_conn.aclose = AsyncMock()
 
-    with patch("app.main.get_user_from_token", return_value=fake_user) as mock_jwt, \
-         patch("app.main.crud.list_user_bots", return_value=[fake_bot]), \
-         patch("app.main.redis.from_url", return_value=mock_redis_conn):
+    with (
+        patch("app.main.get_user_from_token", return_value=fake_user) as mock_jwt,
+        patch("app.main.crud.list_user_bots", return_value=[fake_bot]),
+        patch("app.main.redis.from_url", return_value=mock_redis_conn),
+    ):
         transport = ASGITransport(app=_app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get(

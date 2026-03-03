@@ -12,8 +12,8 @@ Covered:
 - delete_order            (deletes existing / missing order)
 - is_message_processed    (found / not found)
 """
-import pytest
-from unittest.mock import AsyncMock, MagicMock, call, patch
+
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.crud import (
     get_or_create_contact,
@@ -32,6 +32,7 @@ from app.schemas import BotUpdate
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_session() -> AsyncMock:
     """
@@ -57,7 +58,9 @@ def _make_session() -> AsyncMock:
     return session
 
 
-def _make_contact(contact_id: int = 10, phone: str = "5511888888888", bot_id: int = 1) -> MagicMock:
+def _make_contact(
+    contact_id: int = 10, phone: str = "5511888888888", bot_id: int = 1
+) -> MagicMock:
     contact = MagicMock()
     contact.id = contact_id
     contact.phone_number = phone
@@ -105,8 +108,8 @@ def _make_processed_message(message_id: str = "wamid.test123") -> MagicMock:
 # TestGetOrCreateContact
 # ===========================================================================
 
-class TestGetOrCreateContact:
 
+class TestGetOrCreateContact:
     async def test_returns_existing_contact(self):
         """When execute finds a contact, it is returned as-is without adding a new row."""
         session = _make_session()
@@ -115,7 +118,9 @@ class TestGetOrCreateContact:
         # Make scalar_one_or_none return the existing contact.
         session.execute.return_value.scalar_one_or_none.return_value = existing
 
-        result = await get_or_create_contact(session, bot_id=1, contact_number="5511888888888")
+        result = await get_or_create_contact(
+            session, bot_id=1, contact_number="5511888888888"
+        )
 
         assert result is existing
         session.add.assert_not_called()
@@ -129,7 +134,9 @@ class TestGetOrCreateContact:
         session.execute.return_value.scalar_one_or_none.return_value = existing
 
         # Pass a raw number with country prefix — normalization should strip it
-        result = await get_or_create_contact(session, bot_id=1, contact_number="5511888888888")
+        result = await get_or_create_contact(
+            session, bot_id=1, contact_number="5511888888888"
+        )
 
         # The query should have used the normalized phone number
         assert result is existing
@@ -143,7 +150,9 @@ class TestGetOrCreateContact:
         # scalar_one_or_none returns None  → contact must be created.
         session.execute.return_value.scalar_one_or_none.return_value = None
 
-        result = await get_or_create_contact(session, bot_id=1, contact_number="5511777777777")
+        result = await get_or_create_contact(
+            session, bot_id=1, contact_number="5511777777777"
+        )
 
         # session.add must have been called once with a Contact-like object.
         session.add.assert_called_once()
@@ -163,8 +172,8 @@ class TestGetOrCreateContact:
 # TestClearDbCart
 # ===========================================================================
 
-class TestClearDbCart:
 
+class TestClearDbCart:
     async def test_clears_items_and_resets_state(self):
         """All cart items are deleted and cart fields are reset to defaults."""
         session = _make_session()
@@ -215,15 +224,17 @@ class TestClearDbCart:
 # TestSaveAddressToCart
 # ===========================================================================
 
-class TestSaveAddressToCart:
 
+class TestSaveAddressToCart:
     async def test_saves_address(self):
         """customer_address is set on the cart, add and flush are called."""
         session = _make_session()
         cart = _make_cart(cart_id=100)
         session.get.return_value = cart
 
-        result = await save_address_to_cart(session, cart_id=100, address="Rua das Flores, 123")
+        result = await save_address_to_cart(
+            session, cart_id=100, address="Rua das Flores, 123"
+        )
 
         assert result is cart
         assert cart.customer_address == "Rua das Flores, 123"
@@ -246,15 +257,17 @@ class TestSaveAddressToCart:
 # TestSaveCustomerNameToContact
 # ===========================================================================
 
-class TestSaveCustomerNameToContact:
 
+class TestSaveCustomerNameToContact:
     async def test_saves_name(self):
         """contact.name is updated, add / flush / refresh are called."""
         session = _make_session()
         contact = _make_contact(contact_id=10)
         session.get.return_value = contact
 
-        result = await save_customer_name_to_contact(session, contact_id=10, name="Maria")
+        result = await save_customer_name_to_contact(
+            session, contact_id=10, name="Maria"
+        )
 
         assert result is contact
         assert contact.name == "Maria"
@@ -267,7 +280,9 @@ class TestSaveCustomerNameToContact:
         session = _make_session()
         session.get.return_value = None
 
-        result = await save_customer_name_to_contact(session, contact_id=999, name="Ghost")
+        result = await save_customer_name_to_contact(
+            session, contact_id=999, name="Ghost"
+        )
 
         assert result is None
         session.add.assert_not_called()
@@ -279,8 +294,8 @@ class TestSaveCustomerNameToContact:
 # TestDeleteOrder
 # ===========================================================================
 
-class TestDeleteOrder:
 
+class TestDeleteOrder:
     async def test_deletes_existing_order(self):
         """session.delete is called with the order and True is returned."""
         session = _make_session()
@@ -309,8 +324,8 @@ class TestDeleteOrder:
 # TestIsMessageProcessed
 # ===========================================================================
 
-class TestIsMessageProcessed:
 
+class TestIsMessageProcessed:
     async def test_returns_true_when_exists(self):
         """When a ProcessedMessage row is found, the function returns True."""
         session = _make_session()
@@ -337,14 +352,16 @@ class TestIsMessageProcessed:
 # TestUpsertSubscription
 # ===========================================================================
 
-class TestUpsertSubscription:
 
+class TestUpsertSubscription:
     async def test_creates_subscription_when_none_exists(self):
         """When no subscription exists for the bot, a new one is created."""
         session = _make_session()
 
-        with patch("app.crud.get_subscription_by_bot", new=AsyncMock(return_value=None)):
-            result = await upsert_subscription(
+        with patch(
+            "app.crud.get_subscription_by_bot", new=AsyncMock(return_value=None)
+        ):
+            await upsert_subscription(
                 session, user_id=1, bot_id=2, mp_id="mp_abc123", status="authorized"
             )
 
@@ -364,8 +381,10 @@ class TestUpsertSubscription:
         existing_sub.mp_subscription_id = "old_mp_id"
         existing_sub.status = "pending"
 
-        with patch("app.crud.get_subscription_by_bot", new=AsyncMock(return_value=existing_sub)):
-            result = await upsert_subscription(
+        with patch(
+            "app.crud.get_subscription_by_bot", new=AsyncMock(return_value=existing_sub)
+        ):
+            await upsert_subscription(
                 session, user_id=1, bot_id=2, mp_id="new_mp_id", status="authorized"
             )
 
@@ -382,8 +401,8 @@ class TestUpsertSubscription:
 # TestBotUpdateMinOrderValue
 # ===========================================================================
 
-class TestBotUpdateMinOrderValue:
 
+class TestBotUpdateMinOrderValue:
     def test_min_order_value_not_in_dump_when_unset(self):
         """BotUpdate without min_order_value → model_dump(exclude_unset=True) excludes it."""
         update = BotUpdate(restaurant_name="New Name")
@@ -402,18 +421,19 @@ class TestBotUpdateMinOrderValue:
 # TestFindRelevantProducts
 # ===========================================================================
 
-class TestFindRelevantProducts:
 
+class TestFindRelevantProducts:
     async def test_find_relevant_products_excludes_unavailable(self):
         """Verify that all 4 queries include is_available filtering by inspecting compiled SQL."""
         session = _make_session()
 
         # Capture all SQL statements passed to session.execute
         captured_stmts = []
-        original_execute = session.execute
 
         async def capture_execute(stmt, *args, **kwargs):
-            captured_stmts.append(str(stmt.compile(compile_kwargs={"literal_binds": True})))
+            captured_stmts.append(
+                str(stmt.compile(compile_kwargs={"literal_binds": True}))
+            )
             # Return empty result set
             result = MagicMock()
             result.scalars.return_value.all.return_value = []
@@ -425,10 +445,12 @@ class TestFindRelevantProducts:
             await find_relevant_products(session, bot_id=1, extracted_items=["pizza"])
 
         # All 4 queries must contain is_available filter
-        assert len(captured_stmts) == 4, f"Expected 4 queries, got {len(captured_stmts)}"
+        assert len(captured_stmts) == 4, (
+            f"Expected 4 queries, got {len(captured_stmts)}"
+        )
         for i, stmt_str in enumerate(captured_stmts):
             assert "is_available" in stmt_str, (
-                f"Query {i+1} missing is_available filter: {stmt_str}"
+                f"Query {i + 1} missing is_available filter: {stmt_str}"
             )
 
     async def test_find_relevant_products_empty_items_returns_empty(self):
@@ -443,9 +465,11 @@ class TestFindRelevantProducts:
 # TestAddItemsBotIdValidation
 # ===========================================================================
 
-class TestAddItemsBotIdValidation:
 
-    def _make_product(self, product_id: int, bot_id: int = 1, is_available: bool = True):
+class TestAddItemsBotIdValidation:
+    def _make_product(
+        self, product_id: int, bot_id: int = 1, is_available: bool = True
+    ):
         p = MagicMock()
         p.id = product_id
         p.bot_id = bot_id
@@ -467,8 +491,9 @@ class TestAddItemsBotIdValidation:
         # session.get returns cart for first call, product for second
         session.get = AsyncMock(side_effect=[cart, product])
 
-        result = await add_items_to_db_cart(
-            session, cart_id=100,
+        await add_items_to_db_cart(
+            session,
+            cart_id=100,
             items_to_add=[{"product_id": 10, "quantity": 1}],
             bot_id=1,  # product belongs to bot 2, we expect bot 1
         )
@@ -485,8 +510,9 @@ class TestAddItemsBotIdValidation:
 
         session.get = AsyncMock(side_effect=[cart, product])
 
-        result = await add_items_to_db_cart(
-            session, cart_id=100,
+        await add_items_to_db_cart(
+            session,
+            cart_id=100,
             items_to_add=[{"product_id": 10, "quantity": 1}],
             # bot_id not passed → None → skip bot_id check
         )
@@ -503,8 +529,9 @@ class TestAddItemsBotIdValidation:
 
         session.get = AsyncMock(side_effect=[cart, product])
 
-        result = await add_items_to_db_cart(
-            session, cart_id=100,
+        await add_items_to_db_cart(
+            session,
+            cart_id=100,
             items_to_add=[{"product_id": 10, "quantity": 1}],
             bot_id=1,
         )

@@ -1,4 +1,5 @@
 """Tests for MP token refresh logic (V8)."""
+
 import pytest
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -89,6 +90,7 @@ async def test_refresh_mp_token_http_error(mock_config, mock_session):
 async def test_get_valid_access_token_not_expired(mock_config, mock_session):
     """Should return existing token when not expired."""
     from app.time import utcnow
+
     mock_config.token_expires_at = utcnow() + timedelta(hours=1)
 
     result = await get_valid_access_token(mock_config, mock_session)
@@ -96,12 +98,19 @@ async def test_get_valid_access_token_not_expired(mock_config, mock_session):
 
 
 @pytest.mark.asyncio
-async def test_get_valid_access_token_expired_triggers_refresh(mock_config, mock_session):
+async def test_get_valid_access_token_expired_triggers_refresh(
+    mock_config, mock_session
+):
     """Should call refresh when token is expired."""
     from app.time import utcnow
+
     mock_config.token_expires_at = utcnow() - timedelta(hours=1)
 
-    with patch("app.payment_service.refresh_mp_token", new_callable=AsyncMock, return_value="refreshed-token") as mock_refresh:
+    with patch(
+        "app.payment_service.refresh_mp_token",
+        new_callable=AsyncMock,
+        return_value="refreshed-token",
+    ) as mock_refresh:
         result = await get_valid_access_token(mock_config, mock_session)
 
     assert result == "refreshed-token"

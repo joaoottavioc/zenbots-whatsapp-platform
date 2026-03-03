@@ -1,7 +1,7 @@
 """Tests for Step 0.5 — verify formerly-silent error paths now produce log output."""
 
 import logging
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 

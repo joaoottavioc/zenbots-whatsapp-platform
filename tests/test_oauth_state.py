@@ -2,7 +2,7 @@
 """
 Tests for OAuth CSRF state token management and payment route integration.
 """
-import json
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 # ===========================================================================
 # store_oauth_state + consume_oauth_state
 # ===========================================================================
+
 
 @pytest.fixture()
 def mock_redis_for_state():
@@ -70,6 +71,7 @@ async def test_consume_empty_token_returns_none(mock_redis_for_state):
 # Auth URL includes state
 # ===========================================================================
 
+
 async def test_auth_url_includes_state():
     """GET /auth-url must include &state= in the returned URL."""
     from app.payment_routes import get_auth_url
@@ -82,9 +84,17 @@ async def test_auth_url_includes_state():
 
     mock_session = AsyncMock()
 
-    with patch("app.payment_routes.crud.get_bot_by_id", new=AsyncMock(return_value=mock_bot)), \
-         patch("app.payment_routes.store_oauth_state", new=AsyncMock(return_value="test-state-token")), \
-         patch("app.payment_routes.MP_CLIENT_ID", "test_client_id"):
+    with (
+        patch(
+            "app.payment_routes.crud.get_bot_by_id",
+            new=AsyncMock(return_value=mock_bot),
+        ),
+        patch(
+            "app.payment_routes.store_oauth_state",
+            new=AsyncMock(return_value="test-state-token"),
+        ),
+        patch("app.payment_routes.MP_CLIENT_ID", "test_client_id"),
+    ):
         result = await get_auth_url(
             bot_id=1, current_user=mock_user, session=mock_session
         )
@@ -95,6 +105,7 @@ async def test_auth_url_includes_state():
 # ===========================================================================
 # Callback rejects missing/invalid state
 # ===========================================================================
+
 
 async def test_callback_rejects_missing_state():
     """POST /callback with no state token must return 400."""
@@ -124,7 +135,9 @@ async def test_callback_rejects_invalid_state():
     mock_user.id = 1
     mock_session = AsyncMock()
 
-    with patch("app.payment_routes.consume_oauth_state", new=AsyncMock(return_value=None)):
+    with patch(
+        "app.payment_routes.consume_oauth_state", new=AsyncMock(return_value=None)
+    ):
         with pytest.raises(HTTPException) as exc_info:
             await exchange_token(
                 body={"code": "test-code", "state": "invalid-token"},

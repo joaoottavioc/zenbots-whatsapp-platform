@@ -1,4 +1,5 @@
 """Tests for pending_action timezone handling."""
+
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
@@ -35,7 +36,9 @@ class TestHasValidPending:
         cart = MagicMock()
         cart.pending_action_tool = "add_items_to_cart"
         # Expiry is in the future, UTC-aware
-        cart.pending_action_expires_at = datetime(2026, 1, 1, 12, 5, 0, tzinfo=timezone.utc)
+        cart.pending_action_expires_at = datetime(
+            2026, 1, 1, 12, 5, 0, tzinfo=timezone.utc
+        )
         assert has_valid_pending(cart) is True
 
     @patch("app.pending_action.utcnow")
@@ -63,7 +66,9 @@ class TestExpireIfNeeded:
         mock_utcnow.return_value = datetime(2026, 1, 1, 12, 0, 0)
         cart = MagicMock()
         cart.pending_action_tool = "test"
-        cart.pending_action_expires_at = datetime(2026, 1, 1, 11, 0, 0, tzinfo=timezone.utc)
+        cart.pending_action_expires_at = datetime(
+            2026, 1, 1, 11, 0, 0, tzinfo=timezone.utc
+        )
         expire_if_needed(cart)
         assert cart.pending_action_tool is None
 
@@ -72,7 +77,9 @@ class TestExpireIfNeeded:
         mock_utcnow.return_value = datetime(2026, 1, 1, 12, 0, 0)
         cart = MagicMock()
         cart.pending_action_tool = "test"
-        cart.pending_action_expires_at = datetime(2026, 1, 1, 13, 0, 0, tzinfo=timezone.utc)
+        cart.pending_action_expires_at = datetime(
+            2026, 1, 1, 13, 0, 0, tzinfo=timezone.utc
+        )
         expire_if_needed(cart)
         # Should NOT have been cleared
         assert cart.pending_action_tool == "test"

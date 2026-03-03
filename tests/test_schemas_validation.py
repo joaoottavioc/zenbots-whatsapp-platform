@@ -1,4 +1,5 @@
 """Tests for schema validation: price, fee, and max-length constraints."""
+
 import pytest
 from pydantic import ValidationError
 
@@ -8,6 +9,7 @@ from app.schemas import ProductBase, ProductUpdate, BotCreate, BotUpdate
 # ---------------------------------------------------------------------------
 # V1: Price and fee validation
 # ---------------------------------------------------------------------------
+
 
 class TestProductPriceValidation:
     def test_positive_price_accepted(self):
@@ -42,34 +44,44 @@ class TestProductPriceValidation:
 class TestBotFeeValidation:
     def test_zero_delivery_fee_accepted(self):
         b = BotCreate(
-            restaurant_name="Test", whatsapp_number="123",
-            delivery_fee=0.0, min_order_value=0.0,
-            whatsapp_token="tok", phone_number_id="pid",
+            restaurant_name="Test",
+            whatsapp_number="123",
+            delivery_fee=0.0,
+            min_order_value=0.0,
+            whatsapp_token="tok",
+            phone_number_id="pid",
         )
         assert b.delivery_fee == 0.0
 
     def test_positive_delivery_fee_accepted(self):
         b = BotCreate(
-            restaurant_name="Test", whatsapp_number="123",
-            delivery_fee=5.0, min_order_value=10.0,
-            whatsapp_token="tok", phone_number_id="pid",
+            restaurant_name="Test",
+            whatsapp_number="123",
+            delivery_fee=5.0,
+            min_order_value=10.0,
+            whatsapp_token="tok",
+            phone_number_id="pid",
         )
         assert b.delivery_fee == 5.0
 
     def test_negative_delivery_fee_rejected(self):
         with pytest.raises(ValidationError):
             BotCreate(
-                restaurant_name="Test", whatsapp_number="123",
+                restaurant_name="Test",
+                whatsapp_number="123",
                 delivery_fee=-1.0,
-                whatsapp_token="tok", phone_number_id="pid",
+                whatsapp_token="tok",
+                phone_number_id="pid",
             )
 
     def test_negative_min_order_value_rejected(self):
         with pytest.raises(ValidationError):
             BotCreate(
-                restaurant_name="Test", whatsapp_number="123",
+                restaurant_name="Test",
+                whatsapp_number="123",
                 min_order_value=-1.0,
-                whatsapp_token="tok", phone_number_id="pid",
+                whatsapp_token="tok",
+                phone_number_id="pid",
             )
 
     def test_update_negative_fee_rejected(self):
@@ -89,11 +101,14 @@ class TestBotFeeValidation:
 # V3: Timezone validation
 # ---------------------------------------------------------------------------
 
+
 class TestTimezoneValidation:
     def test_valid_timezone_accepted_on_create(self):
         b = BotCreate(
-            restaurant_name="Test", whatsapp_number="123",
-            whatsapp_token="tok", phone_number_id="pid",
+            restaurant_name="Test",
+            whatsapp_number="123",
+            whatsapp_token="tok",
+            phone_number_id="pid",
             timezone="America/Sao_Paulo",
         )
         assert b.timezone == "America/Sao_Paulo"
@@ -101,15 +116,19 @@ class TestTimezoneValidation:
     def test_invalid_timezone_rejected_on_create(self):
         with pytest.raises(ValidationError):
             BotCreate(
-                restaurant_name="Test", whatsapp_number="123",
-                whatsapp_token="tok", phone_number_id="pid",
+                restaurant_name="Test",
+                whatsapp_number="123",
+                whatsapp_token="tok",
+                phone_number_id="pid",
                 timezone="Invalid/Zone",
             )
 
     def test_default_timezone_on_create(self):
         b = BotCreate(
-            restaurant_name="Test", whatsapp_number="123",
-            whatsapp_token="tok", phone_number_id="pid",
+            restaurant_name="Test",
+            whatsapp_number="123",
+            whatsapp_token="tok",
+            phone_number_id="pid",
         )
         assert b.timezone == "America/Sao_Paulo"
 
@@ -134,6 +153,7 @@ class TestTimezoneValidation:
 # V2: Max-length validation (added in Step 5, tests here for cohesion)
 # ---------------------------------------------------------------------------
 
+
 class TestMaxLengthValidation:
     def test_product_name_too_long_rejected(self):
         with pytest.raises(ValidationError):
@@ -145,7 +165,9 @@ class TestMaxLengthValidation:
 
     def test_product_description_too_long_rejected(self):
         with pytest.raises(ValidationError):
-            ProductBase(name="Pizza", price=10.0, category="Food", description="x" * 501)
+            ProductBase(
+                name="Pizza", price=10.0, category="Food", description="x" * 501
+            )
 
     def test_product_category_too_long_rejected(self):
         with pytest.raises(ValidationError):
@@ -154,8 +176,10 @@ class TestMaxLengthValidation:
     def test_bot_restaurant_name_too_long_rejected(self):
         with pytest.raises(ValidationError):
             BotCreate(
-                restaurant_name="x" * 151, whatsapp_number="123",
-                whatsapp_token="tok", phone_number_id="pid",
+                restaurant_name="x" * 151,
+                whatsapp_number="123",
+                whatsapp_token="tok",
+                phone_number_id="pid",
             )
 
     def test_bot_update_restaurant_name_too_long_rejected(self):

@@ -3,6 +3,7 @@ import os
 from contextlib import asynccontextmanager
 
 from app.logging_config import setup_logging
+
 setup_logging()
 
 from fastapi import FastAPI, Query, Request
@@ -15,7 +16,7 @@ from app.payment_routes import router as payment_router
 from app import utils
 
 # Importações dos seus módulos locais
-from app.database import create_db_and_tables, get_session, engine
+from app.database import create_db_and_tables, engine
 from app import whatsapp, auth, bot_routes, takeover_routes
 from app.auth import get_user_from_token
 from app import crud
@@ -91,10 +92,11 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down — draining connections")
     await stop_flush_task()
     logger.info("Fechando conexao com Redis Queue...")
-    if hasattr(app.state, 'arq_redis'):
+    if hasattr(app.state, "arq_redis"):
         await app.state.arq_redis.close()
     await engine.dispose()
     logger.info("Aplicacao encerrada.")
+
 
 # Criação única da aplicação com o ciclo de vida configurado
 app = FastAPI(lifespan=lifespan)
@@ -115,7 +117,9 @@ def build_cors_kwargs() -> dict:
     )
 
     if origins_raw:
-        kwargs["allow_origins"] = [o.strip() for o in origins_raw.split(",") if o.strip()]
+        kwargs["allow_origins"] = [
+            o.strip() for o in origins_raw.split(",") if o.strip()
+        ]
     elif origin_regex:
         kwargs["allow_origin_regex"] = origin_regex
     elif environment == "development":
@@ -146,10 +150,12 @@ app.include_router(utils.router)
 app.include_router(health_routes.router)
 app.include_router(monitoring_routes.router)
 
+
 # Rota de verificação de saúde (Health Check)
 @app.get("/")
 async def root():
     return {"status": "ZenBots API Online 🚀", "queue": "Active"}
+
 
 @app.get("/stream")
 async def stream_events(
@@ -173,11 +179,15 @@ async def stream_events(
         # Ticket-based auth: atomic consume from Redis (one-time use)
         user_id = await consume_sse_ticket(ticket)
         if not user_id:
-            return JSONResponse(content={"detail": "Invalid or expired ticket"}, status_code=401)
+            return JSONResponse(
+                content={"detail": "Invalid or expired ticket"}, status_code=401
+            )
         async with async_session() as session:
             user = await crud.get_user_by_id(session, user_id)
             if not user:
-                return JSONResponse(content={"detail": "User not found"}, status_code=401)
+                return JSONResponse(
+                    content={"detail": "User not found"}, status_code=401
+                )
     else:
         # Extract JWT from Authorization header or token query param
         bearer_token = None
@@ -190,9 +200,13 @@ async def stream_events(
             async with async_session() as session:
                 user = await get_user_from_token(jwt_token, session)
                 if not user:
-                    return JSONResponse(content={"detail": "Invalid or expired token"}, status_code=401)
+                    return JSONResponse(
+                        content={"detail": "Invalid or expired token"}, status_code=401
+                    )
         else:
-            return JSONResponse(content={"detail": "Authentication required"}, status_code=401)
+            return JSONResponse(
+                content={"detail": "Authentication required"}, status_code=401
+            )
 
     async with async_session() as session:
         bots = await crud.list_user_bots(session, user.id)
@@ -206,8 +220,11 @@ async def stream_events(
         local_redis_url = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
 
         r = redis.from_url(
-            local_redis_url, encoding="utf-8", decode_responses=True,
-            socket_timeout=2, socket_connect_timeout=2,
+            local_redis_url,
+            encoding="utf-8",
+            decode_responses=True,
+            socket_timeout=2,
+            socket_connect_timeout=2,
         )
         pubsub = r.pubsub()
 
@@ -227,17 +244,21 @@ async def stream_events(
                     break
 
                 # 3. Aguarda mensagem do Redis (Timeout curto p/ manter o loop rodando)
-                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                message = await pubsub.get_message(
+                    ignore_subscribe_messages=True, timeout=1.0
+                )
 
                 if message:
-                    raw_data = message['data']
+                    raw_data = message["data"]
                     # broadcast.py now publishes valid JSON, so parse directly
                     try:
                         json.loads(raw_data)  # validate
                         final_payload = raw_data
                     except json.JSONDecodeError:
                         logger.warning("Invalid JSON received from Redis PubSub")
-                        final_payload = json.dumps({"type": "error", "message": "Dados inválidos do Redis"})
+                        final_payload = json.dumps(
+                            {"type": "error", "message": "Dados inválidos do Redis"}
+                        )
 
                     logger.info("Sending SSE event to client")
                     yield f"data: {final_payload}\n\n"
@@ -265,6 +286,6 @@ async def stream_events(
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no", # Essencial para Nginx
-        }
+            "X-Accel-Buffering": "no",  # Essencial para Nginx
+        },
     )

@@ -1,5 +1,5 @@
 """Tests for authentication failure logging (V7)."""
-import logging
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -30,9 +30,14 @@ def mock_session():
 @pytest.mark.asyncio
 async def test_failed_login_logs_warning(mock_request, mock_form_data, mock_session):
     """Failed login should log AUTH_FAIL with email and IP."""
-    with patch("app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=None), \
-         patch("app.auth.logger") as mock_logger:
+    with (
+        patch(
+            "app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=None
+        ),
+        patch("app.auth.logger") as mock_logger,
+    ):
         from fastapi import HTTPException
+
         with pytest.raises(HTTPException) as exc_info:
             await login_for_access_token(
                 request=mock_request,
@@ -48,14 +53,23 @@ async def test_failed_login_logs_warning(mock_request, mock_form_data, mock_sess
 
 
 @pytest.mark.asyncio
-async def test_failed_login_wrong_password_logs_warning(mock_request, mock_form_data, mock_session):
+async def test_failed_login_wrong_password_logs_warning(
+    mock_request, mock_form_data, mock_session
+):
     """Wrong password should also log AUTH_FAIL."""
     fake_user = MagicMock()
     fake_user.hashed_password = "some_hash"
-    with patch("app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=fake_user), \
-         patch("app.auth.verify_password", return_value=False), \
-         patch("app.auth.logger") as mock_logger:
+    with (
+        patch(
+            "app.auth.crud.get_user_by_email",
+            new_callable=AsyncMock,
+            return_value=fake_user,
+        ),
+        patch("app.auth.verify_password", return_value=False),
+        patch("app.auth.logger") as mock_logger,
+    ):
         from fastapi import HTTPException
+
         with pytest.raises(HTTPException):
             await login_for_access_token(
                 request=mock_request,
@@ -76,10 +90,16 @@ async def test_successful_login_does_not_log(mock_request, mock_session):
     form.username = "ok@example.com"
     form.password = "Correct1"
 
-    with patch("app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=fake_user), \
-         patch("app.auth.verify_password", return_value=True), \
-         patch("app.auth.create_access_token", return_value="fake-jwt"), \
-         patch("app.auth.logger") as mock_logger:
+    with (
+        patch(
+            "app.auth.crud.get_user_by_email",
+            new_callable=AsyncMock,
+            return_value=fake_user,
+        ),
+        patch("app.auth.verify_password", return_value=True),
+        patch("app.auth.create_access_token", return_value="fake-jwt"),
+        patch("app.auth.logger") as mock_logger,
+    ):
         result = await login_for_access_token(
             request=mock_request,
             form_data=form,

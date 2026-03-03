@@ -32,7 +32,9 @@ def mask_email(email: str) -> str:
         return f"**@{domain}"
     return f"{local[:2]}***@{domain}"
 
+
 router = APIRouter(prefix="/utils", tags=["Utils"])
+
 
 def normalize_phone(number: str) -> str | None:
     """
@@ -51,6 +53,7 @@ def normalize_phone(number: str) -> str | None:
         return None
     return digits
 
+
 def calculate_distance(lat1, lon1, lat2, lon2):
     """
     Calcula a distância entre dois pontos (Haversine).
@@ -60,17 +63,21 @@ def calculate_distance(lat1, lon1, lat2, lon2):
         return 9999.0
     try:
         lat1, lon1, lat2, lon2 = map(float, [lat1, lon1, lat2, lon2])
-        R = 6371 # Raio da Terra em km
+        R = 6371  # Raio da Terra em km
         dlat = math.radians(lat2 - lat1)
         dlon = math.radians(lon2 - lon1)
-        a = (math.sin(dlat / 2) ** 2 +
-             math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
-             math.sin(dlon / 2) ** 2)
+        a = (
+            math.sin(dlat / 2) ** 2
+            + math.cos(math.radians(lat1))
+            * math.cos(math.radians(lat2))
+            * math.sin(dlon / 2) ** 2
+        )
         c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
         return R * c
     except Exception as e:
         logger.error("Distance calculation failed: %s", e)
         return 9999.0
+
 
 async def check_delivery_radius(bot, customer_lat, customer_lon):
     """
@@ -78,36 +85,45 @@ async def check_delivery_radius(bot, customer_lat, customer_lon):
     Retorna (is_within_radius, distance).
     """
     logger.info("Checking delivery radius for bot_id=%s", bot.id)
-    
+
     if not bot.latitude or not bot.longitude:
-        logger.warning("Bot %s has no coordinates configured, blocking delivery", bot.id)
+        logger.warning(
+            "Bot %s has no coordinates configured, blocking delivery", bot.id
+        )
         return False, 0.0
 
     if customer_lat is None or customer_lon is None:
         logger.warning("Customer coordinates missing, blocking delivery")
         return False, 9999.0
 
-    distance = calculate_distance(bot.latitude, bot.longitude, customer_lat, customer_lon)
+    distance = calculate_distance(
+        bot.latitude, bot.longitude, customer_lat, customer_lon
+    )
     max_radius = float(getattr(bot, "max_delivery_radius", 10.0))
-    
+
     is_ok = distance <= max_radius
     if is_ok:
         logger.info("Delivery radius OK: %.2fkm <= %.1fkm limit", distance, max_radius)
     else:
-        logger.warning("Outside delivery radius: %.2fkm > %.1fkm limit", distance, max_radius)
-    
+        logger.warning(
+            "Outside delivery radius: %.2fkm > %.1fkm limit", distance, max_radius
+        )
+
     return is_ok, distance
 
-async def _fetch_coordinates(client, zipcode, street, city, state, brasilapi_location=None):
+
+async def _fetch_coordinates(
+    client, zipcode, street, city, state, brasilapi_location=None
+):
     """
     Motor de geolocalização com hierarquia e Fallback real.
     """
-    
+
     # 1. TENTATIVA: BRASIL API (Objeto location da V2)
     if brasilapi_location and isinstance(brasilapi_location, dict):
-        coords = brasilapi_location.get('coordinates', {})
-        lat = coords.get('latitude')
-        lng = coords.get('longitude')
+        coords = brasilapi_location.get("coordinates", {})
+        lat = coords.get("latitude")
+        lng = coords.get("longitude")
         if lat and lng:
             logger.info("Coordinates resolved via BrasilAPI for cep=%s", zipcode)
             return float(lat), float(lng)
@@ -129,15 +145,39 @@ async def _fetch_coordinates(client, zipcode, street, city, state, brasilapi_loc
                 data = resp.json()
                 if data.get("status") == "OK":
                     loc = data["results"][0]["geometry"]["location"]
-                    logger.info("Coordinates resolved via Google Maps for cep=%s", zipcode)
-                    await record_api_usage(None, "google_maps", "geocode", cost_usd=0.005, duration_ms=elapsed_ms)
-                    return float(loc['lat']), float(loc['lng'])
+                    logger.info(
+                        "Coordinates resolved via Google Maps for cep=%s", zipcode
+                    )
+                    await record_api_usage(
+                        None,
+                        "google_maps",
+                        "geocode",
+                        cost_usd=0.005,
+                        duration_ms=elapsed_ms,
+                    )
+                    return float(loc["lat"]), float(loc["lng"])
                 else:
-                    logger.warning("Google Maps geocoding failed: status=%s", data.get("status"))
-                    await record_api_usage(None, "google_maps", "geocode", cost_usd=0.005, duration_ms=elapsed_ms, success=False)
+                    logger.warning(
+                        "Google Maps geocoding failed: status=%s", data.get("status")
+                    )
+                    await record_api_usage(
+                        None,
+                        "google_maps",
+                        "geocode",
+                        cost_usd=0.005,
+                        duration_ms=elapsed_ms,
+                        success=False,
+                    )
         except Exception as e:
             elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-            await record_api_usage(None, "google_maps", "geocode", cost_usd=0.0, duration_ms=elapsed_ms, success=False)
+            await record_api_usage(
+                None,
+                "google_maps",
+                "geocode",
+                cost_usd=0.0,
+                duration_ms=elapsed_ms,
+                success=False,
+            )
             logger.error("Google Maps geocoding error: %s", e)
     else:
         logger.warning("GOOGLE_MAPS_API_KEY not configured")
@@ -146,28 +186,29 @@ async def _fetch_coordinates(client, zipcode, street, city, state, brasilapi_loc
     try:
         logger.info("Calling Nominatim geocoding for cep=%s", zipcode)
         n_url = "https://nominatim.openstreetmap.org/search"
-        headers = {'User-Agent': 'ZenBots-Marketplace/1.0'}
+        headers = {"User-Agent": "ZenBots-Marketplace/1.0"}
         # Tentamos buscar pela rua e cidade se o CEP falhou
         params = {
             "q": f"{street}, {city}, {state}, Brazil",
             "format": "json",
-            "limit": 1
+            "limit": 1,
         }
         resp = await client.get(n_url, params=params, headers=headers, timeout=5.0)
-        
+
         if resp.status_code == 200 and resp.json():
             data = resp.json()[0]
             logger.info("Coordinates resolved via Nominatim for cep=%s", zipcode)
-            return float(data['lat']), float(data['lon'])
+            return float(data["lat"]), float(data["lon"])
     except Exception as e:
         logger.error("Nominatim geocoding error: %s", e)
 
     logger.error("All geocoding attempts failed for cep=%s", zipcode)
     return None, None
 
+
 async def get_address_from_cep(cep: str):
     """Busca endereço completo e garante a tentativa de lat/lng."""
-    clean_cep = re.sub(r'\D', '', cep)
+    clean_cep = re.sub(r"\D", "", cep)
     if len(clean_cep) != 8:
         logger.warning("CEP invalid format: %s", cep)
         return None
@@ -175,25 +216,33 @@ async def get_address_from_cep(cep: str):
         logger.warning("CEP out of valid range: %s", clean_cep)
         return None
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0)) as client:
+    async with httpx.AsyncClient(
+        timeout=httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0)
+    ) as client:
         try:
             logger.info("Looking up CEP %s", clean_cep)
-            resp = await client.get(f"https://brasilapi.com.br/api/cep/v2/{clean_cep}", timeout=10.0)
-            
+            resp = await client.get(
+                f"https://brasilapi.com.br/api/cep/v2/{clean_cep}", timeout=10.0
+            )
+
             if resp.status_code != 200:
-                logger.warning("BrasilAPI returned status=%d for cep=%s", resp.status_code, clean_cep)
+                logger.warning(
+                    "BrasilAPI returned status=%d for cep=%s",
+                    resp.status_code,
+                    clean_cep,
+                )
                 return None
-            
+
             data = resp.json()
-            
+
             # Agora passamos os dados de rua/cidade para o motor de busca ter mais contexto
             lat, lng = await _fetch_coordinates(
-                client, 
-                clean_cep, 
-                data.get('street', ''), 
-                data.get('city', ''), 
-                data.get('state', ''), 
-                data.get('location')
+                client,
+                clean_cep,
+                data.get("street", ""),
+                data.get("city", ""),
+                data.get("state", ""),
+                data.get("location"),
             )
 
             return {
@@ -203,11 +252,12 @@ async def get_address_from_cep(cep: str):
                 "city": data.get("city"),
                 "state": data.get("state"),
                 "lat": lat,
-                "lng": lng
+                "lng": lng,
             }
         except Exception as e:
             logger.error("get_address_from_cep failed for cep=%s: %s", clean_cep, e)
             return None
+
 
 async def _require_authenticated_user(
     token: str = Depends(_oauth2_scheme),
@@ -215,17 +265,20 @@ async def _require_authenticated_user(
 ):
     """Lazy import wrapper to avoid circular dependency (auth → crud → utils → auth)."""
     from app.auth import get_current_user
+
     return await get_current_user(token=token, session=session)
 
 
 @router.get("/lookup-cep/{cep}")
-async def lookup_cep_endpoint(cep: str, current_user=Depends(_require_authenticated_user)):
+async def lookup_cep_endpoint(
+    cep: str, current_user=Depends(_require_authenticated_user)
+):
     """
     Endpoint público para consultar CEP via Frontend.
     """
     result = await get_address_from_cep(cep)
-    
+
     if not result:
         raise HTTPException(status_code=404, detail="CEP não encontrado ou inválido.")
-        
+
     return result

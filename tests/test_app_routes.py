@@ -2,6 +2,7 @@
 """
 Verify that no (path, method) pair is registered more than once on the FastAPI app.
 """
+
 import sys
 from unittest.mock import MagicMock
 

@@ -8,7 +8,7 @@ Covered:
 - check_delivery_radius  (within radius, outside radius, missing coords)
 - get_address_from_cep   (valid CEP with mocked HTTP, invalid format, API error)
 """
-import re
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -24,6 +24,7 @@ from app.utils import (
 # ===========================================================================
 # TestNormalizePhone
 # ===========================================================================
+
 
 class TestNormalizePhone:
     """normalize_phone returns 10-11 digit Brazilian number or None."""
@@ -81,6 +82,7 @@ class TestNormalizePhone:
 # TestCalculateDistance
 # ===========================================================================
 
+
 class TestCalculateDistance:
     # Approximate straight-line distance between São Paulo and Rio de Janeiro.
     SP_LAT, SP_LON = -23.5505, -46.6333
@@ -106,14 +108,20 @@ class TestCalculateDistance:
 
     def test_invalid_string_returns_9999(self):
         """Non-numeric strings that cannot be converted to float return 9999.0."""
-        assert calculate_distance("abc", self.SP_LON, self.RJ_LAT, self.RJ_LON) == 9999.0
-        assert calculate_distance(self.SP_LAT, "xyz", self.RJ_LAT, self.RJ_LON) == 9999.0
+        assert (
+            calculate_distance("abc", self.SP_LON, self.RJ_LAT, self.RJ_LON) == 9999.0
+        )
+        assert (
+            calculate_distance(self.SP_LAT, "xyz", self.RJ_LAT, self.RJ_LON) == 9999.0
+        )
 
     def test_string_numeric_values_are_accepted(self):
         """Numeric strings are coerced to float and produce a valid distance."""
         dist = calculate_distance(
-            str(self.SP_LAT), str(self.SP_LON),
-            str(self.RJ_LAT), str(self.RJ_LON),
+            str(self.SP_LAT),
+            str(self.SP_LON),
+            str(self.RJ_LAT),
+            str(self.RJ_LON),
         )
         assert 340.0 <= dist <= 380.0
 
@@ -127,6 +135,7 @@ class TestCalculateDistance:
 # ===========================================================================
 # TestCheckDeliveryRadius
 # ===========================================================================
+
 
 class TestCheckDeliveryRadius:
     """check_delivery_radius is async; pytest-asyncio handles coroutine execution."""
@@ -145,7 +154,9 @@ class TestCheckDeliveryRadius:
         """A customer very close to the restaurant is within the delivery radius."""
         bot = self._make_bot(self.BOT_LAT, self.BOT_LON, radius=10.0)
         # Shift ~0.01 degrees (~1 km) — well within 10 km
-        is_ok, dist = await check_delivery_radius(bot, self.BOT_LAT + 0.01, self.BOT_LON + 0.01)
+        is_ok, dist = await check_delivery_radius(
+            bot, self.BOT_LAT + 0.01, self.BOT_LON + 0.01
+        )
         assert is_ok is True
         assert dist < 10.0
 
@@ -192,6 +203,7 @@ class TestCheckDeliveryRadius:
 # TestGetAddressFromCep
 # ===========================================================================
 
+
 class TestGetAddressFromCep:
     """get_address_from_cep makes async HTTP calls; httpx is mocked."""
 
@@ -218,8 +230,13 @@ class TestGetAddressFromCep:
         mock_resp = self._make_httpx_response(200, self._VALID_API_RESPONSE)
 
         # Mock the internal _fetch_coordinates helper to avoid a second HTTP call
-        with patch("app.utils._fetch_coordinates", new=AsyncMock(return_value=("-23.563", "-46.654"))), \
-             patch("httpx.AsyncClient") as mock_client_cls:
+        with (
+            patch(
+                "app.utils._fetch_coordinates",
+                new=AsyncMock(return_value=("-23.563", "-46.654")),
+            ),
+            patch("httpx.AsyncClient") as mock_client_cls,
+        ):
             mock_client = AsyncMock()
             mock_client.get = AsyncMock(return_value=mock_resp)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -304,15 +321,19 @@ class TestGetAddressFromCep:
         """CEPs like "01310-100" have non-digits stripped before the request."""
         mock_resp = self._make_httpx_response(200, self._VALID_API_RESPONSE)
 
-        with patch("app.utils._fetch_coordinates", new=AsyncMock(return_value=(None, None))), \
-             patch("httpx.AsyncClient") as mock_client_cls:
+        with (
+            patch(
+                "app.utils._fetch_coordinates", new=AsyncMock(return_value=(None, None))
+            ),
+            patch("httpx.AsyncClient") as mock_client_cls,
+        ):
             mock_client = AsyncMock()
             mock_client.get = AsyncMock(return_value=mock_resp)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=False)
             mock_client_cls.return_value = mock_client
 
-            result = await get_address_from_cep("01310-100")
+            await get_address_from_cep("01310-100")
 
         # Request must have been made with the clean CEP
         call_url = mock_client.get.call_args[0][0]
@@ -323,6 +344,7 @@ class TestGetAddressFromCep:
 # ===========================================================================
 # TestFetchCoordinatesNoKeyLeak
 # ===========================================================================
+
 
 class TestFetchCoordinatesNoKeyLeak:
     """Ensure _fetch_coordinates never prints the API key to stdout."""
@@ -346,6 +368,7 @@ class TestFetchCoordinatesNoKeyLeak:
 # ===========================================================================
 # TestLookupCepEndpointAuth
 # ===========================================================================
+
 
 class TestLookupCepEndpointAuth:
     """Verify the CEP lookup endpoint requires authentication."""

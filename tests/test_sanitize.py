@@ -1,12 +1,13 @@
-import pytest
-
 from app.sanitize import sanitize_llm_output
 
 
 # ---------- URL stripping ----------
 
+
 def test_strips_https_url():
-    assert "[link removido]" in sanitize_llm_output("Veja https://phishing.com/scam agora")
+    assert "[link removido]" in sanitize_llm_output(
+        "Veja https://phishing.com/scam agora"
+    )
 
 
 def test_strips_http_url():
@@ -19,6 +20,7 @@ def test_strips_www_url():
 
 # ---------- Email stripping ----------
 
+
 def test_strips_email():
     result = sanitize_llm_output("Mande para victim@evil.com")
     assert "[email removido]" in result
@@ -26,6 +28,7 @@ def test_strips_email():
 
 
 # ---------- Phone number stripping ----------
+
 
 def test_strips_domestic_phone():
     result = sanitize_llm_output("Ligue para 11987654321")
@@ -52,6 +55,7 @@ def test_preserves_order_id_like_numbers():
 
 # ---------- Dangerous Unicode ----------
 
+
 def test_strips_rtl_override():
     text = "Hello\u202eevil"
     result = sanitize_llm_output(text)
@@ -68,6 +72,7 @@ def test_strips_zero_width_chars():
 
 # ---------- Truncation ----------
 
+
 def test_truncates_long_messages():
     long_text = "a" * 2000
     result = sanitize_llm_output(long_text)
@@ -75,6 +80,7 @@ def test_truncates_long_messages():
 
 
 # ---------- Preserves normal formatting ----------
+
 
 def test_preserves_whatsapp_bold():
     result = sanitize_llm_output("Seu pedido *total* ficou R$ 30")
@@ -92,6 +98,7 @@ def test_preserves_normal_text():
 
 
 # ---------- Edge cases ----------
+
 
 def test_empty_string():
     assert sanitize_llm_output("") == ""

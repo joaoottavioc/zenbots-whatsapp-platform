@@ -10,9 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_session
 from app.auth import get_current_user
 from app.models import User, Bot, PaymentConfig
-from fastapi import Request
-from sqlalchemy.orm import selectinload
-from app.models import Order, OrderStatus
 from app import crud
 from app.rate_limiter import store_oauth_state, consume_oauth_state
 from datetime import timedelta
@@ -27,6 +24,7 @@ MP_CLIENT_SECRET = os.getenv("MP_CLIENT_SECRET")
 # A URL para onde o Mercado Pago devolve o usuário (Frontend)
 MP_REDIRECT_URI = os.getenv("MP_REDIRECT_URI", "http://localhost:3000/pagamentos")
 
+
 @router.get("/auth-url")
 async def get_auth_url(
     bot_id: int,
@@ -38,7 +36,9 @@ async def get_auth_url(
     Requer bot_id para vincular a autorização ao bot correto.
     """
     if not MP_CLIENT_ID:
-        raise HTTPException(status_code=500, detail="Servidor mal configurado: MP_CLIENT_ID ausente.")
+        raise HTTPException(
+            status_code=500, detail="Servidor mal configurado: MP_CLIENT_ID ausente."
+        )
 
     # Validate bot ownership
     bot = await crud.get_bot_by_id(session, bot_id=bot_id)
@@ -58,11 +58,12 @@ async def get_auth_url(
     )
     return {"url": url}
 
+
 @router.post("/callback")
 async def exchange_token(
     body: dict,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Recebe o 'code' do Frontend, troca por Access Token e salva no Bot do usuário.
@@ -82,7 +83,9 @@ async def exchange_token(
 
     state_user_id, state_bot_id = state_data
     if state_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="State token não corresponde ao usuário.")
+        raise HTTPException(
+            status_code=403, detail="State token não corresponde ao usuário."
+        )
 
     # 1. Troca o CODE pelo TOKEN
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -95,25 +98,29 @@ async def exchange_token(
                 "code": code,
                 "redirect_uri": MP_REDIRECT_URI,
             },
-            headers={"Content-Type": "application/x-www-form-urlencoded"}
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
 
     if resp.status_code != 200:
         logger.error("MP OAuth token exchange failed, status_code=%s", resp.status_code)
-        raise HTTPException(status_code=400, detail="Falha ao conectar com Mercado Pago.")
+        raise HTTPException(
+            status_code=400, detail="Falha ao conectar com Mercado Pago."
+        )
 
     data = resp.json()
     access_token = data.get("access_token")
     public_key = data.get("public_key")
     refresh_token = data.get("refresh_token")
     expires_in = data.get("expires_in")  # seconds until expiry
-    user_id_mp = data.get("user_id")
+    data.get("user_id")
 
     # 2. Select the specific bot from the state token (not .first())
     bot = await crud.get_bot_by_id(session, bot_id=state_bot_id)
 
     if not bot or bot.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Bot não encontrado ou acesso negado.")
+        raise HTTPException(
+            status_code=404, detail="Bot não encontrado ou acesso negado."
+        )
 
     # 3. Salva ou Atualiza a Configuração
     # Carrega a config existente se houver
@@ -139,25 +146,26 @@ async def exchange_token(
             public_key=encrypted_public_key,
             refresh_token=encrypted_refresh_token,
             token_expires_at=token_expires_at,
-            is_active=True
+            is_active=True,
         )
         session.add(config)
 
     await session.commit()
     return {"status": "connected", "bot_name": bot.restaurant_name}
 
+
 @router.get("/status")
 async def get_status(
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     stmt = select(Bot).where(Bot.user_id == current_user.id)
     result = await session.execute(stmt)
     bot = result.scalars().first()
-    
+
     if bot:
         await session.refresh(bot, attribute_names=["payment_config"])
         if bot.payment_config and bot.payment_config.is_active:
-             return {"is_active": True, "provider": "mercadopago"}
-             
+            return {"is_active": True, "provider": "mercadopago"}
+
     return {"is_active": False}

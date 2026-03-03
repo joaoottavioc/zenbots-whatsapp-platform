@@ -7,8 +7,7 @@ Covers:
 - No unnecessary commits when nothing to cancel
 - WorkerSettings has cron_jobs configured
 """
-import pytest
-from datetime import timedelta
+
 from unittest.mock import AsyncMock, MagicMock
 
 from app.models import OrderStatus
@@ -17,6 +16,7 @@ from app.models import OrderStatus
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_session() -> AsyncMock:
     session = AsyncMock()
@@ -40,8 +40,8 @@ def _make_order(order_id: int, status=OrderStatus.PENDING, payment_method: str =
 # TestCancelExpiredPixOrders
 # ===========================================================================
 
-class TestCancelExpiredPixOrders:
 
+class TestCancelExpiredPixOrders:
     async def test_cancels_expired_pix_orders(self):
         """Pending PIX orders older than 15 minutes are canceled."""
         from app.crud import cancel_expired_pix_orders
@@ -49,7 +49,10 @@ class TestCancelExpiredPixOrders:
         session = _make_session()
         order1 = _make_order(order_id=1)
         order2 = _make_order(order_id=2)
-        session.execute.return_value.scalars.return_value.all.return_value = [order1, order2]
+        session.execute.return_value.scalars.return_value.all.return_value = [
+            order1,
+            order2,
+        ]
 
         count = await cancel_expired_pix_orders(session)
 
@@ -75,23 +78,26 @@ class TestCancelExpiredPixOrders:
         from app.worker import WorkerSettings
 
         assert hasattr(WorkerSettings, "cron_jobs"), "WorkerSettings missing cron_jobs"
-        assert len(WorkerSettings.cron_jobs) >= 1, "cron_jobs should have at least one cron job"
+        assert len(WorkerSettings.cron_jobs) >= 1, (
+            "cron_jobs should have at least one cron job"
+        )
 
 
 # ===========================================================================
 # TestOrderStatusEnumUsed
 # ===========================================================================
 
-class TestOrderStatusEnumUsed:
 
+class TestOrderStatusEnumUsed:
     def test_cancel_query_uses_enum_not_string(self):
         """Ensure the query uses OrderStatus.PENDING, not a raw string."""
         import inspect
         from app import crud
+
         source = inspect.getsource(crud.cancel_expired_pix_orders)
-        assert 'OrderStatus.PENDING' in source, (
+        assert "OrderStatus.PENDING" in source, (
             "cancel_expired_pix_orders should use OrderStatus.PENDING, not a raw string"
         )
         assert '"PENDING"' not in source, (
-            "cancel_expired_pix_orders should NOT use string \"PENDING\""
+            'cancel_expired_pix_orders should NOT use string "PENDING"'
         )

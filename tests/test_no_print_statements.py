@@ -1,5 +1,6 @@
 # tests/test_no_print_statements.py
 """AST-walk all app/*.py files and assert zero print() calls."""
+
 import ast
 import pathlib
 

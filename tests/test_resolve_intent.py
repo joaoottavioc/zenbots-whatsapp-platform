@@ -5,6 +5,7 @@ Tests for the lazy LLM fallback in resolve_intent.
 The semantic router runs first. If its confidence is above threshold,
 the LLM is never called. Otherwise, the LLM is used as fallback.
 """
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -22,13 +23,16 @@ PATCH_LLM = "app.whatsapp.classify_user_intent"
 
 
 class TestResolveIntent:
-
     @pytest.mark.asyncio
     async def test_router_confident_skips_llm(self):
         """When the semantic router score is above threshold, LLM is NOT called."""
         with (
-            patch(PATCH_SEMANTIC, AsyncMock(return_value=("ADD", 0.95, "quero pizza"))) as router_mock,
-            patch(PATCH_LLM, AsyncMock(return_value="GREETING_OR_QUESTION")) as llm_mock,
+            patch(
+                PATCH_SEMANTIC, AsyncMock(return_value=("ADD", 0.95, "quero pizza"))
+            ) as router_mock,
+            patch(
+                PATCH_LLM, AsyncMock(return_value="GREETING_OR_QUESTION")
+            ) as llm_mock,
         ):
             result = await resolve_intent("quero pizza", _make_cart(), [])
 
@@ -40,8 +44,12 @@ class TestResolveIntent:
     async def test_router_low_confidence_falls_back_to_llm(self):
         """When the semantic router score is below threshold, LLM is called and its result used."""
         with (
-            patch(PATCH_SEMANTIC, AsyncMock(return_value=("ADD", 0.50, "quero algo"))) as router_mock,
-            patch(PATCH_LLM, AsyncMock(return_value="GREETING_OR_QUESTION")) as llm_mock,
+            patch(
+                PATCH_SEMANTIC, AsyncMock(return_value=("ADD", 0.50, "quero algo"))
+            ) as router_mock,
+            patch(
+                PATCH_LLM, AsyncMock(return_value="GREETING_OR_QUESTION")
+            ) as llm_mock,
         ):
             result = await resolve_intent("quero algo", _make_cart(), [])
 
@@ -53,7 +61,9 @@ class TestResolveIntent:
     async def test_router_exception_falls_back_to_llm(self):
         """When the semantic router throws, LLM is called as fallback."""
         with (
-            patch(PATCH_SEMANTIC, AsyncMock(side_effect=RuntimeError("embed fail"))) as router_mock,
+            patch(
+                PATCH_SEMANTIC, AsyncMock(side_effect=RuntimeError("embed fail"))
+            ) as router_mock,
             patch(PATCH_LLM, AsyncMock(return_value="ADD")) as llm_mock,
         ):
             result = await resolve_intent("quero pizza", _make_cart(), [])

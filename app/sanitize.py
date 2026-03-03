@@ -25,18 +25,16 @@ _URL_PATTERN = re.compile(
 )
 
 # Email addresses
-_EMAIL_PATTERN = re.compile(
-    r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}"
-)
+_EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
 
 # Phone numbers: sequences of 8+ digits (possibly with separators)
 # We use a pattern that matches digit sequences of 8+ digits, allowing
 # optional separators like spaces, dashes, dots, or parentheses.
 _PHONE_PATTERN = re.compile(
-    r"(?<!\d)"                        # not preceded by a digit
-    r"[\+]?"                          # optional leading +
-    r"(?:\(?\d[\d\s\-\.\(\)]{6,}\d)" # 8+ digits with optional separators
-    r"(?!\d)"                         # not followed by a digit
+    r"(?<!\d)"  # not preceded by a digit
+    r"[\+]?"  # optional leading +
+    r"(?:\(?\d[\d\s\-\.\(\)]{6,}\d)"  # 8+ digits with optional separators
+    r"(?!\d)"  # not followed by a digit
 )
 
 
@@ -73,8 +71,8 @@ def sanitize_llm_output(text: str) -> str:
     text = _PHONE_PATTERN.sub("[numero removido]", text)
 
     # 5. Collapse excess whitespace (keep single newlines)
-    text = re.sub(r"[^\S\n]+", " ", text)      # spaces/tabs → single space
-    text = re.sub(r"\n{3,}", "\n\n", text)      # 3+ newlines → 2
+    text = re.sub(r"[^\S\n]+", " ", text)  # spaces/tabs → single space
+    text = re.sub(r"\n{3,}", "\n\n", text)  # 3+ newlines → 2
 
     # 6. Truncate
     if len(text) > MAX_LENGTH:

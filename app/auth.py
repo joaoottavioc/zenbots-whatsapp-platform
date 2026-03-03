@@ -1,7 +1,7 @@
 import logging
 import os
 import re
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -41,11 +41,14 @@ router = APIRouter()
 
 # --- Funções Utilitárias de Autenticação ---
 
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
+
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
+
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
@@ -53,55 +56,93 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         expire = utcnow() + expires_delta
     else:
         expire = utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    
+
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
+
 # --- Password validation ---
 
-COMMON_PASSWORDS = frozenset([
-    "password", "12345678", "123456789", "1234567890", "qwerty123",
-    "abc12345", "password1", "iloveyou", "sunshine1", "princess1",
-    "football1", "charlie1", "shadow12", "master12", "dragon12",
-    "qwerty12", "michael1", "letmein1", "monkey123", "trustno1",
-    "whatever1", "welcome1", "jordan23", "harley12", "robert12",
-    "thomas12", "hockey12", "ranger12", "daniel12", "starwars1",
-    "klaster1", "george12", "computer1", "michelle1", "jessica1",
-    "pepper12", "1111111a", "zaq12wsx", "samsung1", "freedom1",
-])
+COMMON_PASSWORDS = frozenset(
+    [
+        "password",
+        "12345678",
+        "123456789",
+        "1234567890",
+        "qwerty123",
+        "abc12345",
+        "password1",
+        "iloveyou",
+        "sunshine1",
+        "princess1",
+        "football1",
+        "charlie1",
+        "shadow12",
+        "master12",
+        "dragon12",
+        "qwerty12",
+        "michael1",
+        "letmein1",
+        "monkey123",
+        "trustno1",
+        "whatever1",
+        "welcome1",
+        "jordan23",
+        "harley12",
+        "robert12",
+        "thomas12",
+        "hockey12",
+        "ranger12",
+        "daniel12",
+        "starwars1",
+        "klaster1",
+        "george12",
+        "computer1",
+        "michelle1",
+        "jessica1",
+        "pepper12",
+        "1111111a",
+        "zaq12wsx",
+        "samsung1",
+        "freedom1",
+    ]
+)
 
 
 def validate_password_strength(v: str) -> str:
     """Shared password validation — used by all password schemas."""
     if len(v) < 8:
-        raise ValueError('A senha deve ter pelo menos 8 caracteres.')
-    if not re.search(r'[a-z]', v):
-        raise ValueError('A senha deve conter pelo menos uma letra minúscula.')
-    if not re.search(r'[A-Z]', v):
-        raise ValueError('A senha deve conter pelo menos uma letra maiúscula.')
-    if not re.search(r'\d', v):
-        raise ValueError('A senha deve conter pelo menos um número.')
-    if not re.search(r'[^a-zA-Z0-9]', v):
-        raise ValueError('A senha deve conter pelo menos um caractere especial.')
+        raise ValueError("A senha deve ter pelo menos 8 caracteres.")
+    if not re.search(r"[a-z]", v):
+        raise ValueError("A senha deve conter pelo menos uma letra minúscula.")
+    if not re.search(r"[A-Z]", v):
+        raise ValueError("A senha deve conter pelo menos uma letra maiúscula.")
+    if not re.search(r"\d", v):
+        raise ValueError("A senha deve conter pelo menos um número.")
+    if not re.search(r"[^a-zA-Z0-9]", v):
+        raise ValueError("A senha deve conter pelo menos um caractere especial.")
     # Check both the full password and the alphanumeric-only version
     v_lower = v.lower()
-    v_alpha = re.sub(r'[^a-z0-9]', '', v_lower)
+    v_alpha = re.sub(r"[^a-z0-9]", "", v_lower)
     if v_lower in COMMON_PASSWORDS or v_alpha in COMMON_PASSWORDS:
-        raise ValueError('Esta senha é muito comum. Escolha uma senha mais segura.')
+        raise ValueError("Esta senha é muito comum. Escolha uma senha mais segura.")
     return v
 
 
 # --- Schemas (Modelos de Dados da API) ---
 
+
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
 
-    @validator('password')
+    @validator("password")
     def password_complexity(cls, v):
         return validate_password_strength(v)
 
+
 # --- Rate Limit Dependencies ---
+
 
 async def _check_auth_rate_limit(request: Request):
     """10 requests per 5 minutes per IP for /register."""
@@ -126,9 +167,13 @@ async def _check_login_rate_limit(request: Request):
             detail="Too many requests. Please try again later.",
         )
 
+
 # --- Endpoints de Autenticação ---
 
-@router.post("/register", status_code=status.HTTP_201_CREATED, summary="Registra um novo usuário")
+
+@router.post(
+    "/register", status_code=status.HTTP_201_CREATED, summary="Registra um novo usuário"
+)
 async def register(
     register_data: RegisterRequest,
     session: AsyncSession = Depends(get_session),
@@ -137,18 +182,22 @@ async def register(
     user = await crud.get_user_by_email(session, email=register_data.email)
     if user:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
-            detail="Email already registered"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
         )
     hashed_password = get_password_hash(register_data.password)
     new_user = models.User(email=register_data.email, hashed_password=hashed_password)
-    
+
     session.add(new_user)
     await session.commit()
-    
+
     return {"message": "User created successfully"}
 
-@router.post("/token", response_model=schemas.Token, summary="Realiza o login e retorna um token de acesso")
+
+@router.post(
+    "/token",
+    response_model=schemas.Token,
+    summary="Realiza o login e retorna um token de acesso",
+)
 async def login_for_access_token(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
@@ -164,15 +213,16 @@ async def login_for_access_token(
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     access_token = create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
 
+
 # --- Dependência de Autenticação ---
 
+
 async def get_current_user(
-    token: str = Depends(oauth2_scheme), 
-    session: AsyncSession = Depends(get_session)
+    token: str = Depends(oauth2_scheme), session: AsyncSession = Depends(get_session)
 ) -> models.User:
     """
     Dependência para ser usada em endpoints protegidos.
@@ -190,7 +240,7 @@ async def get_current_user(
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    
+
     user = await crud.get_user_by_email(session, email=email)
     if user is None:
         raise credentials_exception
@@ -198,7 +248,9 @@ async def get_current_user(
     return user
 
 
-async def get_user_from_token(token: str, session: AsyncSession) -> Optional[models.User]:
+async def get_user_from_token(
+    token: str, session: AsyncSession
+) -> Optional[models.User]:
     """
     Decode a JWT and return the User, or None if invalid.
     Usable outside Depends() context (e.g. SSE endpoints).
@@ -234,8 +286,7 @@ async def forgot_password(
 
     # 3. Gera Token de Recuperação (15 min)
     reset_token = create_access_token(
-        data={"sub": user.email, "type": "reset"}, 
-        expires_delta=timedelta(minutes=15)
+        data={"sub": user.email, "type": "reset"}, expires_delta=timedelta(minutes=15)
     )
 
     # 4. Envia o E-mail
@@ -243,7 +294,9 @@ async def forgot_password(
         await send_password_reset_email(user.email, reset_token)
     except Exception as e:
         logger.error("Failed to send password reset email: %s", e)
-        raise HTTPException(status_code=500, detail="Falha ao enviar e-mail de recuperação.")
+        raise HTTPException(
+            status_code=500, detail="Falha ao enviar e-mail de recuperação."
+        )
 
     return {"message": "Se o e-mail existir, um link foi enviado."}
 
@@ -253,9 +306,10 @@ class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str
 
-    @validator('new_password')
+    @validator("new_password")
     def password_complexity(cls, v):
         return validate_password_strength(v)
+
 
 @router.post("/reset-password")
 async def reset_password(
@@ -268,16 +322,16 @@ async def reset_password(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail="Token inválido ou expirado.",
     )
-    
+
     try:
         # Decodifica o token usando a SECRET_KEY
         data = jwt.decode(payload.token, SECRET_KEY, algorithms=[ALGORITHM])
         email: Optional[str] = data.get("sub")
         token_type: Optional[str] = data.get("type")
-        
+
         if email is None or token_type != "reset":
             raise credentials_exception
-            
+
     except JWTError:
         raise credentials_exception
 
@@ -296,34 +350,36 @@ async def reset_password(
 
     return {"message": "Senha atualizada com sucesso!"}
 
+
 # 1. Modelo de dados para receber as senhas
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
 
-    @validator('new_password')
+    @validator("new_password")
     def password_complexity(cls, v):
         return validate_password_strength(v)
+
 
 # 2. Rota Protegida (Exige token via get_current_user)
 @router.post("/change-password")
 async def change_password(
     payload: ChangePasswordRequest,
-    current_user: models.User = Depends(get_current_user), # Garante que está logado
-    session: AsyncSession = Depends(get_session)
+    current_user: models.User = Depends(get_current_user),  # Garante que está logado
+    session: AsyncSession = Depends(get_session),
 ):
     # A. Verifica se a senha ATUAL está correta
     if not verify_password(payload.current_password, current_user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A senha atual está incorreta."
+            detail="A senha atual está incorreta.",
         )
 
     # B. Verifica se a NOVA senha é igual à antiga (opcional, mas boa prática)
     if verify_password(payload.new_password, current_user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A nova senha não pode ser igual à atual."
+            detail="A nova senha não pode ser igual à atual.",
         )
 
     # C. Criptografa e salva a nova senha
@@ -332,6 +388,7 @@ async def change_password(
     await session.commit()
 
     return {"message": "Senha alterada com sucesso!"}
+
 
 # Rota para o Frontend pegar os dados do usuário logado
 @router.get("/me", response_model=schemas.UserResponse)

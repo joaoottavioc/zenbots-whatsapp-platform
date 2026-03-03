@@ -36,7 +36,7 @@ def create_central_prompt(
     suggestion_context = ""
     if recent_suggestions:
         suggestion_context = "\n".join(
-            f"{i+1}. {p.name} (ID: {p.id})" for i, p in enumerate(recent_suggestions)
+            f"{i + 1}. {p.name} (ID: {p.id})" for i, p in enumerate(recent_suggestions)
         )
         suggestion_context = (
             "**Sugestões recentes:**\n"
@@ -175,8 +175,7 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
     }
 
     # BULK MODIFY
-    ex3b_user = {"role": "user", "content": "tira 3 coxas e 2 pães"}
-    ex3b_assistant = {
+    {
         "role": "assistant",
         "content": None,
         "tool_calls": [
@@ -196,11 +195,6 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
                 },
             }
         ],
-    }
-    ex3b_tool = {
-        "role": "tool",
-        "tool_call_id": "call-ex3b",
-        "content": "Quantidades de múltiplos itens atualizadas.",
     }
 
     # GREETING
@@ -287,30 +281,35 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
     ex7_assistant = {
         "role": "assistant",
         "content": None,
-        "tool_calls": [{
-            "id": "call-ex7",
-            "type": "function",
-            "function": {
-                "name": "add_items_to_cart",
-                "arguments": json.dumps({
-                    # Assumindo que nas Sugestões recentes estão algo como:
-                    # 1. Oeuf Poche Paul Bocuse (ID: 111)
-                    # 2. Magret de Canard (ID: 222)
-                    "items": [
-                        {"product_id": 111, "quantity": 5},
-                        {"product_id": 222, "quantity": 3}
-                    ]
-                })
+        "tool_calls": [
+            {
+                "id": "call-ex7",
+                "type": "function",
+                "function": {
+                    "name": "add_items_to_cart",
+                    "arguments": json.dumps(
+                        {
+                            # Assumindo que nas Sugestões recentes estão algo como:
+                            # 1. Oeuf Poche Paul Bocuse (ID: 111)
+                            # 2. Magret de Canard (ID: 222)
+                            "items": [
+                                {"product_id": 111, "quantity": 5},
+                                {"product_id": 222, "quantity": 3},
+                            ]
+                        }
+                    ),
+                },
             }
-        }]
+        ],
     }
-    ex7_tool = {"role": "tool", "tool_call_id": "call-ex7", "content": "Itens adicionados."}
+    ex7_tool = {
+        "role": "tool",
+        "tool_call_id": "call-ex7",
+        "content": "Itens adicionados.",
+    }
 
     # Exemplo: usuário escolhe itens usando "primeiro/segundo" da lista de sugestões recentes
-    ex_ordinals_user = {
-        "role": "user",
-        "content": "quero 2 do segundo e 7 do quarto"
-    }
+    ex_ordinals_user = {"role": "user", "content": "quero 2 do segundo e 7 do quarto"}
 
     # Sugestões recentes imaginárias para o exemplo
     # 1. Crevettes à la Provençale (ID: 22)
@@ -321,31 +320,35 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
     ex_ordinals_assistant = {
         "role": "assistant",
         "content": None,
-        "tool_calls": [{
-            "id": "call-ex-ordinais",
-            "type": "function",
-            "function": {
-                "name": "add_items_to_cart",
-                "arguments": json.dumps({
-                    "items": [
-                        {"product_id": 15, "quantity": 2},
-                        {"product_id": 23, "quantity": 7}
-                    ]
-                })
+        "tool_calls": [
+            {
+                "id": "call-ex-ordinais",
+                "type": "function",
+                "function": {
+                    "name": "add_items_to_cart",
+                    "arguments": json.dumps(
+                        {
+                            "items": [
+                                {"product_id": 15, "quantity": 2},
+                                {"product_id": 23, "quantity": 7},
+                            ]
+                        }
+                    ),
+                },
             }
-        }]
+        ],
     }
 
     ex_ordinals_tool = {
         "role": "tool",
         "tool_call_id": "call-ex-ordinais",
-        "content": "Itens adicionados."
+        "content": "Itens adicionados.",
     }
 
     # Exemplo: quantidades por extenso + ordinais
     ex_ordinais_extenso_user = {
         "role": "user",
-        "content": "quero treze do terceiro e quinze do primeiro"
+        "content": "quero treze do terceiro e quinze do primeiro",
     }
 
     # Sugestões recentes imaginárias para o exemplo:
@@ -357,28 +360,35 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
     ex_ordinais_extenso_assistant = {
         "role": "assistant",
         "content": None,
-        "tool_calls": [{
-            "id": "call-ex-ordinais-extenso",
-            "type": "function",
-            "function": {
-                "name": "add_items_to_cart",
-                "arguments": json.dumps({
-                    "items": [
-                        {"product_id": 9, "quantity": 13},   # treze → 13
-                        {"product_id": 22, "quantity": 15}   # quinze → 15
-                    ]
-                })
+        "tool_calls": [
+            {
+                "id": "call-ex-ordinais-extenso",
+                "type": "function",
+                "function": {
+                    "name": "add_items_to_cart",
+                    "arguments": json.dumps(
+                        {
+                            "items": [
+                                {"product_id": 9, "quantity": 13},  # treze → 13
+                                {"product_id": 22, "quantity": 15},  # quinze → 15
+                            ]
+                        }
+                    ),
+                },
             }
-        }]
+        ],
     }
 
     ex_ordinais_extenso_tool = {
         "role": "tool",
         "tool_call_id": "call-ex-ordinais-extenso",
-        "content": "Itens adicionados."
+        "content": "Itens adicionados.",
     }
 
-    ex_suggestion_user = {"role": "user", "content": "o que vcs tem de sobremesa pra hoje?"}
+    ex_suggestion_user = {
+        "role": "user",
+        "content": "o que vcs tem de sobremesa pra hoje?",
+    }
     ex_suggestion_assistant = {
         "role": "assistant",
         "content": None,
@@ -388,11 +398,7 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
                 "type": "function",
                 "function": {
                     "name": "search_catalog_for_suggestions",
-                    "arguments": json.dumps(
-                        {
-                            "search_concept": "sobremesa"
-                        }
-                    ),
+                    "arguments": json.dumps({"search_concept": "sobremesa"}),
                 },
             }
         ],
@@ -410,81 +416,140 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
     ex_notes_simple_assistant = {
         "role": "assistant",
         "content": None,
-        "tool_calls": [{
-            "id": "call-ex-notes-simple",
-            "type": "function",
-            "function": {
-                "name": "add_items_to_cart",
-                "arguments": json.dumps({
-                    "items": [
-                        # Assumindo ID 12 para X-Salada
-                        {"product_id": 12, "quantity": 1, "notes": "sem tomate"} 
-                    ]
-                })
+        "tool_calls": [
+            {
+                "id": "call-ex-notes-simple",
+                "type": "function",
+                "function": {
+                    "name": "add_items_to_cart",
+                    "arguments": json.dumps(
+                        {
+                            "items": [
+                                # Assumindo ID 12 para X-Salada
+                                {"product_id": 12, "quantity": 1, "notes": "sem tomate"}
+                            ]
+                        }
+                    ),
+                },
             }
-        }]
+        ],
     }
-    ex_notes_simple_tool = {"role": "tool", "tool_call_id": "call-ex-notes-simple", "content": "Item adicionado com nota."}
+    ex_notes_simple_tool = {
+        "role": "tool",
+        "tool_call_id": "call-ex-notes-simple",
+        "content": "Item adicionado com nota.",
+    }
 
     # Exemplo 2: Adicionar com observação complexa
-    ex_notes_complex_user = {"role": "user", "content": "Me vê um Hot Dog Mexicano mas tira a salsicha e coloca purê extra"}
+    ex_notes_complex_user = {
+        "role": "user",
+        "content": "Me vê um Hot Dog Mexicano mas tira a salsicha e coloca purê extra",
+    }
     ex_notes_complex_assistant = {
         "role": "assistant",
         "content": None,
-        "tool_calls": [{
-            "id": "call-ex-notes-complex",
-            "type": "function",
-            "function": {
-                "name": "add_items_to_cart",
-                "arguments": json.dumps({
-                    "items": [
-                        # Assumindo ID 55 para Hot Dog Mexicano
-                        {"product_id": 55, "quantity": 1, "notes": "sem salsicha, com purê extra"}
-                    ]
-                })
+        "tool_calls": [
+            {
+                "id": "call-ex-notes-complex",
+                "type": "function",
+                "function": {
+                    "name": "add_items_to_cart",
+                    "arguments": json.dumps(
+                        {
+                            "items": [
+                                # Assumindo ID 55 para Hot Dog Mexicano
+                                {
+                                    "product_id": 55,
+                                    "quantity": 1,
+                                    "notes": "sem salsicha, com purê extra",
+                                }
+                            ]
+                        }
+                    ),
+                },
             }
-        }]
+        ],
     }
-    ex_notes_complex_tool = {"role": "tool", "tool_call_id": "call-ex-notes-complex", "content": "Item adicionado com nota."}
+    ex_notes_complex_tool = {
+        "role": "tool",
+        "tool_call_id": "call-ex-notes-complex",
+        "content": "Item adicionado com nota.",
+    }
 
     # Exemplo 3: Atualizar observação de item existente
-    ex_notes_update_user = {"role": "user", "content": "Ah, o refrigerante é sem gelo, tá?"}
+    ex_notes_update_user = {
+        "role": "user",
+        "content": "Ah, o refrigerante é sem gelo, tá?",
+    }
     ex_notes_update_assistant = {
         "role": "assistant",
         "content": None,
-        "tool_calls": [{
-            "id": "call-ex-notes-update",
-            "type": "function",
-            "function": {
-                "name": "update_item_observation",
-                "arguments": json.dumps({
-                    # Assumindo ID 89 para o Refrigerante que já está no carrinho
-                    "product_id": 89,
-                    "notes": "sem gelo"
-                })
+        "tool_calls": [
+            {
+                "id": "call-ex-notes-update",
+                "type": "function",
+                "function": {
+                    "name": "update_item_observation",
+                    "arguments": json.dumps(
+                        {
+                            # Assumindo ID 89 para o Refrigerante que já está no carrinho
+                            "product_id": 89,
+                            "notes": "sem gelo",
+                        }
+                    ),
+                },
             }
-        }]
+        ],
     }
-    ex_notes_update_tool = {"role": "tool", "tool_call_id": "call-ex-notes-update", "content": "Observação atualizada."}
-
+    ex_notes_update_tool = {
+        "role": "tool",
+        "tool_call_id": "call-ex-notes-update",
+        "content": "Observação atualizada.",
+    }
 
     # --- MONTAGEM FINAL ---
     # Examples go right after system, then history (closer to LLM output boundary),
     # then the current user query last.
     examples = [
-        ex1_user, ex1_assistant, ex1_tool,
-        ex2_user, ex2_assistant, ex2_tool,
-        ex3_user, ex3_assistant, ex3_tool,
-        ex4_user, ex4_assistant, ex4_tool,
-        ex5_user, ex5_assistant, ex5_tool,
-        ex5b_user, ex5b_assistant, ex5b_tool,
-        ex7_user, ex7_assistant, ex7_tool,
-        ex_ordinals_user, ex_ordinals_assistant, ex_ordinals_tool,
-        ex_ordinais_extenso_user, ex_ordinais_extenso_assistant, ex_ordinais_extenso_tool,
-        ex_suggestion_user, ex_suggestion_assistant, ex_suggestion_tool,
-        ex_notes_simple_user, ex_notes_simple_assistant, ex_notes_simple_tool,
-        ex_notes_complex_user, ex_notes_complex_assistant, ex_notes_complex_tool,
-        ex_notes_update_user, ex_notes_update_assistant, ex_notes_update_tool,
+        ex1_user,
+        ex1_assistant,
+        ex1_tool,
+        ex2_user,
+        ex2_assistant,
+        ex2_tool,
+        ex3_user,
+        ex3_assistant,
+        ex3_tool,
+        ex4_user,
+        ex4_assistant,
+        ex4_tool,
+        ex5_user,
+        ex5_assistant,
+        ex5_tool,
+        ex5b_user,
+        ex5b_assistant,
+        ex5b_tool,
+        ex7_user,
+        ex7_assistant,
+        ex7_tool,
+        ex_ordinals_user,
+        ex_ordinals_assistant,
+        ex_ordinals_tool,
+        ex_ordinais_extenso_user,
+        ex_ordinais_extenso_assistant,
+        ex_ordinais_extenso_tool,
+        ex_suggestion_user,
+        ex_suggestion_assistant,
+        ex_suggestion_tool,
+        ex_notes_simple_user,
+        ex_notes_simple_assistant,
+        ex_notes_simple_tool,
+        ex_notes_complex_user,
+        ex_notes_complex_assistant,
+        ex_notes_complex_tool,
+        ex_notes_update_user,
+        ex_notes_update_assistant,
+        ex_notes_update_tool,
     ]
 
     prompt = (

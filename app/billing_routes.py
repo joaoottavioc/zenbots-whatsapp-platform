@@ -8,11 +8,11 @@ logger = logging.getLogger(__name__)
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select
-from datetime import datetime, timedelta, timezone # <--- Adicione timezone aqui
+from datetime import datetime, timezone  # <--- Adicione timezone aqui
 
 from app.database import get_session
 from app.auth import get_current_user
-from app.models import User, Plan, Subscription, Bot
+from app.models import User, Plan, Bot
 from app import crud, schemas
 from app.webhook_security import require_mp_signature
 
@@ -22,11 +22,12 @@ router = APIRouter(prefix="/billing", tags=["SaaS Billing"])
 # SDK com SEU token de admin (quem recebe o dinheiro da assinatura)
 sdk = mercadopago.SDK(os.getenv("MP_ADMIN_ACCESS_TOKEN"))
 
+
 @router.post("/checkout")
 async def create_checkout(
-    req: schemas.CheckoutRequest, # Recebe o JSON novo
+    req: schemas.CheckoutRequest,  # Recebe o JSON novo
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     # 1. Valida se o Bot existe e pertence ao usuário
     bot = await session.get(Bot, req.bot_id)
@@ -39,7 +40,7 @@ async def create_checkout(
     query = select(Plan).where(Plan.key == req.plan_key)
     result = await session.execute(query)
     selected_plan = result.scalars().first()
-    
+
     if not selected_plan:
         raise HTTPException(status_code=404, detail="Plano não encontrado")
 
@@ -50,23 +51,25 @@ async def create_checkout(
             "frequency": 1,
             "frequency_type": "months",
             "transaction_amount": selected_plan.price,
-            "currency_id": "BRL"
+            "currency_id": "BRL",
         },
         "payer_email": current_user.email,
         # TRUQUE: Passamos "BOT_ID" na referência externa para saber quem ativar depois
-        "external_reference": f"BOT_{bot.id}", 
+        "external_reference": f"BOT_{bot.id}",
         "back_url": f"{os.getenv('BASE_URL', 'http://localhost:3000')}/dashboard/settings",
-        "status": "pending"
+        "status": "pending",
     }
 
     try:
         result = sdk.preapproval().create(subscription_data)
-        
+
         if result["status"] != 201:
-            error_detail = result.get("response", {}).get("message", "Erro desconhecido")
+            error_detail = result.get("response", {}).get(
+                "message", "Erro desconhecido"
+            )
             logger.error("Mercado Pago preapproval creation failed: %s", error_detail)
             raise HTTPException(status_code=400, detail=f"Erro MP: {error_detail}")
-            
+
         checkout_link = result["response"]["init_point"]
         return {"checkout_url": checkout_link}
 
@@ -74,8 +77,11 @@ async def create_checkout(
         logger.exception("Checkout creation failed")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.post("/webhook")
-async def billing_webhook(request: Request, session: AsyncSession = Depends(get_session)):
+async def billing_webhook(
+    request: Request, session: AsyncSession = Depends(get_session)
+):
     try:
         data = await request.json()
 
@@ -87,16 +93,16 @@ async def billing_webhook(request: Request, session: AsyncSession = Depends(get_
 
         if topic == "subscription_preapproval":
             preapproval_id = data.get("data", {}).get("id")
-            
+
             # Busca status atualizado no MP
             sub_info = sdk.preapproval().get(preapproval_id)["response"]
             status = sub_info["status"]
-            external_ref = sub_info["external_reference"] # Ex: "BOT_12"
-            
+            external_ref = sub_info["external_reference"]  # Ex: "BOT_12"
+
             # --- LÓGICA DE ATIVAÇÃO POR BOT ---
             if external_ref and external_ref.startswith("BOT_"):
                 bot_id = int(external_ref.split("_")[1])
-                
+
                 # Busca o dono do bot para registrar
                 bot = await session.get(Bot, bot_id)
                 if bot:
@@ -104,23 +110,26 @@ async def billing_webhook(request: Request, session: AsyncSession = Depends(get_
                     await crud.upsert_subscription(
                         session=session,
                         user_id=bot.user_id,
-                        bot_id=bot.id, # <--- Passa o ID do Bot
+                        bot_id=bot.id,  # <--- Passa o ID do Bot
                         mp_id=preapproval_id,
                         status=status,
-                        plan_type="pro" if status == "authorized" else "free"
+                        plan_type="pro" if status == "authorized" else "free",
                     )
-                    logger.info("Subscription updated for bot_id=%s, status=%s", bot_id, status)
+                    logger.info(
+                        "Subscription updated for bot_id=%s, status=%s", bot_id, status
+                    )
 
         return {"status": "ok"}
-    except Exception as e:
+    except Exception:
         logger.exception("Billing webhook processing failed")
         return {"status": "error"}
 
+
 @router.get("/status", response_model=schemas.SubscriptionStatusResponse)
 async def check_subscription_status(
-    bot_id: int, # <--- Agora exige bot_id na URL
+    bot_id: int,  # <--- Agora exige bot_id na URL
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     # Verifica se o bot é do usuário
     bot = await session.get(Bot, bot_id)
@@ -129,23 +138,23 @@ async def check_subscription_status(
 
     # Busca a assinatura deste bot específico
     sub = await crud.get_subscription_by_bot(session, bot_id)
-    
+
     if not sub:
         return {
             "status": "inactive",
             "is_active": False,
             "days_remaining": 0,
             "next_payment": datetime.now(timezone.utc),
-            "plan_type": "free"
+            "plan_type": "free",
         }
-    
+
     remaining = (sub.current_period_end - datetime.now(timezone.utc)).days
     is_active = sub.status == "authorized" and remaining > -3
-    
+
     return {
         "status": sub.status,
         "is_active": is_active,
         "days_remaining": max(0, remaining),
         "next_payment": sub.current_period_end,
-        "plan_type": sub.plan_type
+        "plan_type": sub.plan_type,
     }

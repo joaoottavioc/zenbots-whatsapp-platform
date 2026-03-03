@@ -3,7 +3,6 @@ import logging
 import os
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 from pydantic import EmailStr
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +16,9 @@ conf = ConnectionConfig(
     MAIL_STARTTLS=os.getenv("MAIL_STARTTLS", "False") == "True",
     MAIL_SSL_TLS=os.getenv("MAIL_SSL_TLS", "False") == "True",
     USE_CREDENTIALS=os.getenv("USE_CREDENTIALS", "False") == "True",
-    VALIDATE_CERTS=os.getenv("VALIDATE_CERTS", "False") == "True"
+    VALIDATE_CERTS=os.getenv("VALIDATE_CERTS", "False") == "True",
 )
+
 
 async def send_password_reset_email(email: EmailStr, token: str):
     """
@@ -26,7 +26,7 @@ async def send_password_reset_email(email: EmailStr, token: str):
     """
     # Link que aponta para o Frontend (vamos criar essa página depois)
     reset_link = f"http://localhost:3000/redefinir-senha?token={token}"
-    
+
     html = f"""
     <html>
         <body style="font-family: Arial, sans-serif; color: #333;">
@@ -50,7 +50,7 @@ async def send_password_reset_email(email: EmailStr, token: str):
         subject="Redefinir sua senha - ZenBots AI",
         recipients=[email],
         body=html,
-        subtype=MessageType.html
+        subtype=MessageType.html,
     )
 
     fm = FastMail(conf)

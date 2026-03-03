@@ -2,7 +2,10 @@
 from __future__ import annotations
 import logging
 from typing import List, Iterable
-import unicodedata, difflib, math, asyncio
+import unicodedata
+import difflib
+import math
+import asyncio
 import regex as re
 from sentence_transformers import SentenceTransformer
 import threading  # <--- ADICIONADO PARA PROTEÇÃO
@@ -25,6 +28,7 @@ _model_router: SentenceTransformer | None = None
 _products_lock = threading.Lock()
 _router_lock = threading.Lock()
 
+
 def _get_products_model() -> SentenceTransformer:
     global _model_products
     # Primeira verificação (rápida, sem bloqueio)
@@ -37,6 +41,7 @@ def _get_products_model() -> SentenceTransformer:
                 _model_products = SentenceTransformer(_PRODUCTS_MODEL_NAME)
     return _model_products
 
+
 def _get_router_model() -> SentenceTransformer:
     global _model_router
     if _model_router is None:
@@ -46,18 +51,36 @@ def _get_router_model() -> SentenceTransformer:
                 _model_router = SentenceTransformer(_ROUTER_MODEL_NAME)
     return _model_router
 
+
 # ========= Normalização focada em PT (para robustez a typos) =========
 
 # Léxico mínimo de âncoras para fuzzy-correction (ajuste à vontade)
 _LEXICON = {
-    "carrinho","pedido","qual","ver","mostrar","itens","limpar","esvaziar",
-    "adicionar","remover","modificar","finalizar","fechar","sugestoes","sugestao",
+    "carrinho",
+    "pedido",
+    "qual",
+    "ver",
+    "mostrar",
+    "itens",
+    "limpar",
+    "esvaziar",
+    "adicionar",
+    "remover",
+    "modificar",
+    "finalizar",
+    "fechar",
+    "sugestoes",
+    "sugestao",
 }
 
 _REPEAT_RE = re.compile(r"(.)\1{2,}")  # colapsa 3+ repetições
 
+
 def _strip_accents(s: str) -> str:
-    return "".join(ch for ch in unicodedata.normalize("NFKD", s) if not unicodedata.combining(ch))
+    return "".join(
+        ch for ch in unicodedata.normalize("NFKD", s) if not unicodedata.combining(ch)
+    )
+
 
 def normalize_pt(text: str) -> str:
     """
@@ -73,17 +96,21 @@ def normalize_pt(text: str) -> str:
     corrected: List[str] = []
     for tok in tokens:
         if len(tok) < 4:
-            corrected.append(tok); continue
+            corrected.append(tok)
+            continue
         match = difflib.get_close_matches(tok, _LEXICON, n=1, cutoff=0.86)
         corrected.append(match[0] if match else tok)
 
     return " ".join(corrected)
 
+
 # ========= Utilidades de embedding (com L2-normalização) =========
 
+
 def _l2_norm(v: List[float]) -> List[float]:
-    s = math.sqrt(sum(x*x for x in v)) or 1.0
-    return [x/s for x in v]
+    s = math.sqrt(sum(x * x for x in v)) or 1.0
+    return [x / s for x in v]
+
 
 def _encode_sync(texts: List[str], space: str, normalize: bool) -> List[List[float]]:
     if space == "router":
@@ -106,33 +133,46 @@ def _encode_sync(texts: List[str], space: str, normalize: bool) -> List[List[flo
         arr = [list(map(float, row)) for row in embs]
     return [_l2_norm(v) for v in arr]
 
+
 # ---- APIs públicas ----
 
-def embed_sync(texts: Iterable[str], space: str = "router", normalize: bool = True) -> List[List[float]]:
+
+def embed_sync(
+    texts: Iterable[str], space: str = "router", normalize: bool = True
+) -> List[List[float]]:
     """Embed síncrono (útil para pré-processamentos/offline)."""
     return _encode_sync(list(texts), space=space, normalize=normalize)
 
-async def embed_async(texts: Iterable[str], space: str = "router", normalize: bool = True) -> List[List[float]]:
+
+async def embed_async(
+    texts: Iterable[str], space: str = "router", normalize: bool = True
+) -> List[List[float]]:
     """Embed assíncrono (não bloqueia o event loop)."""
     lst = list(texts)
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _encode_sync, lst, space, normalize)
 
+
 # ---- Compat para código já existente no catálogo ----
+
 
 def generate_embedding(text: str) -> List[float]:
     """Compat: embedding individual para catálogo (products)."""
     # MANTÉM SÍNCRONO POR COMPATIBILIDADE, MAS EVITE USAR EM ROTAS ASYNC
     return embed_sync([text], space="products", normalize=False)[0]
 
+
 def generate_embeddings(texts: List[str]) -> List[List[float]]:
     """Compat: batch para catálogo (products)."""
     return embed_sync(texts, space="products", normalize=False)
 
+
 # ---- Atalhos ergonomicos (router) ----
+
 
 async def embed_router(texts: Iterable[str]) -> List[List[float]]:
     return await embed_async(texts, space="router", normalize=True)
+
 
 async def embed_products(texts: Iterable[str]) -> List[List[float]]:
     return await embed_async(texts, space="products", normalize=False)

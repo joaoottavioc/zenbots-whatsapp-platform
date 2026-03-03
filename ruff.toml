@@ -1,0 +1,9 @@
+[lint]
+# Ignore pre-existing style issues that are safe but noisy
+ignore = [
+    "E402",   # Module level import not at top of file (logger setup pattern)
+    "E701",   # Multiple statements on one line (compact guard clauses)
+    "E702",   # Multiple statements on one line, semicolon
+    "E712",   # Comparison to True/False (SQLAlchemy filter pattern)
+    "E722",   # Bare except (used intentionally in SSE cleanup)
+]

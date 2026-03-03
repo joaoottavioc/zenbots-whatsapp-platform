@@ -4,6 +4,7 @@ Async unit tests for the rate limiter.
 
 All Redis interaction is mocked via AsyncMock — no real Redis required.
 """
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 import redis.asyncio as redis

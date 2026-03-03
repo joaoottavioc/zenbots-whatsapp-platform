@@ -75,5 +75,8 @@ async def require_mp_signature(request: Request, data_id: str) -> None:
     x_request_id = request.headers.get("x-request-id", "")
 
     if not verify_mp_signature(x_signature, x_request_id, data_id, secret):
-        logger.warning("Invalid MP webhook signature from IP %s", request.client.host if request.client else "unknown")
+        logger.warning(
+            "Invalid MP webhook signature from IP %s",
+            request.client.host if request.client else "unknown",
+        )
         raise HTTPException(status_code=403, detail="Invalid webhook signature")

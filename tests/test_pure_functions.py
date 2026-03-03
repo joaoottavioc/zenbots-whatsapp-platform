@@ -8,6 +8,7 @@ Covered:
 - _build_cart_summary_message
 - is_likely_shopping_intent
 """
+
 import pytest
 from datetime import datetime
 from unittest.mock import MagicMock, patch
@@ -26,6 +27,7 @@ from tests.conftest import make_cart_item
 # Helpers
 # ===========================================================================
 
+
 def _bot_with_schedule(schedule: dict, is_open: bool = True, tz: str = "UTC"):
     bot = MagicMock()
     bot.is_open = is_open
@@ -37,6 +39,7 @@ def _bot_with_schedule(schedule: dict, is_open: bool = True, tz: str = "UTC"):
 # ===========================================================================
 # is_store_open
 # ===========================================================================
+
 
 class TestIsStoreOpen:
     def test_manual_close_overrides_schedule(self):
@@ -52,8 +55,10 @@ class TestIsStoreOpen:
     def test_closed_day_returns_false(self):
         """Day marked inactive should return False."""
         # Use a fixed schedule where every day is inactive
-        schedule = {k: {"active": False, "start": "09:00", "end": "22:00"}
-                    for k in ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]}
+        schedule = {
+            k: {"active": False, "start": "09:00", "end": "22:00"}
+            for k in ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+        }
         bot = _bot_with_schedule(schedule, is_open=True)
         assert is_store_open(bot) is False
 
@@ -101,6 +106,7 @@ class TestIsStoreOpen:
 # get_next_opening_text
 # ===========================================================================
 
+
 class TestGetNextOpeningText:
     def test_no_schedule_returns_em_breve(self):
         bot = MagicMock()
@@ -137,7 +143,10 @@ class TestGetNextOpeningText:
         assert result == "Quarta às 18:00"
 
     def test_all_days_inactive_returns_em_breve(self):
-        schedule = {k: {"active": False} for k in ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]}
+        schedule = {
+            k: {"active": False}
+            for k in ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+        }
         bot = _bot_with_schedule(schedule, tz="UTC")
         fixed = datetime(2024, 1, 1, 20, 0)
         with patch("app.whatsapp.datetime") as mock_dt:
@@ -149,6 +158,7 @@ class TestGetNextOpeningText:
 # ===========================================================================
 # _build_cart_summary_message
 # ===========================================================================
+
 
 class TestBuildCartSummaryMessage:
     def _make_bot(self, delivery_fee=5.0):
@@ -221,28 +231,35 @@ class TestBuildCartSummaryMessage:
 # is_likely_shopping_intent
 # ===========================================================================
 
+
 class TestIsLikelyShoppingIntent:
-    @pytest.mark.parametrize("text", [
-        "quero uma pizza",
-        "adiciona mais uma coca",
-        "tira o hamburguer",
-        "remova o item",
-        "ver meu carrinho",
-        "limpar pedido",
-        "cancelar tudo",
-        "quanto custa o açaí",
-    ])
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "quero uma pizza",
+            "adiciona mais uma coca",
+            "tira o hamburguer",
+            "remova o item",
+            "ver meu carrinho",
+            "limpar pedido",
+            "cancelar tudo",
+            "quanto custa o açaí",
+        ],
+    )
     def test_shopping_phrases_return_true(self, text):
         assert is_likely_shopping_intent(text) is True
 
-    @pytest.mark.parametrize("text", [
-        "boa tarde",
-        "ok",
-        "sim",
-        "não",
-        "obrigado",
-        "12345-678",
-        "rua das flores",
-    ])
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "boa tarde",
+            "ok",
+            "sim",
+            "não",
+            "obrigado",
+            "12345-678",
+            "rua das flores",
+        ],
+    )
     def test_non_shopping_phrases_return_false(self, text):
         assert is_likely_shopping_intent(text) is False

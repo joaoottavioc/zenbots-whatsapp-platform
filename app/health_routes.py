@@ -56,7 +56,8 @@ async def readiness():
         start = time.perf_counter()
         r = redis.from_url(
             f"redis://{REDIS_HOST}:{REDIS_PORT}/0",
-            socket_timeout=2, socket_connect_timeout=2,
+            socket_timeout=2,
+            socket_connect_timeout=2,
         )
         try:
             await r.ping()
@@ -74,7 +75,8 @@ async def readiness():
         start = time.perf_counter()
         r = redis.from_url(
             f"redis://{REDIS_HOST}:{REDIS_PORT}/1",
-            socket_timeout=2, socket_connect_timeout=2,
+            socket_timeout=2,
+            socket_connect_timeout=2,
         )
         try:
             await r.ping()

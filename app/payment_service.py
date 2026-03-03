@@ -4,7 +4,7 @@ import os
 import mercadopago
 import httpx
 from typing import Dict, Any, Optional
-from datetime import datetime, timedelta
+from datetime import timedelta
 from app.time import utcnow
 from app.encryption import encrypt_value, decrypt_value
 
@@ -25,7 +25,9 @@ async def refresh_mp_token(config, session) -> Optional[str]:
 
     plaintext_refresh = decrypt_value(config.refresh_token)
     if not plaintext_refresh:
-        logger.warning("Empty refresh_token after decryption for PaymentConfig %s", config.id)
+        logger.warning(
+            "Empty refresh_token after decryption for PaymentConfig %s", config.id
+        )
         return None
 
     try:
@@ -81,20 +83,23 @@ async def get_valid_access_token(config, session) -> Optional[str]:
         return await refresh_mp_token(config, session)
     return decrypt_value(config.access_token) if config.access_token else None
 
+
 async def create_pix_payment(
     order_id: int,
     total_amount: float,
     bot_name: str,
     contact_phone: str,
     access_token_cliente: str,  # <--- OBRIGATÓRIO: O Token do dono do bot
-    webhook_token: str = "",    # Token for webhook URL authentication
+    webhook_token: str = "",  # Token for webhook URL authentication
 ) -> Optional[Dict[str, Any]]:
     """
     Cria uma cobrança PIX no Mercado Pago usando o TOKEN DO CLIENTE ESPECÍFICO.
     """
-    
+
     if not access_token_cliente:
-        logger.error("Attempted to create payment without access token for order_id=%s", order_id)
+        logger.error(
+            "Attempted to create payment without access token for order_id=%s", order_id
+        )
         return None
 
     # ▼▼▼ INICIALIZAÇÃO DINÂMICA (A MÁGICA ACONTECE AQUI) ▼▼▼
@@ -115,41 +120,50 @@ async def create_pix_payment(
 
     payment_data = {
         "transaction_amount": round(total_amount, 2),
-        "description": f"Pedido #{order_id} - {bot_name}", 
+        "description": f"Pedido #{order_id} - {bot_name}",
         "payment_method_id": "pix",
         "date_of_expiration": expiration_date_iso,
         "payer": {
-            "email": f"{contact_phone}@zenbotz.com.br", # Email fictício para o pagador (MP exige email)
+            "email": f"{contact_phone}@zenbotz.com.br",  # Email fictício para o pagador (MP exige email)
         },
         "external_reference": str(order_id),
-        
         # O Webhook precisa ser notificado na sua URL global
-        "notification_url": f"{base_url}/payments/webhooks/payment-confirm/{order_id}?token={webhook_token}"
+        "notification_url": f"{base_url}/payments/webhooks/payment-confirm/{order_id}?token={webhook_token}",
     }
 
     try:
         # Chamada real ao Mercado Pago
         request_options = mercadopago.config.RequestOptions()
         request_options.custom_headers = {
-            'x-idempotency-key': str(order_id) # Evita cobrança duplicada se tentar gerar 2x
+            "x-idempotency-key": str(
+                order_id
+            )  # Evita cobrança duplicada se tentar gerar 2x
         }
 
         result = sdk.payment().create(payment_data, request_options)
 
         if result["status"] in [200, 201]:
             # Captura os dados do PIX tanto se for novo (201) quanto se já existir (200)
-            pix_data = result["response"].get("point_of_interaction", {}).get("transaction_data")
-    
+            pix_data = (
+                result["response"]
+                .get("point_of_interaction", {})
+                .get("transaction_data")
+            )
+
             if pix_data:
                 return {
                     "qr_code_base64": pix_data.get("qr_code_base64"),
                     "qr_code_url": pix_data.get("ticket_url"),
-                    "pix_copy_paste": pix_data.get("qr_code")
+                    "pix_copy_paste": pix_data.get("qr_code"),
                 }
             else:
-                logger.error("MP payment creation failed for order_id=%s, status=%s", order_id, result.get("status"))
+                logger.error(
+                    "MP payment creation failed for order_id=%s, status=%s",
+                    order_id,
+                    result.get("status"),
+                )
                 return None
 
-    except Exception as e:
+    except Exception:
         logger.exception("Critical error calling MP API for order_id=%s", order_id)
         return None

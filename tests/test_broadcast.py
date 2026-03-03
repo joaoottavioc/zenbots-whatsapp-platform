@@ -31,7 +31,9 @@ async def test_message_format_contains_type_and_payload():
     mock_redis.aclose = AsyncMock()
 
     with patch("app.broadcast.redis.from_url", return_value=mock_redis):
-        await broadcast_order_update("status_change", {"order_id": 42, "status": "paid"})
+        await broadcast_order_update(
+            "status_change", {"order_id": 42, "status": "paid"}
+        )
 
     call_args = mock_redis.publish.call_args
     message = call_args[0][1]
@@ -83,6 +85,7 @@ async def test_published_message_is_valid_json():
 
 
 # ---------- Per-bot channel routing ----------
+
 
 @pytest.mark.asyncio
 async def test_publishes_to_bot_specific_channel():
