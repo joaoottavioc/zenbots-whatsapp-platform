@@ -57,25 +57,31 @@ resource "aws_lb_listener" "https" {
 
 # ------------------ HTTP Listener (redirect to HTTPS or forward) ------------------
 
-resource "aws_lb_listener" "http" {
+resource "aws_lb_listener" "http_forward" {
+  count             = var.certificate_arn == "" ? 1 : 0
   load_balancer_arn = aws_lb.this.arn
   port              = 80
   protocol          = "HTTP"
 
   default_action {
-    type = var.certificate_arn != "" ? "redirect" : "forward"
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.backend.arn
+  }
+}
 
-    # Redirect to HTTPS when cert is present
-    dynamic "redirect" {
-      for_each = var.certificate_arn != "" ? [1] : []
-      content {
-        port        = "443"
-        protocol    = "HTTPS"
-        status_code = "HTTP_301"
-      }
+resource "aws_lb_listener" "http_redirect" {
+  count             = var.certificate_arn != "" ? 1 : 0
+  load_balancer_arn = aws_lb.this.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type = "redirect"
+
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
     }
-
-    # Forward directly when no cert (initial setup)
-    target_group_arn = var.certificate_arn == "" ? aws_lb_target_group.backend.arn : null
   }
 }

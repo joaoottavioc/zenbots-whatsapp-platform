@@ -13,12 +13,12 @@ nat_type = "instance"
 # Image tag — overridden by CI/CD
 image_tag = "latest-dev"
 
-# Domain (set after Route 53 zone is created in global)
-# route53_zone_id = ""
-# domain_prefix   = "dev-api"
+# Domain
+route53_zone_id = "Z09896471XJVSM51SC7S3"
+domain_prefix   = "dev-api"
 
-# ACM cert (set after requesting certificate)
-# certificate_arn = ""
+# ACM cert (enable after certificate is validated)
+# certificate_arn = "arn:aws:acm:us-east-1:578761488332:certificate/f17d26df-e7d5-4d79-8dcd-e429f0c6cac4"
 
 # Monitoring
-# alert_email = "you@example.com"
+alert_email = "joao.ottavio.cruzeiro@gmail.com"

@@ -15,7 +15,7 @@ output "target_group_arn" {
 }
 
 output "http_listener_arn" {
-  value = aws_lb_listener.http.arn
+  value = var.certificate_arn != "" ? aws_lb_listener.http_redirect[0].arn : aws_lb_listener.http_forward[0].arn
 }
 
 output "alb_arn_suffix" {
