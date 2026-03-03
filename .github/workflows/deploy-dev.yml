@@ -53,6 +53,7 @@ jobs:
       SECRET_KEY: test-secret-key-for-ci
       ENCRYPTION_KEY: TwG3wHb7SKizcVoU0bi3V7x3ODONyZCgdJr8jPK44L0=
       OPENAI_API_KEY: sk-test-ci-placeholder
+      MP_ADMIN_ACCESS_TOKEN: TEST-placeholder-token
       ENVIRONMENT: test
     steps:
       - uses: actions/checkout@v4

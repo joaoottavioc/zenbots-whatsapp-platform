@@ -20,7 +20,16 @@ from app.webhook_security import require_mp_signature
 router = APIRouter(prefix="/billing", tags=["SaaS Billing"])
 
 # SDK com SEU token de admin (quem recebe o dinheiro da assinatura)
-sdk = mercadopago.SDK(os.getenv("MP_ADMIN_ACCESS_TOKEN"))
+# Lazy initialization to avoid import-time errors when env var is not set (e.g., tests)
+_sdk = None
+
+
+def _get_sdk():
+    global _sdk
+    if _sdk is None:
+        token = os.getenv("MP_ADMIN_ACCESS_TOKEN", "")
+        _sdk = mercadopago.SDK(token)
+    return _sdk
 
 
 @router.post("/checkout")
@@ -61,7 +70,7 @@ async def create_checkout(
     }
 
     try:
-        result = sdk.preapproval().create(subscription_data)
+        result = _get_sdk().preapproval().create(subscription_data)
 
         if result["status"] != 201:
             error_detail = result.get("response", {}).get(
@@ -95,7 +104,7 @@ async def billing_webhook(
             preapproval_id = data.get("data", {}).get("id")
 
             # Busca status atualizado no MP
-            sub_info = sdk.preapproval().get(preapproval_id)["response"]
+            sub_info = _get_sdk().preapproval().get(preapproval_id)["response"]
             status = sub_info["status"]
             external_ref = sub_info["external_reference"]  # Ex: "BOT_12"
 
