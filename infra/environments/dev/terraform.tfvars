@@ -1,9 +1,11 @@
 # Dev environment configuration
-# Usage: terraform plan -var-file=terraform.tfvars -var="db_password=xxx" -var="account_id=xxx"
 
 project     = "zenbots"
 environment = "dev"
 region      = "us-east-1"
+
+account_id         = "578761488332"
+ecr_repository_url = "578761488332.dkr.ecr.us-east-1.amazonaws.com/zenbots/app"
 
 # NAT Instance for dev ($3/mo vs $32/mo gateway)
 nat_type = "instance"

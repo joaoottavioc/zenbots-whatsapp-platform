@@ -13,7 +13,7 @@ resource "aws_db_parameter_group" "this" {
 
   parameter {
     name  = "shared_preload_libraries"
-    value = "vector"
+    value = "pg_stat_statements"
   }
 
   tags = {

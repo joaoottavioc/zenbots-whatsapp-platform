@@ -255,14 +255,12 @@ resource "aws_ecs_service" "backend" {
     container_port   = 8000
   }
 
-  deployment_configuration {
-    minimum_healthy_percent = var.minimum_healthy_percent
-    maximum_percent         = var.maximum_percent
+  deployment_minimum_healthy_percent = var.minimum_healthy_percent
+  deployment_maximum_percent         = var.maximum_percent
 
-    deployment_circuit_breaker {
-      enable   = true
-      rollback = true
-    }
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
   }
 
   dynamic "ordered_placement_strategy" {
@@ -298,14 +296,12 @@ resource "aws_ecs_service" "worker" {
     security_groups = [var.ecs_security_group_id]
   }
 
-  deployment_configuration {
-    minimum_healthy_percent = var.minimum_healthy_percent
-    maximum_percent         = var.maximum_percent
+  deployment_minimum_healthy_percent = var.minimum_healthy_percent
+  deployment_maximum_percent         = var.maximum_percent
 
-    deployment_circuit_breaker {
-      enable   = true
-      rollback = true
-    }
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
   }
 
   lifecycle {

@@ -24,3 +24,9 @@ db_data/
 .ruff_cache/
 .coverage
 htmlcov/
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan

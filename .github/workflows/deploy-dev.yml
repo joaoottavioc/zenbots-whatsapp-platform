@@ -133,6 +133,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }}-migrations
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest-dev-migrations
           cache-from: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest-dev
           cache-to: type=inline
 
@@ -178,7 +179,7 @@ jobs:
             # Print migration logs for debugging
             TASK_ID=$(echo "$TASK_ARN" | awk -F'/' '{print $NF}')
             aws logs get-log-events \
-              --log-group-name "/ecs/zenbots-dev" \
+              --log-group-name "/ecs/zenbots-dev/backend" \
               --log-stream-name "migrations/migrations/$TASK_ID" \
               --query 'events[*].message' \
               --output text || echo "Could not retrieve migration logs"
@@ -227,6 +228,7 @@ jobs:
   smoke-test:
     needs: deploy
     runs-on: ubuntu-latest
+    environment: dev
     steps:
       - name: Health check (full readiness)
         run: |

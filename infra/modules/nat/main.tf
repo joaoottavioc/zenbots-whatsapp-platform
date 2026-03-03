@@ -21,23 +21,8 @@ resource "aws_nat_gateway" "this" {
 
 # ------------------ NAT Instance (dev — $3/mo) ------------------
 
-data "aws_ami" "nat" {
-  count       = var.nat_type == "instance" ? 1 : 0
-  most_recent = true
-  owners      = ["amazon"]
-
-  filter {
-    name   = "name"
-    values = ["amzn-ami-vpc-nat-*-arm64-ebs"]
-  }
-
-  filter {
-    name   = "state"
-    values = ["available"]
-  }
-}
-
-# Fallback: if no ARM64 NAT AMI found, use fck-nat (community AMI)
+# fck-nat: lightweight, open-source NAT AMI optimized for low-traffic use
+# https://fck-nat.dev — ARM64 compatible, much cheaper than managed NAT Gateway
 data "aws_ami" "fck_nat" {
   count       = var.nat_type == "instance" ? 1 : 0
   most_recent = true
@@ -55,9 +40,7 @@ data "aws_ami" "fck_nat" {
 }
 
 locals {
-  nat_ami_id = var.nat_type == "instance" ? (
-    length(data.aws_ami.nat) > 0 && data.aws_ami.nat[0].id != "" ? data.aws_ami.nat[0].id : data.aws_ami.fck_nat[0].id
-  ) : ""
+  nat_ami_id = var.nat_type == "instance" ? data.aws_ami.fck_nat[0].id : ""
 }
 
 resource "aws_security_group" "nat" {
