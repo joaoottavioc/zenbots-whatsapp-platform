@@ -28,10 +28,14 @@ async def main():
         has_alembic = result.scalar()
 
         if not has_alembic:
-            # Fresh DB: create all tables from SQLModel metadata
+            # Fresh DB: create pgvector extension first (needed for Product.embedding column)
+            print("Fresh database detected. Creating pgvector extension...")
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+
+            # Create all tables from SQLModel metadata
             from sqlmodel import SQLModel
 
-            print("Fresh database detected. Creating tables from SQLModel metadata...")
+            print("Creating tables from SQLModel metadata...")
             await conn.run_sync(SQLModel.metadata.create_all)
             print("Tables created.")
 
