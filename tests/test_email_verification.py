@@ -65,9 +65,15 @@ async def test_register_sends_verification_email(mock_session):
     register_data = RegisterRequest(email="new@example.com", password="StrongPass1!")
 
     with (
-        patch("app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=None),
+        patch(
+            "app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=None
+        ),
         patch("app.auth.get_password_hash", return_value="hashed"),
-        patch("app.auth.store_email_verification_token", new_callable=AsyncMock, return_value="test-token") as mock_store,
+        patch(
+            "app.auth.store_email_verification_token",
+            new_callable=AsyncMock,
+            return_value="test-token",
+        ) as mock_store,
         patch("app.auth.send_verification_email", new_callable=AsyncMock) as mock_send,
     ):
         result = await register(register_data=register_data, session=mock_session)
@@ -83,9 +89,15 @@ async def test_register_succeeds_even_if_email_fails(mock_session):
     register_data = RegisterRequest(email="new@example.com", password="StrongPass1!")
 
     with (
-        patch("app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=None),
+        patch(
+            "app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=None
+        ),
         patch("app.auth.get_password_hash", return_value="hashed"),
-        patch("app.auth.store_email_verification_token", new_callable=AsyncMock, side_effect=Exception("Redis down")),
+        patch(
+            "app.auth.store_email_verification_token",
+            new_callable=AsyncMock,
+            side_effect=Exception("Redis down"),
+        ),
     ):
         result = await register(register_data=register_data, session=mock_session)
 
@@ -108,7 +120,11 @@ async def test_login_blocked_when_email_not_verified(
     form.password = "StrongPass1!"
 
     with (
-        patch("app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=unverified_user),
+        patch(
+            "app.auth.crud.get_user_by_email",
+            new_callable=AsyncMock,
+            return_value=unverified_user,
+        ),
         patch("app.auth.verify_password", return_value=True),
     ):
         from fastapi import HTTPException
@@ -133,7 +149,11 @@ async def test_login_allowed_when_email_verified(
     form.password = "StrongPass1!"
 
     with (
-        patch("app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=verified_user),
+        patch(
+            "app.auth.crud.get_user_by_email",
+            new_callable=AsyncMock,
+            return_value=verified_user,
+        ),
         patch("app.auth.verify_password", return_value=True),
         patch("app.auth.create_access_token", return_value="fake-jwt"),
     ):
@@ -157,13 +177,24 @@ async def test_verify_email_success(mock_session, unverified_user):
     payload = VerifyEmailRequest(token="valid-token")
 
     with (
-        patch("app.auth.consume_email_verification_token", new_callable=AsyncMock, return_value=(1, "new@example.com")),
-        patch("app.auth.crud.get_user_by_id", new_callable=AsyncMock, return_value=unverified_user),
+        patch(
+            "app.auth.consume_email_verification_token",
+            new_callable=AsyncMock,
+            return_value=(1, "new@example.com"),
+        ),
+        patch(
+            "app.auth.crud.get_user_by_id",
+            new_callable=AsyncMock,
+            return_value=unverified_user,
+        ),
     ):
         result = await verify_email(payload=payload, session=mock_session)
 
     assert unverified_user.is_email_verified is True
-    assert "sucesso" in result["message"].lower() or "verificado" in result["message"].lower()
+    assert (
+        "sucesso" in result["message"].lower()
+        or "verificado" in result["message"].lower()
+    )
 
 
 @pytest.mark.asyncio
@@ -171,7 +202,11 @@ async def test_verify_email_invalid_token(mock_session):
     """Invalid/expired token should return 400."""
     payload = VerifyEmailRequest(token="bad-token")
 
-    with patch("app.auth.consume_email_verification_token", new_callable=AsyncMock, return_value=None):
+    with patch(
+        "app.auth.consume_email_verification_token",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException) as exc_info:
@@ -185,8 +220,16 @@ async def test_verify_email_already_verified(mock_session, verified_user):
     payload = VerifyEmailRequest(token="valid-token")
 
     with (
-        patch("app.auth.consume_email_verification_token", new_callable=AsyncMock, return_value=(2, "verified@example.com")),
-        patch("app.auth.crud.get_user_by_id", new_callable=AsyncMock, return_value=verified_user),
+        patch(
+            "app.auth.consume_email_verification_token",
+            new_callable=AsyncMock,
+            return_value=(2, "verified@example.com"),
+        ),
+        patch(
+            "app.auth.crud.get_user_by_id",
+            new_callable=AsyncMock,
+            return_value=verified_user,
+        ),
     ):
         result = await verify_email(payload=payload, session=mock_session)
 
@@ -202,8 +245,14 @@ async def test_verify_email_user_email_mismatch(mock_session):
     user.email = "changed@example.com"
 
     with (
-        patch("app.auth.consume_email_verification_token", new_callable=AsyncMock, return_value=(1, "old@example.com")),
-        patch("app.auth.crud.get_user_by_id", new_callable=AsyncMock, return_value=user),
+        patch(
+            "app.auth.consume_email_verification_token",
+            new_callable=AsyncMock,
+            return_value=(1, "old@example.com"),
+        ),
+        patch(
+            "app.auth.crud.get_user_by_id", new_callable=AsyncMock, return_value=user
+        ),
     ):
         from fastapi import HTTPException
 
@@ -218,33 +267,53 @@ async def test_verify_email_user_email_mismatch(mock_session):
 
 
 @pytest.mark.asyncio
-async def test_resend_verification_sends_email(mock_request, mock_session, unverified_user):
+async def test_resend_verification_sends_email(
+    mock_request, mock_session, unverified_user
+):
     """Resend should send a new verification email for unverified users."""
     payload = ResendVerificationRequest(email="new@example.com")
 
     with (
         patch("app.auth.is_rate_limited", new_callable=AsyncMock, return_value=False),
-        patch("app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=unverified_user),
-        patch("app.auth.store_email_verification_token", new_callable=AsyncMock, return_value="new-token") as mock_store,
+        patch(
+            "app.auth.crud.get_user_by_email",
+            new_callable=AsyncMock,
+            return_value=unverified_user,
+        ),
+        patch(
+            "app.auth.store_email_verification_token",
+            new_callable=AsyncMock,
+            return_value="new-token",
+        ) as mock_store,
         patch("app.auth.send_verification_email", new_callable=AsyncMock) as mock_send,
     ):
-        await resend_verification(payload=payload, request=mock_request, session=mock_session)
+        await resend_verification(
+            payload=payload, request=mock_request, session=mock_session
+        )
 
     mock_store.assert_called_once()
     mock_send.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_resend_verification_already_verified_does_not_reveal(mock_request, mock_session, verified_user):
+async def test_resend_verification_already_verified_does_not_reveal(
+    mock_request, mock_session, verified_user
+):
     """Resend for verified user should not reveal the user's status."""
     payload = ResendVerificationRequest(email="verified@example.com")
 
     with (
         patch("app.auth.is_rate_limited", new_callable=AsyncMock, return_value=False),
-        patch("app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=verified_user),
+        patch(
+            "app.auth.crud.get_user_by_email",
+            new_callable=AsyncMock,
+            return_value=verified_user,
+        ),
         patch("app.auth.send_verification_email", new_callable=AsyncMock) as mock_send,
     ):
-        result = await resend_verification(payload=payload, request=mock_request, session=mock_session)
+        result = await resend_verification(
+            payload=payload, request=mock_request, session=mock_session
+        )
 
     # Should NOT send email but return same generic message
     mock_send.assert_not_called()
@@ -258,17 +327,23 @@ async def test_resend_verification_nonexistent_user(mock_request, mock_session):
 
     with (
         patch("app.auth.is_rate_limited", new_callable=AsyncMock, return_value=False),
-        patch("app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=None),
+        patch(
+            "app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=None
+        ),
         patch("app.auth.send_verification_email", new_callable=AsyncMock) as mock_send,
     ):
-        result = await resend_verification(payload=payload, request=mock_request, session=mock_session)
+        result = await resend_verification(
+            payload=payload, request=mock_request, session=mock_session
+        )
 
     mock_send.assert_not_called()
     assert "se o e-mail existir" in result["message"].lower()
 
 
 @pytest.mark.asyncio
-async def test_resend_verification_rate_limited(mock_request, mock_session, unverified_user):
+async def test_resend_verification_rate_limited(
+    mock_request, mock_session, unverified_user
+):
     """Resend should return 429 when rate limited per email."""
     payload = ResendVerificationRequest(email="new@example.com")
 
@@ -278,5 +353,7 @@ async def test_resend_verification_rate_limited(mock_request, mock_session, unve
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException) as exc_info:
-            await resend_verification(payload=payload, request=mock_request, session=mock_session)
+            await resend_verification(
+                payload=payload, request=mock_request, session=mock_session
+            )
         assert exc_info.value.status_code == 429

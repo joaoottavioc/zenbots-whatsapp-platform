@@ -221,7 +221,9 @@ async def register(
     except Exception as e:
         logger.error("Failed to send verification email on register: %s", e)
 
-    return {"message": "User created successfully. Please check your email to verify your account."}
+    return {
+        "message": "User created successfully. Please check your email to verify your account."
+    }
 
 
 class VerifyEmailRequest(BaseModel):
@@ -281,7 +283,9 @@ async def resend_verification(
 
     # Don't reveal whether the email exists
     if not user or user.is_email_verified:
-        return {"message": "Se o e-mail existir e não estiver verificado, um link foi enviado."}
+        return {
+            "message": "Se o e-mail existir e não estiver verificado, um link foi enviado."
+        }
 
     try:
         token = await store_email_verification_token(user.id, user.email)
@@ -293,7 +297,9 @@ async def resend_verification(
             detail="Falha ao enviar e-mail de verificação.",
         )
 
-    return {"message": "Se o e-mail existir e não estiver verificado, um link foi enviado."}
+    return {
+        "message": "Se o e-mail existir e não estiver verificado, um link foi enviado."
+    }
 
 
 @router.post(
