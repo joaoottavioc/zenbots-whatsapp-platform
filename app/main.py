@@ -141,10 +141,10 @@ def build_cors_kwargs() -> dict:
 from app.csrf import CSRFMiddleware
 
 _cors_kwargs = build_cors_kwargs()
-# Starlette LIFO: last added = outermost. CORS runs first (handles preflight),
-# then CSRF runs on the inner layer.
-app.add_middleware(CORSMiddleware, **_cors_kwargs)
+# Starlette LIFO: last added = outermost. CORS must be outermost so it
+# adds headers to ALL responses (including CSRF 403 rejections).
 app.add_middleware(CSRFMiddleware)
+app.add_middleware(CORSMiddleware, **_cors_kwargs)
 
 # --- Inclusão das Rotas ---
 app.include_router(whatsapp.router)
