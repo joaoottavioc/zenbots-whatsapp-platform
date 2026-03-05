@@ -148,6 +148,12 @@ variable "migrations_image" {
 
 # --- Deployment ---
 
+variable "health_check_grace_period" {
+  description = "Seconds to wait before ALB health checks count against new tasks (must cover startup time)"
+  type        = number
+  default     = 360
+}
+
 variable "minimum_healthy_percent" {
   type    = number
   default = 100

@@ -255,6 +255,8 @@ resource "aws_ecs_service" "backend" {
     container_port   = 8000
   }
 
+  health_check_grace_period_seconds = var.health_check_grace_period
+
   deployment_minimum_healthy_percent = var.minimum_healthy_percent
   deployment_maximum_percent         = var.maximum_percent
 
