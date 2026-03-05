@@ -5,13 +5,14 @@ Tests for rate limiting on the payment webhook endpoint.
 
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from fastapi.testclient import TestClient
 
 
 @pytest.mark.asyncio
 async def test_payment_webhook_returns_429_when_rate_limited():
     """handle_payment_notification returns 429 when rate limited."""
-    with patch("app.whatsapp.is_rate_limited", new_callable=AsyncMock, return_value=True):
+    with patch(
+        "app.whatsapp.is_rate_limited", new_callable=AsyncMock, return_value=True
+    ):
         from app.whatsapp import handle_payment_notification
 
         mock_request = MagicMock()
@@ -32,7 +33,9 @@ async def test_payment_webhook_proceeds_when_not_rate_limited():
     mock_request.headers = {}
 
     with (
-        patch("app.whatsapp.is_rate_limited", new_callable=AsyncMock, return_value=False),
+        patch(
+            "app.whatsapp.is_rate_limited", new_callable=AsyncMock, return_value=False
+        ),
         patch("app.whatsapp.require_mp_signature", new_callable=AsyncMock),
         patch("app.whatsapp.async_session") as mock_session_factory,
     ):

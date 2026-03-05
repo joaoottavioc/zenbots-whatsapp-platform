@@ -23,16 +23,12 @@ class TestFileUploadMagicBytes:
     def test_upload_checks_jpeg_magic_bytes(self):
         """The upload function should check for JPEG magic bytes."""
         source = _read_bot_routes_source()
-        assert "\\xff\\xd8\\xff" in source, (
-            "Upload should check for JPEG magic bytes"
-        )
+        assert "\\xff\\xd8\\xff" in source, "Upload should check for JPEG magic bytes"
 
     def test_upload_checks_png_magic_bytes(self):
         """The upload function should check for PNG magic bytes."""
         source = _read_bot_routes_source()
-        assert "\\x89PNG" in source, (
-            "Upload should check for PNG magic bytes"
-        )
+        assert "\\x89PNG" in source, "Upload should check for PNG magic bytes"
 
     def test_upload_has_unsupported_file_type_error(self):
         """Unsupported file types should raise HTTP 400."""

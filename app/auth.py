@@ -20,7 +20,12 @@ from app.schemas import ForgotPasswordRequest
 from app.email_service import send_password_reset_email
 from sqlmodel import select
 from app.time import utcnow
-from app.rate_limiter import is_rate_limited, create_sse_ticket, mark_reset_token_used, is_reset_token_used
+from app.rate_limiter import (
+    is_rate_limited,
+    create_sse_ticket,
+    mark_reset_token_used,
+    is_reset_token_used,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -254,7 +259,11 @@ async def login_for_access_token(
         max_age=COOKIE_MAX_AGE,
     )
 
-    return {"access_token": access_token, "token_type": "bearer", "csrf_token": csrf_token}
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "csrf_token": csrf_token,
+    }
 
 
 # --- Logout ---

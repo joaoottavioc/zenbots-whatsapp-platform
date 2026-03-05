@@ -17,6 +17,7 @@ from app.models import Plan, User
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 def _make_user(is_admin: bool = False) -> User:
     user = MagicMock(spec=User)
     user.id = 1
@@ -124,7 +125,9 @@ class TestAdminPlanCRUD:
     def test_create_plan_success(self, admin_client):
         plan = _make_plan()
         with (
-            patch("app.crud.get_plan_by_key", new_callable=AsyncMock, return_value=None),
+            patch(
+                "app.crud.get_plan_by_key", new_callable=AsyncMock, return_value=None
+            ),
             patch("app.crud.create_plan", new_callable=AsyncMock, return_value=plan),
         ):
             resp = admin_client.post(
@@ -160,19 +163,13 @@ class TestAdminPlanCRUD:
         with patch(
             "app.crud.update_plan", new_callable=AsyncMock, return_value=updated
         ):
-            resp = admin_client.put(
-                "/admin/plans/1", json={"title": "Updated Pro"}
-            )
+            resp = admin_client.put("/admin/plans/1", json={"title": "Updated Pro"})
         assert resp.status_code == 200
         assert resp.json()["title"] == "Updated Pro"
 
     def test_update_plan_not_found_404(self, admin_client):
-        with patch(
-            "app.crud.update_plan", new_callable=AsyncMock, return_value=None
-        ):
-            resp = admin_client.put(
-                "/admin/plans/999", json={"title": "Nope"}
-            )
+        with patch("app.crud.update_plan", new_callable=AsyncMock, return_value=None):
+            resp = admin_client.put("/admin/plans/999", json={"title": "Nope"})
         assert resp.status_code == 404
 
     def test_update_plan_empty_body_400(self, admin_client):
@@ -180,16 +177,12 @@ class TestAdminPlanCRUD:
         assert resp.status_code == 400
 
     def test_delete_plan_success(self, admin_client):
-        with patch(
-            "app.crud.delete_plan", new_callable=AsyncMock, return_value=True
-        ):
+        with patch("app.crud.delete_plan", new_callable=AsyncMock, return_value=True):
             resp = admin_client.delete("/admin/plans/1")
         assert resp.status_code == 204
 
     def test_delete_plan_not_found_404(self, admin_client):
-        with patch(
-            "app.crud.delete_plan", new_callable=AsyncMock, return_value=False
-        ):
+        with patch("app.crud.delete_plan", new_callable=AsyncMock, return_value=False):
             resp = admin_client.delete("/admin/plans/999")
         assert resp.status_code == 404
 

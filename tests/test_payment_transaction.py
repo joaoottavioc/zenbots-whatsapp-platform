@@ -6,7 +6,7 @@ Tests for transaction isolation in payment handler (Fix #9).
 2. create_order with auto_commit=False uses flush instead of commit
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.crud import create_order

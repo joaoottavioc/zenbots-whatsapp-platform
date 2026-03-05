@@ -34,7 +34,9 @@ def mock_session():
 
 
 @pytest.mark.asyncio
-async def test_failed_login_logs_warning(mock_request, mock_response, mock_form_data, mock_session):
+async def test_failed_login_logs_warning(
+    mock_request, mock_response, mock_form_data, mock_session
+):
     """Failed login should log AUTH_FAIL with email and IP."""
     with (
         patch(

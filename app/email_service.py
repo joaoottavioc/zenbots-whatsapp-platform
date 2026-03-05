@@ -69,6 +69,8 @@ async def send_password_reset_email(email: EmailStr, token: str):
     try:
         await fm.send_message(message)
     except Exception:
-        logger.exception("Failed to send password reset email to %s via %s", email, conf.MAIL_SERVER)
+        logger.exception(
+            "Failed to send password reset email to %s via %s", email, conf.MAIL_SERVER
+        )
         raise
     logger.info("Password reset email sent via %s", conf.MAIL_SERVER)

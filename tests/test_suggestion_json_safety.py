@@ -3,9 +3,6 @@
 
 import ast
 import inspect
-import textwrap
-
-import pytest
 
 from app import whatsapp
 
@@ -61,9 +58,12 @@ class TestConceptValidation:
     def test_concept_special_chars_cleaned(self):
         """Special characters should be removed from concept."""
         import regex as re
+
         concept = "pizza'; DROP TABLE<>"
         concept = str(concept)[:100]
-        concept = re.sub(r"[^\w\s\-áàâãéèêíìîóòôõúùûçÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ]", "", concept).strip()
+        concept = re.sub(
+            r"[^\w\s\-áàâãéèêíìîóòôõúùûçÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ]", "", concept
+        ).strip()
         assert concept == "pizza DROP TABLE"
 
     def test_concept_long_truncated(self):
@@ -75,9 +75,12 @@ class TestConceptValidation:
     def test_concept_empty_after_clean_becomes_none(self):
         """If cleaning removes everything, concept should become None."""
         import regex as re
+
         concept = "!@#$%^&*()"
         concept = str(concept)[:100]
-        concept = re.sub(r"[^\w\s\-áàâãéèêíìîóòôõúùûçÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ]", "", concept).strip()
+        concept = re.sub(
+            r"[^\w\s\-áàâãéèêíìîóòôõúùûçÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ]", "", concept
+        ).strip()
         if not concept:
             concept = None
         assert concept is None
@@ -85,7 +88,10 @@ class TestConceptValidation:
     def test_concept_preserves_accented_chars(self):
         """Portuguese accented characters should be preserved."""
         import regex as re
+
         concept = "frango à parmegiana"
         concept = str(concept)[:100]
-        concept = re.sub(r"[^\w\s\-áàâãéèêíìîóòôõúùûçÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ]", "", concept).strip()
+        concept = re.sub(
+            r"[^\w\s\-áàâãéèêíìîóòôõúùûçÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ]", "", concept
+        ).strip()
         assert concept == "frango à parmegiana"

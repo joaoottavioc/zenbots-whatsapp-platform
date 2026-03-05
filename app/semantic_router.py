@@ -86,7 +86,9 @@ async def _ensure_proto_embeddings():
     async with _EMB_LOCK:
         if _EMB_CACHE:  # double-check after acquiring lock
             return
-        logger.debug("Populating semantic router embedding cache (%d intents)", len(PROTOS))
+        logger.debug(
+            "Populating semantic router embedding cache (%d intents)", len(PROTOS)
+        )
         for intent, phrases in PROTOS.items():
             _EMB_CACHE[intent] = await embed_router(phrases)
         logger.debug("Semantic router cache populated")

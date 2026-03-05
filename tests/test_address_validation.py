@@ -33,7 +33,9 @@ class TestAddressValidation:
     @pytest.mark.asyncio
     @patch("app.whatsapp.send_whatsapp_message", new_callable=AsyncMock)
     @patch("app.whatsapp.crud.add_interaction_to_history", new_callable=AsyncMock)
-    async def test_address_with_missing_fields_uses_fallbacks(self, mock_history, mock_send):
+    async def test_address_with_missing_fields_uses_fallbacks(
+        self, mock_history, mock_send
+    ):
         """When partial_address has only CEP, fallbacks should be used."""
         from app.whatsapp import _handle_number_complement
 
@@ -48,7 +50,9 @@ class TestAddressValidation:
     @patch("app.whatsapp.send_whatsapp_message", new_callable=AsyncMock)
     @patch("app.whatsapp.crud.add_interaction_to_history", new_callable=AsyncMock)
     @patch("app.whatsapp.app.utils.get_address_from_cep", new_callable=AsyncMock)
-    async def test_cep_only_digits_reach_external_api(self, mock_get_cep, mock_history, mock_send):
+    async def test_cep_only_digits_reach_external_api(
+        self, mock_get_cep, mock_history, mock_send
+    ):
         """Special chars in CEP input should be stripped — only digits reach the API."""
         from app.whatsapp import _handle_cep
 

@@ -32,7 +32,10 @@ class TestOrderStatusFilter:
         mock_bot.user_id = 1
 
         with (
-            patch("app.bot_routes.crud.get_bot_by_id", new=AsyncMock(return_value=mock_bot)),
+            patch(
+                "app.bot_routes.crud.get_bot_by_id",
+                new=AsyncMock(return_value=mock_bot),
+            ),
             patch(
                 "app.bot_routes.crud.list_orders_by_bot", new=AsyncMock(return_value=[])
             ) as mock_list,
@@ -58,12 +61,15 @@ class TestOrderStatusFilter:
         mock_bot.user_id = 1
 
         with (
-            patch("app.bot_routes.crud.get_bot_by_id", new=AsyncMock(return_value=mock_bot)),
+            patch(
+                "app.bot_routes.crud.get_bot_by_id",
+                new=AsyncMock(return_value=mock_bot),
+            ),
             patch(
                 "app.bot_routes.crud.list_orders_by_bot", new=AsyncMock(return_value=[])
             ) as mock_list,
         ):
-            result = await list_bot_orders(
+            await list_bot_orders(
                 bot_id=1, status=None, session=mock_session, current_user=mock_user
             )
 
@@ -81,7 +87,9 @@ class TestOrderStatusFilter:
         mock_bot = MagicMock()
         mock_bot.user_id = 1
 
-        with patch("app.bot_routes.crud.get_bot_by_id", new=AsyncMock(return_value=mock_bot)):
+        with patch(
+            "app.bot_routes.crud.get_bot_by_id", new=AsyncMock(return_value=mock_bot)
+        ):
             with pytest.raises(HTTPException) as exc_info:
                 await list_bot_orders(
                     bot_id=1,
@@ -104,7 +112,10 @@ class TestOrderStatusFilter:
         mock_bot.user_id = 1
 
         with (
-            patch("app.bot_routes.crud.get_bot_by_id", new=AsyncMock(return_value=mock_bot)),
+            patch(
+                "app.bot_routes.crud.get_bot_by_id",
+                new=AsyncMock(return_value=mock_bot),
+            ),
             patch(
                 "app.bot_routes.crud.list_orders_by_bot", new=AsyncMock(return_value=[])
             ) as mock_list,

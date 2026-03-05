@@ -254,7 +254,9 @@ class Order(SQLModel, table=True):
     bot: "Bot" = Relationship(back_populates="orders")
 
     # ▼▼▼ NOVOS CAMPOS ▼▼▼
-    contact_id: Optional[int] = Field(default=None, foreign_key="contact.id", index=True)
+    contact_id: Optional[int] = Field(
+        default=None, foreign_key="contact.id", index=True
+    )
     payment_method: Optional[str] = Field(default=None)
     contact: Optional["Contact"] = Relationship()
 

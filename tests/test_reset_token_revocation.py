@@ -12,11 +12,17 @@ SECRET_KEY = "test-secret-key-for-testing"
 ALGORITHM = "HS256"
 
 
-def _make_reset_token(email="test@example.com", jti="unique-jti-123", token_type="reset"):
+def _make_reset_token(
+    email="test@example.com", jti="unique-jti-123", token_type="reset"
+):
     from app.time import utcnow
     from datetime import timedelta
 
-    payload = {"sub": email, "type": token_type, "exp": utcnow() + timedelta(minutes=15)}
+    payload = {
+        "sub": email,
+        "type": token_type,
+        "exp": utcnow() + timedelta(minutes=15),
+    }
     if jti:
         payload["jti"] = jti
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
@@ -29,7 +35,9 @@ async def test_used_token_rejected_with_400():
 
     with (
         patch("app.auth.SECRET_KEY", SECRET_KEY),
-        patch("app.auth.is_reset_token_used", new_callable=AsyncMock, return_value=True),
+        patch(
+            "app.auth.is_reset_token_used", new_callable=AsyncMock, return_value=True
+        ),
         patch("app.auth.mark_reset_token_used", new_callable=AsyncMock),
         patch("app.auth.is_rate_limited", new_callable=AsyncMock, return_value=False),
     ):
@@ -63,7 +71,9 @@ async def test_token_marked_used_after_success():
 
     with (
         patch("app.auth.SECRET_KEY", SECRET_KEY),
-        patch("app.auth.is_reset_token_used", new_callable=AsyncMock, return_value=False),
+        patch(
+            "app.auth.is_reset_token_used", new_callable=AsyncMock, return_value=False
+        ),
         patch("app.auth.mark_reset_token_used", new_callable=AsyncMock) as mock_mark,
         patch("app.auth.is_rate_limited", new_callable=AsyncMock, return_value=False),
         patch("app.auth.get_password_hash", return_value="newhash"),
@@ -94,7 +104,9 @@ async def test_token_without_jti_still_works():
 
     with (
         patch("app.auth.SECRET_KEY", SECRET_KEY),
-        patch("app.auth.is_reset_token_used", new_callable=AsyncMock, return_value=False) as mock_check,
+        patch(
+            "app.auth.is_reset_token_used", new_callable=AsyncMock, return_value=False
+        ) as mock_check,
         patch("app.auth.mark_reset_token_used", new_callable=AsyncMock) as mock_mark,
         patch("app.auth.is_rate_limited", new_callable=AsyncMock, return_value=False),
         patch("app.auth.get_password_hash", return_value="newhash"),

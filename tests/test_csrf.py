@@ -1,8 +1,7 @@
 """Tests for CSRFMiddleware (double-submit cookie pattern)."""
 
 import pytest
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.csrf import CSRFMiddleware
@@ -69,7 +68,9 @@ def test_get_passes_without_csrf(client):
 
 
 def test_auth_token_exempt(client):
-    resp = client.post("/auth/token", cookies={"access_token": "jwt", "csrf_token": "abc"})
+    resp = client.post(
+        "/auth/token", cookies={"access_token": "jwt", "csrf_token": "abc"}
+    )
     assert resp.status_code == 200
 
 

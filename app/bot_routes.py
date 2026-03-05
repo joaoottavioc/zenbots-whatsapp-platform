@@ -393,12 +393,20 @@ async def upload_catalog_from_file_endpoint(
         elif contents[:8] == b"\x89PNG\r\n\x1a\n":  # PNG
             is_image = True
             detected_mime = "image/png"
-        elif len(contents) >= 12 and contents[:4] == b"RIFF" and contents[8:12] == b"WEBP":
+        elif (
+            len(contents) >= 12
+            and contents[:4] == b"RIFF"
+            and contents[8:12] == b"WEBP"
+        ):
             is_image = True
             detected_mime = "image/webp"
         else:
             # Fallback to extension/MIME for edge cases
-            ext = (file.filename or "").lower().rsplit(".", 1)[-1] if file.filename else ""
+            ext = (
+                (file.filename or "").lower().rsplit(".", 1)[-1]
+                if file.filename
+                else ""
+            )
             ct = (file.content_type or "").lower()
             if ext == "pdf" or "pdf" in ct:
                 is_pdf = True

@@ -22,7 +22,9 @@ class TestOrderIndexes:
         assert self._column_has_index("bot_id"), "Order.bot_id should have index=True"
 
     def test_contact_id_has_index(self):
-        assert self._column_has_index("contact_id"), "Order.contact_id should have index=True"
+        assert self._column_has_index("contact_id"), (
+            "Order.contact_id should have index=True"
+        )
 
     def test_status_has_index(self):
         assert self._column_has_index("status"), "Order.status should have index=True"

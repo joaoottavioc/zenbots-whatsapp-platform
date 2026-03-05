@@ -634,7 +634,9 @@ class TestUpdateOrderStatusForUpdate:
         result_mock.scalars.return_value.first.return_value = order
         session.execute.return_value = result_mock
 
-        await update_order_status_by_id(session, order_id=1, new_status=OrderStatus.PAID)
+        await update_order_status_by_id(
+            session, order_id=1, new_status=OrderStatus.PAID
+        )
 
         session.execute.assert_awaited_once()
         compiled = str(
@@ -717,8 +719,16 @@ class TestCreateBotEncryptsToken:
         result_mock.scalars.return_value.first.return_value = None
         session.execute.return_value = result_mock
 
-        with patch("app.crud.encrypt_value", side_effect=lambda v: f"ENC:{v}") as mock_enc, \
-             patch("app.crud.get_bot_by_id", new_callable=AsyncMock, return_value=MagicMock()):
+        with (
+            patch(
+                "app.crud.encrypt_value", side_effect=lambda v: f"ENC:{v}"
+            ) as mock_enc,
+            patch(
+                "app.crud.get_bot_by_id",
+                new_callable=AsyncMock,
+                return_value=MagicMock(),
+            ),
+        ):
             await create_bot(
                 session,
                 user_id=1,
@@ -745,8 +755,14 @@ class TestUpdateBotEncryptsToken:
 
         update = BotUpdate(whatsapp_token="new_secret")
 
-        with patch("app.crud.encrypt_value", side_effect=lambda v: f"ENC:{v}") as mock_enc, \
-             patch("app.crud.get_bot_by_id", new_callable=AsyncMock, return_value=db_bot):
+        with (
+            patch(
+                "app.crud.encrypt_value", side_effect=lambda v: f"ENC:{v}"
+            ) as mock_enc,
+            patch(
+                "app.crud.get_bot_by_id", new_callable=AsyncMock, return_value=db_bot
+            ),
+        ):
             await update_bot(session, bot_id=1, update_data=update)
 
         mock_enc.assert_called_once_with("new_secret")
@@ -768,7 +784,9 @@ class TestBulkCreateProductsValidation:
         session.execute.return_value = result_mock
 
         with patch("app.crud.embed_async", new=AsyncMock(return_value=[])):
-            count = await bulk_create_products(session, bot_id=1, products_data=products_data)
+            count = await bulk_create_products(
+                session, bot_id=1, products_data=products_data
+            )
         return count
 
     async def test_zero_price_skipped(self):
@@ -794,9 +812,6 @@ class TestBulkCreateProductsValidation:
         result_mock.scalars.return_value.all.return_value = []
         session.execute.return_value = result_mock
 
-        items_captured = []
-        original_append = list.append
-
         products_data = [{"name": long_name, "price": 10.0}]
 
         with patch("app.crud.embed_async", new=AsyncMock(return_value=[[0.0] * 384])):
@@ -815,7 +830,9 @@ class TestBulkCreateProductsValidation:
         result_mock.scalars.return_value.all.return_value = []
         session.execute.return_value = result_mock
 
-        products_data = [{"name": "Good product", "price": 10.0, "description": long_desc}]
+        products_data = [
+            {"name": "Good product", "price": 10.0, "description": long_desc}
+        ]
 
         with patch("app.crud.embed_async", new=AsyncMock(return_value=[[0.0] * 384])):
             await bulk_create_products(session, bot_id=1, products_data=products_data)

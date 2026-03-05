@@ -911,7 +911,9 @@ async def _handle_shopping_intent(
     recent_suggestions = None
     if cart.last_suggestions:
         sug_res = await session.execute(
-            select(Product).where(Product.id.in_(cart.last_suggestions), Product.is_deleted == False)
+            select(Product).where(
+                Product.id.in_(cart.last_suggestions), Product.is_deleted == False
+            )
         )
         sug_map = {p.id: p for p in sug_res.scalars().all()}
         recent_suggestions = [
@@ -944,7 +946,9 @@ async def _handle_shopping_intent(
                 concept = tool_args.get("search_concept")
                 if concept:
                     concept = str(concept)[:100]
-                    concept = re.sub(r"[^\w\s\-áàâãéèêíìîóòôõúùûçÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ]", "", concept).strip()
+                    concept = re.sub(
+                        r"[^\w\s\-áàâãéèêíìîóòôõúùûçÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ]", "", concept
+                    ).strip()
                     if not concept:
                         concept = None  # will trigger "prato principal" fallback below
             except (json.JSONDecodeError, TypeError):
@@ -1208,7 +1212,9 @@ async def _handle_shopping_intent(
                         if pid is not None and newq is not None:
                             chk = await session.execute(
                                 select(Product.id).where(
-                                    Product.bot_id == bot.id, Product.id == pid, Product.is_deleted == False
+                                    Product.bot_id == bot.id,
+                                    Product.id == pid,
+                                    Product.is_deleted == False,
                                 )
                             )
                             if chk.scalars().first():
@@ -1441,7 +1447,7 @@ def _classify_error_message(exc: Exception) -> str:
 
 
 async def process_whatsapp_message(ctx, data: Dict[str, Any]):
-    trace_id = new_trace_id()
+    new_trace_id()
     contact_number: str | None = None
     current_token: str | None = None
     current_phone_id: str | None = None
@@ -1669,7 +1675,8 @@ async def _execute_pending_action(
         except json.JSONDecodeError:
             logger.warning(
                 "Corrupted pending_action_args for cart %s: %r",
-                cart.id, cart.pending_action_args,
+                cart.id,
+                cart.pending_action_args,
             )
             clear_pending(cart)
             return "Houve um erro ao processar sua confirmação. Pode repetir o pedido?"
@@ -1705,7 +1712,11 @@ async def _execute_pending_action(
             return "Não consegui identificar os produtos na proposta. Poderia me dizer novamente?"
 
         res = await session.execute(
-            select(Product.id).where(Product.bot_id == bot_id, Product.id.in_(item_ids), Product.is_deleted == False)
+            select(Product.id).where(
+                Product.bot_id == bot_id,
+                Product.id.in_(item_ids),
+                Product.is_deleted == False,
+            )
         )
         valid_product_ids = set(res.scalars().all())
         valid_items = [
@@ -1731,9 +1742,7 @@ async def _execute_pending_action(
             clear_pending(cart)
             return "A proposta para modificar o item estava incompleta. Pode repetir?"
 
-        await crud.modify_item_quantity_in_db_cart(
-            session, cart.id, pid, newq
-        )
+        await crud.modify_item_quantity_in_db_cart(session, cart.id, pid, newq)
         await session.refresh(cart, attribute_names=["items"])
         clear_pending(cart)
         # --- CORREÇÃO APLICADA ---
@@ -1761,7 +1770,11 @@ async def _execute_pending_action(
         )
         if names:
             res = await session.execute(
-                select(Product).where(Product.bot_id == bot_id, Product.name.in_(names), Product.is_deleted == False)
+                select(Product).where(
+                    Product.bot_id == bot_id,
+                    Product.name.in_(names),
+                    Product.is_deleted == False,
+                )
             )
             prods = res.scalars().all()
             if prods:
@@ -1774,7 +1787,9 @@ async def _execute_pending_action(
 
 
 async def _product_ids_for_bot(session: AsyncSession, bot_id: int) -> set[int]:
-    res = await session.execute(select(Product.id).where(Product.bot_id == bot_id, Product.is_deleted == False))
+    res = await session.execute(
+        select(Product.id).where(Product.bot_id == bot_id, Product.is_deleted == False)
+    )
     return set(res.scalars().all())
 
 
@@ -1804,7 +1819,11 @@ async def _resolve_items_for_proposal(
             return []
         found = await session.execute(
             select(Product)
-            .where(Product.bot_id == bot_id, Product.is_deleted == False, Product.name.ilike(f"%{pname}%"))
+            .where(
+                Product.bot_id == bot_id,
+                Product.is_deleted == False,
+                Product.name.ilike(f"%{pname}%"),
+            )
             .limit(1)
         )
         p = found.scalars().first()

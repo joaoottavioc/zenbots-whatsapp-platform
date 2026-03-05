@@ -3,7 +3,7 @@
 Test that display_items is built BEFORE cart is cleared in _handle_payment_method.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 import pytest
 
 

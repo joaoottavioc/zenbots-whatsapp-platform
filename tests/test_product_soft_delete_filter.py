@@ -7,7 +7,7 @@ import re
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app import whatsapp, crud
+from app import whatsapp
 from app.crud import find_relevant_products
 
 

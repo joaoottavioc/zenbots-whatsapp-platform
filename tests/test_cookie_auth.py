@@ -73,8 +73,12 @@ def client(user, mock_session):
 
 
 def test_login_sets_cookies(client, user, mock_session):
-    with patch("app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=user), \
-         patch("app.auth.verify_password", return_value=True):
+    with (
+        patch(
+            "app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=user
+        ),
+        patch("app.auth.verify_password", return_value=True),
+    ):
         resp = client.post(
             "/auth/token",
             data={"username": "test@example.com", "password": "Test1234!"},
@@ -103,7 +107,9 @@ def test_get_with_cookie_auth(client, user, mock_session):
 
     token = create_access_token(data={"sub": user.email})
 
-    with patch("app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=user):
+    with patch(
+        "app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=user
+    ):
         resp = client.get(
             "/protected",
             cookies={COOKIE_NAME: token},
@@ -125,7 +131,9 @@ def test_post_with_cookie_and_csrf(client, user, mock_session):
     token = create_access_token(data={"sub": user.email})
     csrf = "test-csrf-value"
 
-    with patch("app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=user):
+    with patch(
+        "app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=user
+    ):
         resp = client.post(
             "/protected-post",
             cookies={COOKIE_NAME: token, CSRF_COOKIE_NAME: csrf},
@@ -160,7 +168,9 @@ def test_bearer_auth_without_csrf(client, user, mock_session):
 
     token = create_access_token(data={"sub": user.email})
 
-    with patch("app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=user):
+    with patch(
+        "app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=user
+    ):
         resp = client.post(
             "/protected-post",
             headers={"Authorization": f"Bearer {token}"},

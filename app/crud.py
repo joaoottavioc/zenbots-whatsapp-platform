@@ -343,7 +343,11 @@ async def find_relevant_products(
         query_embedding = embeddings[0]
         embedding_query = (
             select(Product)
-            .where(Product.bot_id == bot_id, Product.is_available == True, Product.is_deleted == False)
+            .where(
+                Product.bot_id == bot_id,
+                Product.is_available == True,
+                Product.is_deleted == False,
+            )
             .order_by(
                 Product.embedding.cosine_distance(query_embedding)  #
             )
@@ -599,10 +603,19 @@ async def bulk_create_products(
         try:
             price = float(item.get("price", 0.0))
         except (ValueError, TypeError):
-            logger.warning("BULK_PRODUCT_SKIP_INVALID_PRICE name=%s bot_id=%s", raw_name[:50], bot_id)
+            logger.warning(
+                "BULK_PRODUCT_SKIP_INVALID_PRICE name=%s bot_id=%s",
+                raw_name[:50],
+                bot_id,
+            )
             continue
         if price <= 0:
-            logger.warning("BULK_PRODUCT_SKIP_NON_POSITIVE_PRICE name=%s price=%s bot_id=%s", raw_name[:50], price, bot_id)
+            logger.warning(
+                "BULK_PRODUCT_SKIP_NON_POSITIVE_PRICE name=%s price=%s bot_id=%s",
+                raw_name[:50],
+                price,
+                bot_id,
+            )
             continue
 
         # Texto para o Embedding

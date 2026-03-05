@@ -53,7 +53,9 @@ async def test_no_send_when_variables_not_assigned():
 
     with (
         patch("app.whatsapp.async_session", return_value=mock_session_ctx),
-        patch("app.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_send,
+        patch(
+            "app.whatsapp.send_whatsapp_message", new_callable=AsyncMock
+        ) as mock_send,
         patch("app.whatsapp.new_trace_id", return_value="aabbccdd"),
         patch("app.whatsapp.record_business_event", new_callable=AsyncMock),
         patch("app.whatsapp.record_error", new_callable=AsyncMock),
@@ -76,15 +78,27 @@ async def test_send_when_all_variables_assigned():
 
     with (
         patch("app.whatsapp.async_session", return_value=mock_session_ctx),
-        patch("app.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_send,
+        patch(
+            "app.whatsapp.send_whatsapp_message", new_callable=AsyncMock
+        ) as mock_send,
         patch("app.whatsapp.new_trace_id", return_value="aabbccdd"),
         patch("app.whatsapp.record_business_event", new_callable=AsyncMock),
         patch("app.whatsapp.record_error", new_callable=AsyncMock),
         patch("app.whatsapp.is_spamming", new_callable=AsyncMock, return_value=False),
-        patch("app.whatsapp.is_rate_limited", new_callable=AsyncMock, return_value=False),
+        patch(
+            "app.whatsapp.is_rate_limited", new_callable=AsyncMock, return_value=False
+        ),
         patch("app.whatsapp._find_bot", new_callable=AsyncMock) as mock_find_bot,
-        patch("app.whatsapp._check_subscription", new_callable=AsyncMock, return_value=False),
-        patch("app.whatsapp._handle_dedup", new_callable=AsyncMock, side_effect=RuntimeError("test boom")),
+        patch(
+            "app.whatsapp._check_subscription",
+            new_callable=AsyncMock,
+            return_value=False,
+        ),
+        patch(
+            "app.whatsapp._handle_dedup",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("test boom"),
+        ),
         patch("app.whatsapp.decrypt_value", side_effect=lambda x: x),
         patch("app.whatsapp.mask_phone", side_effect=lambda x: "***"),
     ):

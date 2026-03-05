@@ -6,7 +6,7 @@ Tests for app/email_service.py:
 - Exception from send_message is logged and re-raised
 """
 
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 import pytest
 import os
 
@@ -50,9 +50,10 @@ class TestSendPasswordResetEmail:
         mock_fm = AsyncMock()
         mock_fm.send_message = AsyncMock(side_effect=ConnectionError("SMTP down"))
 
-        with patch("app.email_service.FastMail", return_value=mock_fm), patch(
-            "app.email_service.logger"
-        ) as mock_logger:
+        with (
+            patch("app.email_service.FastMail", return_value=mock_fm),
+            patch("app.email_service.logger") as mock_logger,
+        ):
             from app.email_service import send_password_reset_email
 
             with pytest.raises(ConnectionError, match="SMTP down"):
@@ -65,7 +66,9 @@ class TestValidateEmailConfig:
     """Tests for validate_email_config() production guard."""
 
     def test_dev_environment_passes(self):
-        with patch.dict(os.environ, {"ENVIRONMENT": "development", "MAIL_SERVER": "mailhog"}):
+        with patch.dict(
+            os.environ, {"ENVIRONMENT": "development", "MAIL_SERVER": "mailhog"}
+        ):
             from app.email_service import validate_email_config
 
             validate_email_config()  # Should not raise
@@ -80,14 +83,18 @@ class TestValidateEmailConfig:
             validate_email_config()  # Defaults to development — should not raise
 
     def test_production_with_mailhog_raises(self):
-        with patch.dict(os.environ, {"ENVIRONMENT": "production", "MAIL_SERVER": "mailhog"}):
+        with patch.dict(
+            os.environ, {"ENVIRONMENT": "production", "MAIL_SERVER": "mailhog"}
+        ):
             from app.email_service import validate_email_config
 
             with pytest.raises(RuntimeError, match="MAIL_SERVER"):
                 validate_email_config()
 
     def test_production_with_real_server_passes(self):
-        with patch.dict(os.environ, {"ENVIRONMENT": "production", "MAIL_SERVER": "smtp.gmail.com"}):
+        with patch.dict(
+            os.environ, {"ENVIRONMENT": "production", "MAIL_SERVER": "smtp.gmail.com"}
+        ):
             from app.email_service import validate_email_config
 
             validate_email_config()  # Should not raise

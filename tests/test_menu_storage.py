@@ -3,7 +3,6 @@
 Tests for S3 key path sanitization in menu_storage.upload_bytes_to_s3.
 """
 
-import pytest
 from unittest.mock import patch, MagicMock
 from app.menu_storage import ALLOWED_EXTENSIONS
 

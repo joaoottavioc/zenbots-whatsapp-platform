@@ -221,7 +221,8 @@ async def stream_events(
                     user = await get_user_from_token(jwt_token, session)
                     if not user:
                         return JSONResponse(
-                            content={"detail": "Invalid or expired token"}, status_code=401
+                            content={"detail": "Invalid or expired token"},
+                            status_code=401,
                         )
             else:
                 return JSONResponse(
