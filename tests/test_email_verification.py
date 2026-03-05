@@ -1,4 +1,4 @@
-"""Tests for the email verification flow (registration, verify, resend, login gate)."""
+"""Tests for email verification flow (registration, verify, resend, login gate)."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
