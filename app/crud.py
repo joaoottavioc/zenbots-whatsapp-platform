@@ -21,12 +21,14 @@ from app.models import (
     ShoppingCart,
     CartItem,
     Subscription,
+    Plan,
     DeliveryMethod,
     OrderStatus,
     CartState,
 )
 from app.schemas import BotUpdate, ProductUpdate
 from app.embedding_service import embed_async
+from app.encryption import encrypt_value
 
 logger = logging.getLogger(__name__)
 
@@ -293,6 +295,7 @@ async def find_relevant_products(
             .where(
                 Product.bot_id == bot_id,
                 Product.is_available == True,
+                Product.is_deleted == False,
                 Product.name.ilike(f"%{escape_ilike(item_name)}%", escape="\\"),
             )
             .limit(limit_per_item)
@@ -307,6 +310,7 @@ async def find_relevant_products(
             .where(
                 Product.bot_id == bot_id,
                 Product.is_available == True,
+                Product.is_deleted == False,
                 Product.keywords.ilike(f"%{escape_ilike(item_name)}%", escape="\\"),
             )
             .limit(limit_per_item)
@@ -321,6 +325,7 @@ async def find_relevant_products(
             .where(
                 Product.bot_id == bot_id,
                 Product.is_available == True,
+                Product.is_deleted == False,
                 Product.description.is_not(None),
                 Product.description.ilike(f"%{escape_ilike(item_name)}%", escape="\\"),
             )
@@ -338,7 +343,7 @@ async def find_relevant_products(
         query_embedding = embeddings[0]
         embedding_query = (
             select(Product)
-            .where(Product.bot_id == bot_id, Product.is_available == True)
+            .where(Product.bot_id == bot_id, Product.is_available == True, Product.is_deleted == False)
             .order_by(
                 Product.embedding.cosine_distance(query_embedding)  #
             )
@@ -393,7 +398,7 @@ async def create_bot(
         restaurant_name=restaurant_name,
         pix_key=pix_key,
         # ▼▼▼ ASSIGN NEW FIELDS ▼▼▼
-        whatsapp_token=whatsapp_token,
+        whatsapp_token=encrypt_value(whatsapp_token) if whatsapp_token else "",
         phone_number_id=phone_number_id,
         delivery_fee=delivery_fee,
         min_order_value=min_order_value,
@@ -446,6 +451,8 @@ async def update_bot(
 
     update_data_dict = update_data.model_dump(exclude_unset=True)
     for key, value in update_data_dict.items():
+        if key == "whatsapp_token":
+            value = encrypt_value(value) if value else ""
         setattr(db_bot, key, value)
 
     session.add(db_bot)
@@ -571,6 +578,7 @@ async def bulk_create_products(
         raw_name = item.get("name", "").strip()
         if not raw_name:
             continue
+        raw_name = raw_name[:150]  # Enforce max length
 
         name_key = raw_name.lower()
 
@@ -581,12 +589,21 @@ async def bulk_create_products(
 
         # Extração segura dos dados
         category = item.get("category", "Geral")
+        category = str(category).strip()[:100] if category else "Geral"
         description = item.get("description", "")
+        description = str(description).strip()[:500] if description else ""
         keywords = item.get("keywords", [])
         keywords_str = (
             ", ".join(keywords) if isinstance(keywords, list) else str(keywords)
         )
-        price = float(item.get("price", 0.0))
+        try:
+            price = float(item.get("price", 0.0))
+        except (ValueError, TypeError):
+            logger.warning("BULK_PRODUCT_SKIP_INVALID_PRICE name=%s bot_id=%s", raw_name[:50], bot_id)
+            continue
+        if price <= 0:
+            logger.warning("BULK_PRODUCT_SKIP_NON_POSITIVE_PRICE name=%s price=%s bot_id=%s", raw_name[:50], price, bot_id)
+            continue
 
         # Texto para o Embedding
         text = (
@@ -731,8 +748,9 @@ async def create_order(
     total_amount: float,
     delivery_method: DeliveryMethod,
     customer_address: str | None = None,
-    contact_id: int | None = None,  # <-- 1. Novo parâmetro
+    contact_id: int | None = None,
     payment_method: str | None = None,
+    auto_commit: bool = True,
 ) -> Order | None:
     try:
         order_items_to_create: list[OrderItem] = []
@@ -745,7 +763,7 @@ async def create_order(
                     product_id=product.id,
                     quantity=item_data["quantity"],
                     price_at_time_of_order=product.price,
-                    notes=item_data.get("notes"),  # Pega do dicionário passado
+                    notes=item_data.get("notes"),
                 )
             )
 
@@ -754,13 +772,16 @@ async def create_order(
             total_amount=round(total_amount, 2),
             delivery_method=delivery_method,
             customer_address=customer_address,
-            contact_id=contact_id,  # <-- 2. Salva o contato
+            contact_id=contact_id,
             payment_method=payment_method,
             items=order_items_to_create,
         )
 
         session.add(new_order)
-        await session.commit()
+        if auto_commit:
+            await session.commit()
+        else:
+            await session.flush()
         await session.refresh(new_order, attribute_names=["items"])
         return new_order
 
@@ -875,9 +896,12 @@ async def update_order_status_by_id(
     e o status tiver sido realmente alterado.
     """
     # Usamos selectinload para já carregar os dados do contato e do bot
+    # with_for_update() acquires a row-level lock to prevent race conditions
+    # from concurrent payment webhooks
     query = (
         select(Order)
         .where(Order.id == order_id)
+        .with_for_update()
         .options(
             selectinload(Order.bot),
             selectinload(Order.items).selectinload(OrderItem.product),
@@ -920,7 +944,11 @@ async def update_order_status_by_id(
 
 
 async def list_orders_by_bot(
-    session: AsyncSession, bot_id: int, status_filter: Optional[str] = None
+    session: AsyncSession,
+    bot_id: int,
+    status_filter: Optional[OrderStatus] = None,
+    limit: int = 50,
+    offset: int = 0,
 ) -> List[Dict[str, Any]]:
     query = (
         select(Order)
@@ -935,6 +963,8 @@ async def list_orders_by_bot(
 
     if status_filter:
         query = query.where(Order.status == status_filter)
+
+    query = query.offset(offset).limit(limit)
 
     result = await session.execute(query)
     orders = result.scalars().all()
@@ -1063,22 +1093,39 @@ async def upsert_subscription(
     bot_id: int,
     mp_id: str,
     status: str,
+    plan_type: str = "pro",
+    plan_frequency_months: int = 1,
 ):
-    sub = await get_subscription_by_bot(session, bot_id)
-    if sub:
-        sub.mp_subscription_id = mp_id
-        sub.status = status
-    else:
-        sub = Subscription(
-            user_id=user_id,
-            bot_id=bot_id,
-            mp_subscription_id=mp_id,
-            status=status,
-            current_period_end=utcnow() + timedelta(days=30),
-        )
-        session.add(sub)
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    values = {
+        "user_id": user_id,
+        "bot_id": bot_id,
+        "mp_subscription_id": mp_id,
+        "status": status,
+        "plan_type": plan_type,
+        "current_period_end": utcnow() + timedelta(days=30 * plan_frequency_months),
+        "created_at": utcnow(),
+        "updated_at": utcnow(),
+    }
+
+    stmt = pg_insert(Subscription).values(**values)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["bot_id"],
+        set_={
+            "mp_subscription_id": stmt.excluded.mp_subscription_id,
+            "status": stmt.excluded.status,
+            "plan_type": stmt.excluded.plan_type,
+            "current_period_end": stmt.excluded.current_period_end,
+            "updated_at": stmt.excluded.updated_at,
+        },
+    )
+
+    await session.execute(stmt)
     await session.flush()
-    await session.refresh(sub)
+
+    # Reload the subscription to return it
+    sub = await get_subscription_by_bot(session, bot_id)
     return sub
 
 
@@ -1105,3 +1152,53 @@ async def cancel_expired_pix_orders(session: AsyncSession):
     if count > 0:
         await session.commit()
     return count
+
+
+# ────────────────────────────────────────────────────────────────
+# Plan CRUD
+# ────────────────────────────────────────────────────────────────
+
+
+async def list_plans(session: AsyncSession) -> List[Plan]:
+    result = await session.execute(select(Plan).order_by(Plan.id))
+    return result.scalars().all()
+
+
+async def get_plan_by_id(session: AsyncSession, plan_id: int) -> Optional[Plan]:
+    return await session.get(Plan, plan_id)
+
+
+async def get_plan_by_key(session: AsyncSession, key: str) -> Optional[Plan]:
+    result = await session.execute(select(Plan).where(Plan.key == key))
+    return result.scalars().first()
+
+
+async def create_plan(session: AsyncSession, data: dict) -> Plan:
+    plan = Plan(**data)
+    session.add(plan)
+    await session.commit()
+    await session.refresh(plan)
+    return plan
+
+
+async def update_plan(
+    session: AsyncSession, plan_id: int, data: dict
+) -> Optional[Plan]:
+    plan = await session.get(Plan, plan_id)
+    if not plan:
+        return None
+    for key, value in data.items():
+        setattr(plan, key, value)
+    session.add(plan)
+    await session.commit()
+    await session.refresh(plan)
+    return plan
+
+
+async def delete_plan(session: AsyncSession, plan_id: int) -> bool:
+    plan = await session.get(Plan, plan_id)
+    if not plan:
+        return False
+    await session.delete(plan)
+    await session.commit()
+    return True

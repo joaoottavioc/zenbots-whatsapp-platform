@@ -10,6 +10,8 @@ from app.monitoring import record_api_usage
 
 logger = logging.getLogger(__name__)
 
+ALLOWED_EXTENSIONS = {"pdf", "jpg", "jpeg", "png", "webp"}
+
 # Carrega configurações
 AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
@@ -35,9 +37,14 @@ def upload_bytes_to_s3(
 
     start = time.perf_counter_ns()
     try:
-        # Gera nome único
-        # Se filename for None ou vazio, usa .bin como fallback
-        ext = filename.split(".")[-1] if filename and "." in filename else "bin"
+        # Gera nome único — sanitiza filename para evitar path traversal
+        safe_name = os.path.basename(filename) if filename else ""
+        if safe_name and "." in safe_name:
+            ext = safe_name.rsplit(".", 1)[1].lower()
+        else:
+            ext = "bin"
+        if ext not in ALLOWED_EXTENSIONS:
+            ext = "bin"
         unique_filename = f"{folder}/{uuid4()}.{ext}"
 
         # Cria um objeto de arquivo em memória

@@ -30,6 +30,7 @@ class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     email: str = Field(unique=True, index=True)
     hashed_password: str
+    is_admin: bool = Field(default=False)
 
     bots: List["Bot"] = Relationship(back_populates="user")
 
@@ -241,7 +242,7 @@ class CartItem(SQLModel, table=True):
 class Order(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     total_amount: float
-    status: OrderStatus = Field(default=OrderStatus.PENDING)
+    status: OrderStatus = Field(default=OrderStatus.PENDING, index=True)
     created_at: datetime = Field(default_factory=utcnow)
     psp_charge_id: Optional[str] = Field(default=None, index=True)
     customer_address: Optional[str] = Field(default=None)
@@ -249,11 +250,11 @@ class Order(SQLModel, table=True):
         default_factory=lambda: secrets.token_urlsafe(32), index=True
     )
 
-    bot_id: int = Field(foreign_key="bot.id")
+    bot_id: int = Field(foreign_key="bot.id", index=True)
     bot: "Bot" = Relationship(back_populates="orders")
 
     # ▼▼▼ NOVOS CAMPOS ▼▼▼
-    contact_id: Optional[int] = Field(default=None, foreign_key="contact.id")
+    contact_id: Optional[int] = Field(default=None, foreign_key="contact.id", index=True)
     payment_method: Optional[str] = Field(default=None)
     contact: Optional["Contact"] = Relationship()
 
@@ -308,7 +309,7 @@ class Subscription(SQLModel, table=True):
     bot: "Bot" = Relationship(back_populates="subscription")
 
     # Vínculo com o dono da conta (Um usuário tem uma assinatura)
-    user_id: int = Field(foreign_key="user.id", unique=True)
+    user_id: int = Field(foreign_key="user.id")
     user: "User" = Relationship(
         back_populates="subscriptions"
     )  # Precisamos adicionar isso no User

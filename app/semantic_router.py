@@ -1,5 +1,6 @@
 # app/semantic_router.py
 from __future__ import annotations
+import asyncio
 import logging
 from typing import List, Tuple, Dict
 
@@ -76,15 +77,19 @@ THRESHOLDS = {
 }
 
 _EMB_CACHE: Dict[str, List[List[float]]] = {}
+_EMB_LOCK = asyncio.Lock()
 
 
 async def _ensure_proto_embeddings():
     if _EMB_CACHE:
         return
-    logger.debug("Populating semantic router embedding cache (%d intents)", len(PROTOS))
-    for intent, phrases in PROTOS.items():
-        _EMB_CACHE[intent] = await embed_router(phrases)
-    logger.debug("Semantic router cache populated")
+    async with _EMB_LOCK:
+        if _EMB_CACHE:  # double-check after acquiring lock
+            return
+        logger.debug("Populating semantic router embedding cache (%d intents)", len(PROTOS))
+        for intent, phrases in PROTOS.items():
+            _EMB_CACHE[intent] = await embed_router(phrases)
+        logger.debug("Semantic router cache populated")
 
 
 def _argmax(xs: List[float]) -> Tuple[int, float]:

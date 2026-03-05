@@ -32,6 +32,12 @@ def _get_sdk():
     return _sdk
 
 
+@router.get("/plans", response_model=list[schemas.PlanResponse])
+async def list_plans(session: AsyncSession = Depends(get_session)):
+    """Public endpoint — returns all available plans (no auth required)."""
+    return await crud.list_plans(session)
+
+
 @router.post("/checkout")
 async def create_checkout(
     req: schemas.CheckoutRequest,  # Recebe o JSON novo

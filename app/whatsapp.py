@@ -50,7 +50,7 @@ from app.pending_action import (
 # Função padronizada para obter o tempo atual em UTC
 from app.time import utcnow
 import pytz
-from app.rate_limiter import is_spamming
+from app.rate_limiter import is_spamming, is_rate_limited
 from app.broadcast import broadcast_order_update
 from app.utils import mask_phone
 from app.webhook_security import require_mp_signature
@@ -64,6 +64,15 @@ import logging
 import time as _time
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_int(value, label: str = "value") -> int | None:
+    """Convert to int, return None on failure with warning log."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        logger.warning("Invalid %s for int conversion: %r", label, value)
+        return None
 
 
 load_dotenv()
@@ -91,9 +100,11 @@ _ITEM_FROM_Q_RE = re.compile(
 )
 
 
-async def _check_rate_limit(contact_number: str) -> bool:
+async def _check_rate_limit(contact_number: str, phone_id: str = "") -> bool:
     """Returns True if the sender is rate-limited (caller should stop)."""
-    if await is_spamming(contact_number, limit=20, window_seconds=60):
+    if await is_spamming(
+        contact_number, limit=20, window_seconds=60, bot_phone_id=phone_id
+    ):
         logger.warning(
             "RATE LIMIT: blocking contact %s for excessive messages",
             mask_phone(contact_number),
@@ -154,7 +165,7 @@ async def _check_subscription(
         await send_whatsapp_message(
             to=contact_number,
             message=maintenance_msg,
-            token=bot.whatsapp_token,
+            token=decrypt_value(bot.whatsapp_token),
             phone_id=bot.phone_number_id,
         )
     return is_blocked
@@ -205,7 +216,7 @@ async def _handle_store_closed(
     await send_whatsapp_message(
         to=contact_number,
         message=rich_closing_msg,
-        token=bot.whatsapp_token,
+        token=decrypt_value(bot.whatsapp_token),
         phone_id=bot.phone_number_id,
         media_url=menu_url,
         media_type=media_type,
@@ -245,7 +256,7 @@ async def _send_welcome_with_menu(session, bot, cart, contact_number, text_body)
     await send_whatsapp_message(
         to=contact_number,
         message=response_to_user,
-        token=bot.whatsapp_token,
+        token=decrypt_value(bot.whatsapp_token),
         phone_id=bot.phone_number_id,
         media_url=menu_url,
         media_type=media_type,
@@ -375,7 +386,7 @@ async def _handle_cep(mctx: MessageContext) -> str | None:
 
     # 3. CEP / Location logic
     cep_text = re.sub(r"\D", "", mctx.text_body)
-    input_cep = cep_text if len(cep_text) == 8 else mctx.text_body
+    input_cep = cep_text  # Always use sanitized digits-only version
 
     address_data = await app.utils.get_address_from_cep(input_cep)
 
@@ -446,12 +457,20 @@ async def _handle_number_complement(mctx: MessageContext) -> str | None:
         return None
 
     partial = cart.partial_address
+    if not isinstance(partial, dict):
+        cart.state = CartState.AWAITING_CEP
+        return "Ocorreu um erro com o endereço. Por favor, informe seu CEP novamente."
+
     number_complement = mctx.text_body.strip()[:200]
-    cep_display = partial.get("cep", "Não informado")
+    cep_display = partial.get("cep") or "Não informado"
+    street = partial.get("street") or "Rua não informada"
+    neighborhood = partial.get("neighborhood") or "Bairro não informado"
+    city = partial.get("city") or ""
+    state = partial.get("state") or ""
 
     full_address = (
-        f"{partial.get('street')}, {number_complement}\n"
-        f"{partial.get('neighborhood')} - {partial.get('city')}/{partial.get('state')}\n"
+        f"{street}, {number_complement}\n"
+        f"{neighborhood} - {city}/{state}\n"
         f"CEP: {cep_display}"
     )
 
@@ -612,6 +631,7 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
             contact_id=contact.id,
             payment_method=detected_method,
             delivery_method=cart.delivery_method,
+            auto_commit=False,
         )
 
         if not order:
@@ -640,7 +660,7 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
                     order_created = True
                 else:
                     response = "Tivemos um problema ao gerar o QR Code do PIX. 😔 Por favor, escolha *Cartão* ou *Dinheiro* para continuar."
-                    await crud.delete_order(session, order.id)
+                    await session.rollback()
             else:
                 response = f"Tudo certo! Seu pedido foi registrado.\n\n💠 *Chave PIX:* {bot.pix_key}\n\nAvisaremos quando estiver pronto!"
                 order_created = True
@@ -659,9 +679,9 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
             response = f"Tudo certo! Seu pedido foi confirmado. Total: *R$ {total_amount:.2f}* em dinheiro. Separe o valor para facilitar. Avisaremos quando estiver pronto!"
 
         if order_created:
+            display_items = [f"{i.quantity}x {i.product.name}" for i in cart.items]
             await crud.clear_db_cart(session, cart.id)
             try:
-                display_items = [f"{i.quantity}x {i.product.name}" for i in cart.items]
                 await broadcast_order_update(
                     "new_order",
                     {
@@ -891,7 +911,7 @@ async def _handle_shopping_intent(
     recent_suggestions = None
     if cart.last_suggestions:
         sug_res = await session.execute(
-            select(Product).where(Product.id.in_(cart.last_suggestions))
+            select(Product).where(Product.id.in_(cart.last_suggestions), Product.is_deleted == False)
         )
         sug_map = {p.id: p for p in sug_res.scalars().all()}
         recent_suggestions = [
@@ -919,8 +939,19 @@ async def _handle_shopping_intent(
             and ai_message.tool_calls[0].function.name
             == "search_catalog_for_suggestions"
         ):
-            tool_args = json.loads(ai_message.tool_calls[0].function.arguments)
-            concept = tool_args.get("search_concept")
+            try:
+                tool_args = json.loads(ai_message.tool_calls[0].function.arguments)
+                concept = tool_args.get("search_concept")
+                if concept:
+                    concept = str(concept)[:100]
+                    concept = re.sub(r"[^\w\s\-áàâãéèêíìîóòôõúùûçÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ]", "", concept).strip()
+                    if not concept:
+                        concept = None  # will trigger "prato principal" fallback below
+            except (json.JSONDecodeError, TypeError):
+                logger.warning(
+                    "Malformed JSON in search_catalog_for_suggestions tool_call, "
+                    "falling back to default concept"
+                )
 
         if not concept:
             concept = "prato principal"
@@ -1062,9 +1093,8 @@ async def _handle_shopping_intent(
                         raw_ids = tool_args.get("product_ids", []) or []
                         targets = []
                         for pid in raw_ids:
-                            try:
-                                pid = int(pid)
-                            except Exception:
+                            pid = _safe_int(pid, "product_id")
+                            if pid is None:
                                 continue
                             if pid in current_ids:
                                 targets.append(pid)
@@ -1083,11 +1113,8 @@ async def _handle_shopping_intent(
                             )
 
                     elif tool_name == "modify_item_quantity":
-                        try:
-                            pid = int(tool_args.get("product_id"))
-                            newq = int(tool_args.get("new_quantity"))
-                        except Exception:
-                            pid, newq = None, None
+                        pid = _safe_int(tool_args.get("product_id"), "product_id")
+                        newq = _safe_int(tool_args.get("new_quantity"), "new_quantity")
 
                         if pid is None or newq is None or pid not in current_ids:
                             response_to_user = "Esse item não está no seu carrinho. Posso adicioná-lo para você?"
@@ -1102,19 +1129,19 @@ async def _handle_shopping_intent(
                             )
 
                     elif tool_name == "update_item_observation":
-                        pid = tool_args.get("product_id")
+                        pid = _safe_int(tool_args.get("product_id"), "product_id")
                         notes = tool_args.get("notes")
 
-                        if pid and notes and int(pid) in current_ids:
+                        if pid is not None and notes and pid in current_ids:
                             await crud.update_item_notes(
-                                session, cart.id, int(pid), str(notes)[:200]
+                                session, cart.id, pid, str(notes)[:200]
                             )
                             await session.refresh(cart, attribute_names=["items"])
                             response_to_user = (
                                 _build_cart_summary_message(cart, bot, "✏️")
                                 + "\n\nObservação anotada! Mais alguma coisa?"
                             )
-                        elif pid and notes:
+                        elif pid is not None and notes:
                             response_to_user = "Esse item não está no seu carrinho. Posso adicionar algo para você?"
                         else:
                             response_to_user = (
@@ -1126,12 +1153,9 @@ async def _handle_shopping_intent(
                         updates_raw = tool_args.get("updates", []) or []
                         updates = []
                         for upd in updates_raw:
-                            try:
-                                pid, newq = (
-                                    int(upd.get("product_id")),
-                                    int(upd.get("new_quantity")),
-                                )
-                            except Exception:
+                            pid = _safe_int(upd.get("product_id"), "product_id")
+                            newq = _safe_int(upd.get("new_quantity"), "new_quantity")
+                            if pid is None or newq is None:
                                 continue
                             if pid in current_ids:
                                 updates.append(
@@ -1179,17 +1203,18 @@ async def _handle_shopping_intent(
                         if resolved:
                             normalized_args = {"items": resolved}
                     elif ptool == "modify_item_quantity":
-                        pid, newq = pargs.get("product_id"), pargs.get("new_quantity")
+                        pid = _safe_int(pargs.get("product_id"), "product_id")
+                        newq = _safe_int(pargs.get("new_quantity"), "new_quantity")
                         if pid is not None and newq is not None:
                             chk = await session.execute(
                                 select(Product.id).where(
-                                    Product.bot_id == bot.id, Product.id == int(pid)
+                                    Product.bot_id == bot.id, Product.id == pid, Product.is_deleted == False
                                 )
                             )
                             if chk.scalars().first():
                                 normalized_args = {
-                                    "product_id": int(pid),
-                                    "new_quantity": int(newq),
+                                    "product_id": pid,
+                                    "new_quantity": newq,
                                 }
 
                     if question and ptool and normalized_args:
@@ -1389,7 +1414,7 @@ async def _process_contact_message(
     await send_whatsapp_message(
         contact_number,
         response_to_user,
-        token=bot.whatsapp_token,
+        token=decrypt_value(bot.whatsapp_token),
         phone_id=bot.phone_number_id,
     )
     await crud.add_interaction_to_history(
@@ -1417,6 +1442,9 @@ def _classify_error_message(exc: Exception) -> str:
 
 async def process_whatsapp_message(ctx, data: Dict[str, Any]):
     trace_id = new_trace_id()
+    contact_number: str | None = None
+    current_token: str | None = None
+    current_phone_id: str | None = None
     async with async_session() as session:
         try:
             # 1. Extração segura dos dados
@@ -1432,12 +1460,12 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
             text_body = message_data.get("text", {}).get("body", "")
             message_id = message_data["id"]
 
-            # Gate: Rate limiting
-            if await _check_rate_limit(contact_number):
-                return
-
             incoming_phone_id = value["metadata"]["phone_number_id"]
             bot_display_phone = value["metadata"]["display_phone_number"]
+
+            # Gate: Rate limiting (scoped by bot phone_id)
+            if await _check_rate_limit(contact_number, phone_id=incoming_phone_id):
+                return
             logger.info(
                 "Message received from %s to phone_id %s",
                 mask_phone(contact_number),
@@ -1455,7 +1483,7 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
             if await _check_subscription(session, bot, contact_number):
                 return
 
-            current_token = bot.whatsapp_token
+            current_token = decrypt_value(bot.whatsapp_token)
             current_phone_id = bot.phone_number_id
 
             # Gate: Deduplication
@@ -1497,18 +1525,14 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
             await record_error("whatsapp", type(e).__name__)
 
             # Tenta reverter o banco para não deixar travado
-            if "session" in locals() and session.is_active:
+            if session.is_active:
                 try:
                     await session.rollback()
                 except Exception:
                     pass
 
             # Envia mensagem de erro classificada ao usuário
-            if (
-                "contact_number" in locals()
-                and "current_token" in locals()
-                and current_token
-            ):
+            if contact_number and current_token and current_phone_id:
                 try:
                     await send_whatsapp_message(
                         to=contact_number,
@@ -1643,7 +1667,12 @@ async def _execute_pending_action(
         try:
             args = json.loads(args)
         except json.JSONDecodeError:
-            args = {}
+            logger.warning(
+                "Corrupted pending_action_args for cart %s: %r",
+                cart.id, cart.pending_action_args,
+            )
+            clear_pending(cart)
+            return "Houve um erro ao processar sua confirmação. Pode repetir o pedido?"
 
     logger.info("Executing pending action: tool=%s", tool)
 
@@ -1676,7 +1705,7 @@ async def _execute_pending_action(
             return "Não consegui identificar os produtos na proposta. Poderia me dizer novamente?"
 
         res = await session.execute(
-            select(Product.id).where(Product.bot_id == bot_id, Product.id.in_(item_ids))
+            select(Product.id).where(Product.bot_id == bot_id, Product.id.in_(item_ids), Product.is_deleted == False)
         )
         valid_product_ids = set(res.scalars().all())
         valid_items = [
@@ -1690,22 +1719,21 @@ async def _execute_pending_action(
             return "Os itens propostos não foram encontrados em nosso cardápio. Quer ver outras opções?"
 
         await crud.add_items_to_db_cart(session, cart.id, valid_items, bot_id=bot_id)
-        await session.flush()
         await session.refresh(cart, attribute_names=["items"])
         clear_pending(cart)
         # --- CORREÇÃO APLICADA ---
         return _build_cart_summary_message(cart, bot, "✅") + "\n\nAlgo mais?"
 
     if tool == "modify_item_quantity":
-        pid, newq = args.get("product_id"), args.get("new_quantity")
+        pid = _safe_int(args.get("product_id"), "product_id")
+        newq = _safe_int(args.get("new_quantity"), "new_quantity")
         if pid is None or newq is None:
             clear_pending(cart)
             return "A proposta para modificar o item estava incompleta. Pode repetir?"
 
         await crud.modify_item_quantity_in_db_cart(
-            session, cart.id, int(pid), int(newq)
+            session, cart.id, pid, newq
         )
-        await session.flush()
         await session.refresh(cart, attribute_names=["items"])
         clear_pending(cart)
         # --- CORREÇÃO APLICADA ---
@@ -1714,8 +1742,10 @@ async def _execute_pending_action(
     if tool == "remove_items_from_cart":
         ids = args.get("product_ids", [])
         for pid in ids:
-            await crud.modify_item_quantity_in_db_cart(session, cart.id, int(pid), 0)
-        await session.flush()
+            pid = _safe_int(pid, "product_id")
+            if pid is None:
+                continue
+            await crud.modify_item_quantity_in_db_cart(session, cart.id, pid, 0)
         await session.refresh(cart, attribute_names=["items"])
         clear_pending(cart)
         # --- CORREÇÃO APLICADA ---
@@ -1731,7 +1761,7 @@ async def _execute_pending_action(
         )
         if names:
             res = await session.execute(
-                select(Product).where(Product.bot_id == bot_id, Product.name.in_(names))
+                select(Product).where(Product.bot_id == bot_id, Product.name.in_(names), Product.is_deleted == False)
             )
             prods = res.scalars().all()
             if prods:
@@ -1744,7 +1774,7 @@ async def _execute_pending_action(
 
 
 async def _product_ids_for_bot(session: AsyncSession, bot_id: int) -> set[int]:
-    res = await session.execute(select(Product.id).where(Product.bot_id == bot_id))
+    res = await session.execute(select(Product.id).where(Product.bot_id == bot_id, Product.is_deleted == False))
     return set(res.scalars().all())
 
 
@@ -1762,9 +1792,8 @@ async def _resolve_items_for_proposal(
             return []
         pid = it.get("product_id")
         if pid is not None:
-            try:
-                pid = int(pid)
-            except Exception:
+            pid = _safe_int(pid, "product_id")
+            if pid is None:
                 return []
             if pid not in valid_ids:
                 return []
@@ -1775,7 +1804,7 @@ async def _resolve_items_for_proposal(
             return []
         found = await session.execute(
             select(Product)
-            .where(Product.bot_id == bot_id, Product.name.ilike(f"%{pname}%"))
+            .where(Product.bot_id == bot_id, Product.is_deleted == False, Product.name.ilike(f"%{pname}%"))
             .limit(1)
         )
         p = found.scalars().first()
@@ -1898,6 +1927,10 @@ async def handle_payment_notification(order_id: int, request: Request):
     2. Busca o pedido no banco para descobrir quem é o BOT dono.
     3. Usa o Token desse BOT para consultar o Mercado Pago.
     """
+    # --- Rate limiting per order (P1) ---
+    if await is_rate_limited(f"rl:webhook:{order_id}", limit=5, window_seconds=60):
+        return JSONResponse(content={"status": "rate_limited"}, status_code=429)
+
     # --- Signature verification (P0-1) ---
     data = await request.json()
     payment_id_str = data.get("data", {}).get("id")
@@ -2040,7 +2073,7 @@ async def handle_payment_notification(order_id: int, request: Request):
                         await send_whatsapp_message(
                             to=phone_dest,
                             message=msg,
-                            token=order.bot.whatsapp_token,
+                            token=decrypt_value(order.bot.whatsapp_token),
                             phone_id=order.bot.phone_number_id,
                         )
                     else:

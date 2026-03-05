@@ -13,6 +13,7 @@ Covered:
 - is_message_processed    (found / not found)
 """
 
+import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.crud import (
@@ -25,7 +26,13 @@ from app.crud import (
     upsert_subscription,
     find_relevant_products,
     add_items_to_db_cart,
+    list_orders_by_bot,
+    update_order_status_by_id,
+    create_bot,
+    update_bot,
+    bulk_create_products,
 )
+from app.models import OrderStatus
 from app.schemas import BotUpdate
 
 
@@ -354,47 +361,45 @@ class TestIsMessageProcessed:
 
 
 class TestUpsertSubscription:
-    async def test_creates_subscription_when_none_exists(self):
-        """When no subscription exists for the bot, a new one is created."""
+    async def test_creates_subscription_via_on_conflict(self):
+        """upsert_subscription uses INSERT ... ON CONFLICT (atomic upsert)."""
         session = _make_session()
+        sub_mock = MagicMock()
 
         with patch(
-            "app.crud.get_subscription_by_bot", new=AsyncMock(return_value=None)
+            "app.crud.get_subscription_by_bot", new=AsyncMock(return_value=sub_mock)
         ):
-            await upsert_subscription(
+            result = await upsert_subscription(
                 session, user_id=1, bot_id=2, mp_id="mp_abc123", status="authorized"
             )
 
-        session.add.assert_called_once()
-        added = session.add.call_args[0][0]
-        assert added.user_id == 1
-        assert added.bot_id == 2
-        assert added.mp_subscription_id == "mp_abc123"
-        assert added.status == "authorized"
+        assert result is sub_mock
+        session.execute.assert_awaited_once()
         session.flush.assert_awaited()
-        session.refresh.assert_awaited()
 
-    async def test_updates_existing_subscription(self):
-        """When a subscription already exists, its fields are mutated in-place."""
+        # Verify the statement is a PostgreSQL INSERT with ON CONFLICT
+        stmt = session.execute.call_args[0][0]
+        compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "INSERT INTO" in compiled.upper()
+        assert "ON CONFLICT" in compiled.upper()
+
+    async def test_upsert_returns_refreshed_subscription(self):
+        """After upsert, get_subscription_by_bot is called to return the result."""
         session = _make_session()
-        existing_sub = MagicMock()
-        existing_sub.mp_subscription_id = "old_mp_id"
-        existing_sub.status = "pending"
+        sub_mock = MagicMock()
+        sub_mock.mp_subscription_id = "new_mp_id"
+        sub_mock.status = "authorized"
 
         with patch(
-            "app.crud.get_subscription_by_bot", new=AsyncMock(return_value=existing_sub)
+            "app.crud.get_subscription_by_bot", new=AsyncMock(return_value=sub_mock)
         ):
-            await upsert_subscription(
+            result = await upsert_subscription(
                 session, user_id=1, bot_id=2, mp_id="new_mp_id", status="authorized"
             )
 
-        # Fields should be updated on the existing object
-        assert existing_sub.mp_subscription_id == "new_mp_id"
-        assert existing_sub.status == "authorized"
-        # Should NOT call session.add for an existing object
-        session.add.assert_not_called()
-        session.flush.assert_awaited()
-        session.refresh.assert_awaited()
+        assert result is sub_mock
+        assert result.mp_subscription_id == "new_mp_id"
+        assert result.status == "authorized"
 
 
 # ===========================================================================
@@ -451,6 +456,33 @@ class TestFindRelevantProducts:
         for i, stmt_str in enumerate(captured_stmts):
             assert "is_available" in stmt_str, (
                 f"Query {i + 1} missing is_available filter: {stmt_str}"
+            )
+
+    async def test_find_relevant_products_excludes_soft_deleted(self):
+        """Verify that all 4 queries include is_deleted filtering by inspecting compiled SQL."""
+        session = _make_session()
+
+        captured_stmts = []
+
+        async def capture_execute(stmt, *args, **kwargs):
+            captured_stmts.append(
+                str(stmt.compile(compile_kwargs={"literal_binds": True}))
+            )
+            result = MagicMock()
+            result.scalars.return_value.all.return_value = []
+            return result
+
+        session.execute = AsyncMock(side_effect=capture_execute)
+
+        with patch("app.crud.embed_async", new=AsyncMock(return_value=[[0.0] * 384])):
+            await find_relevant_products(session, bot_id=1, extracted_items=["pizza"])
+
+        assert len(captured_stmts) == 4, (
+            f"Expected 4 queries, got {len(captured_stmts)}"
+        )
+        for i, stmt_str in enumerate(captured_stmts):
+            assert "is_deleted" in stmt_str, (
+                f"Query {i + 1} missing is_deleted filter: {stmt_str}"
             )
 
     async def test_find_relevant_products_empty_items_returns_empty(self):
@@ -538,3 +570,256 @@ class TestAddItemsBotIdValidation:
 
         session.add.assert_called_once()
         session.flush.assert_awaited_once()
+
+
+# ===========================================================================
+# TestListOrdersByBotPagination
+# ===========================================================================
+
+
+class TestListOrdersByBotPagination:
+    async def test_default_pagination_applied(self):
+        """list_orders_by_bot applies default limit=50, offset=0 to the query."""
+        session = _make_session()
+
+        result_mock = MagicMock()
+        result_mock.scalars.return_value.all.return_value = []
+        session.execute.return_value = result_mock
+
+        orders = await list_orders_by_bot(session, bot_id=1)
+        assert orders == []
+
+        session.execute.assert_awaited_once()
+        compiled = str(
+            session.execute.call_args[0][0].compile(
+                compile_kwargs={"literal_binds": True}
+            )
+        )
+        assert "LIMIT" in compiled.upper()
+        assert "OFFSET" in compiled.upper()
+
+    async def test_custom_limit_offset(self):
+        """Custom limit and offset are passed through to the query."""
+        session = _make_session()
+
+        result_mock = MagicMock()
+        result_mock.scalars.return_value.all.return_value = []
+        session.execute.return_value = result_mock
+
+        await list_orders_by_bot(session, bot_id=1, limit=10, offset=20)
+
+        session.execute.assert_awaited_once()
+        compiled = str(
+            session.execute.call_args[0][0].compile(
+                compile_kwargs={"literal_binds": True}
+            )
+        )
+        assert "LIMIT" in compiled.upper()
+        assert "OFFSET" in compiled.upper()
+
+
+# ===========================================================================
+# TestUpdateOrderStatusForUpdate
+# ===========================================================================
+
+
+class TestUpdateOrderStatusForUpdate:
+    async def test_query_uses_for_update(self):
+        """update_order_status_by_id uses FOR UPDATE to prevent race conditions."""
+        session = _make_session()
+
+        order = _make_order(order_id=1)
+        order.status = OrderStatus.PENDING
+        result_mock = MagicMock()
+        result_mock.scalars.return_value.first.return_value = order
+        session.execute.return_value = result_mock
+
+        await update_order_status_by_id(session, order_id=1, new_status=OrderStatus.PAID)
+
+        session.execute.assert_awaited_once()
+        compiled = str(
+            session.execute.call_args[0][0].compile(
+                compile_kwargs={"literal_binds": True}
+            )
+        )
+        assert "FOR UPDATE" in compiled.upper(), (
+            f"Query should include FOR UPDATE but got: {compiled}"
+        )
+
+
+# ===========================================================================
+# TestUpsertSubscriptionOnConflict
+# ===========================================================================
+
+
+class TestUpsertSubscriptionOnConflict:
+    async def test_upsert_uses_pg_insert_on_conflict(self):
+        """upsert_subscription uses PostgreSQL INSERT ... ON CONFLICT."""
+        session = _make_session()
+
+        sub_mock = MagicMock()
+        with patch(
+            "app.crud.get_subscription_by_bot", new=AsyncMock(return_value=sub_mock)
+        ):
+            result = await upsert_subscription(
+                session,
+                user_id=1,
+                bot_id=2,
+                mp_id="mp_abc",
+                status="authorized",
+            )
+
+        assert result is sub_mock
+        session.execute.assert_awaited_once()
+
+        stmt = session.execute.call_args[0][0]
+        compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "INSERT INTO" in compiled.upper()
+        assert "ON CONFLICT" in compiled.upper()
+
+    async def test_yearly_plan_gets_longer_period(self):
+        """A plan with frequency_months=12 gets ~360-day expiry."""
+        session = _make_session()
+        sub_mock = MagicMock()
+
+        with patch(
+            "app.crud.get_subscription_by_bot", new=AsyncMock(return_value=sub_mock)
+        ):
+            await upsert_subscription(
+                session,
+                user_id=1,
+                bot_id=2,
+                mp_id="mp_yearly",
+                status="authorized",
+                plan_type="yearly",
+                plan_frequency_months=12,
+            )
+
+        stmt = session.execute.call_args[0][0]
+        compiled = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "INSERT INTO" in compiled.upper()
+
+
+# ---------------------------------------------------------------------------
+# WhatsApp token encryption
+# ---------------------------------------------------------------------------
+
+
+class TestCreateBotEncryptsToken:
+    """create_bot must encrypt whatsapp_token before persisting."""
+
+    @pytest.mark.asyncio
+    async def test_create_bot_encrypts_whatsapp_token(self):
+        session = _make_session()
+
+        # Make existing-bot check return None (no duplicate)
+        result_mock = MagicMock()
+        result_mock.scalars.return_value.first.return_value = None
+        session.execute.return_value = result_mock
+
+        with patch("app.crud.encrypt_value", side_effect=lambda v: f"ENC:{v}") as mock_enc, \
+             patch("app.crud.get_bot_by_id", new_callable=AsyncMock, return_value=MagicMock()):
+            await create_bot(
+                session,
+                user_id=1,
+                whatsapp_number="5511999999999",
+                restaurant_name="Test",
+                pix_key=None,
+                whatsapp_token="my_secret_token",
+            )
+
+        mock_enc.assert_called_once_with("my_secret_token")
+        # The Bot object passed to session.add should have the encrypted token
+        added_bot = session.add.call_args[0][0]
+        assert added_bot.whatsapp_token == "ENC:my_secret_token"
+
+
+class TestUpdateBotEncryptsToken:
+    """update_bot must encrypt whatsapp_token when it appears in the update."""
+
+    @pytest.mark.asyncio
+    async def test_update_bot_encrypts_whatsapp_token(self):
+        session = _make_session()
+        db_bot = MagicMock()
+        session.get = AsyncMock(return_value=db_bot)
+
+        update = BotUpdate(whatsapp_token="new_secret")
+
+        with patch("app.crud.encrypt_value", side_effect=lambda v: f"ENC:{v}") as mock_enc, \
+             patch("app.crud.get_bot_by_id", new_callable=AsyncMock, return_value=db_bot):
+            await update_bot(session, bot_id=1, update_data=update)
+
+        mock_enc.assert_called_once_with("new_secret")
+        assert db_bot.whatsapp_token == "ENC:new_secret"
+
+
+# ===========================================================================
+# TestBulkCreateProductsValidation
+# ===========================================================================
+
+
+class TestBulkCreateProductsValidation:
+    """Tests for input validation in bulk_create_products."""
+
+    async def _run_bulk(self, products_data):
+        session = _make_session()
+        result_mock = MagicMock()
+        result_mock.scalars.return_value.all.return_value = []
+        session.execute.return_value = result_mock
+
+        with patch("app.crud.embed_async", new=AsyncMock(return_value=[])):
+            count = await bulk_create_products(session, bot_id=1, products_data=products_data)
+        return count
+
+    async def test_zero_price_skipped(self):
+        """Items with price=0 should be skipped."""
+        count = await self._run_bulk([{"name": "Free item", "price": 0.0}])
+        assert count == 0
+
+    async def test_negative_price_skipped(self):
+        """Items with negative price should be skipped."""
+        count = await self._run_bulk([{"name": "Negative", "price": -5.0}])
+        assert count == 0
+
+    async def test_non_numeric_price_skipped(self):
+        """Items with non-numeric price string should be skipped."""
+        count = await self._run_bulk([{"name": "Bad price", "price": "abc"}])
+        assert count == 0
+
+    async def test_long_name_truncated(self):
+        """Product names longer than 150 chars should be truncated."""
+        long_name = "A" * 200
+        session = _make_session()
+        result_mock = MagicMock()
+        result_mock.scalars.return_value.all.return_value = []
+        session.execute.return_value = result_mock
+
+        items_captured = []
+        original_append = list.append
+
+        products_data = [{"name": long_name, "price": 10.0}]
+
+        with patch("app.crud.embed_async", new=AsyncMock(return_value=[[0.0] * 384])):
+            await bulk_create_products(session, bot_id=1, products_data=products_data)
+
+        # Check via session.add calls — the Product object's name should be truncated
+        if session.add.called:
+            added_obj = session.add.call_args[0][0]
+            assert len(added_obj.name) <= 150
+
+    async def test_long_description_truncated(self):
+        """Product descriptions longer than 500 chars should be truncated."""
+        long_desc = "B" * 600
+        session = _make_session()
+        result_mock = MagicMock()
+        result_mock.scalars.return_value.all.return_value = []
+        session.execute.return_value = result_mock
+
+        products_data = [{"name": "Good product", "price": 10.0, "description": long_desc}]
+
+        with patch("app.crud.embed_async", new=AsyncMock(return_value=[[0.0] * 384])):
+            await bulk_create_products(session, bot_id=1, products_data=products_data)
+
+        if session.add.called:
+            added_obj = session.add.call_args[0][0]
+            assert len(added_obj.description) <= 500

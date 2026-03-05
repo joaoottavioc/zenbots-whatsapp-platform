@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator, validator
 from datetime import datetime
 from typing import List, Optional, Any, Dict
 import pytz
@@ -152,6 +152,13 @@ class BotResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    @model_validator(mode="after")
+    def decrypt_whatsapp_token(self) -> "BotResponse":
+        from app.encryption import decrypt_value
+
+        self.whatsapp_token = decrypt_value(self.whatsapp_token)
+        return self
+
 
 # --- Schemas de Autenticação e Usuário ---
 
@@ -170,6 +177,7 @@ class UserResponse(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    csrf_token: Optional[str] = None
 
 
 # --- Schema para Upload de Catálogo ---
@@ -260,3 +268,35 @@ class CepResponse(BaseModel):
     state: str
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+
+
+# --- Schemas de Plano (Admin + Público) ---
+
+
+class PlanResponse(BaseModel):
+    id: int
+    key: str
+    title: str
+    description: str
+    price: float
+    currency: str
+    frequency: int
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PlanCreate(BaseModel):
+    key: str = Field(max_length=50)
+    title: str = Field(max_length=150)
+    description: str = Field(max_length=500)
+    price: float = Field(gt=0)
+    currency: str = Field(default="BRL", max_length=10)
+    frequency: int = Field(default=1, ge=1)
+
+
+class PlanUpdate(BaseModel):
+    key: Optional[str] = Field(default=None, max_length=50)
+    title: Optional[str] = Field(default=None, max_length=150)
+    description: Optional[str] = Field(default=None, max_length=500)
+    price: Optional[float] = Field(default=None, gt=0)
+    currency: Optional[str] = Field(default=None, max_length=10)
+    frequency: Optional[int] = Field(default=None, ge=1)

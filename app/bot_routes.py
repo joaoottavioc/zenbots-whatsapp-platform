@@ -5,7 +5,7 @@ from typing import List, Dict, Any
 # --- Importações Consolidadas ---
 from app import crud, schemas, data_extractor
 from app.database import get_session
-from app.models import User
+from app.models import User, OrderStatus
 from app.auth import get_current_user
 from app.schemas import WhatsAppAuthRequest
 import re
@@ -21,6 +21,7 @@ from arq import ArqRedis
 import asyncio
 from app.menu_storage import upload_bytes_to_s3
 from app.whatsapp import send_whatsapp_message
+from app.encryption import encrypt_value, decrypt_value
 
 logger = logging.getLogger(__name__)
 
@@ -380,12 +381,35 @@ async def upload_catalog_from_file_endpoint(
         # 4. Processamento IA (Lógica Blindada)
         all_extracted_products = []
 
-        # DETECÇÃO HÍBRIDA: Confia no Content-Type E na extensão do arquivo
+        # DETECÇÃO POR MAGIC BYTES: Verifica assinatura real do arquivo
         is_pdf = False
-        if file.content_type and "pdf" in file.content_type.lower():
+        is_image = False
+        detected_mime = None
+        if contents[:4] == b"%PDF":
             is_pdf = True
-        elif file.filename and file.filename.lower().endswith(".pdf"):
-            is_pdf = True
+        elif contents[:3] == b"\xff\xd8\xff":  # JPEG
+            is_image = True
+            detected_mime = "image/jpeg"
+        elif contents[:8] == b"\x89PNG\r\n\x1a\n":  # PNG
+            is_image = True
+            detected_mime = "image/png"
+        elif len(contents) >= 12 and contents[:4] == b"RIFF" and contents[8:12] == b"WEBP":
+            is_image = True
+            detected_mime = "image/webp"
+        else:
+            # Fallback to extension/MIME for edge cases
+            ext = (file.filename or "").lower().rsplit(".", 1)[-1] if file.filename else ""
+            ct = (file.content_type or "").lower()
+            if ext == "pdf" or "pdf" in ct:
+                is_pdf = True
+            elif ext in ("jpg", "jpeg", "png", "webp") or ct.startswith("image/"):
+                is_image = True
+                detected_mime = file.content_type
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Tipo de arquivo não suportado. Envie PDF, JPEG, PNG ou WebP.",
+                )
 
         if is_pdf:
             logger.info("PDF mode activated, starting page conversion")
@@ -423,10 +447,10 @@ async def upload_catalog_from_file_endpoint(
                 logger.error("Critical error reading PDF: %s", e)
                 # Não damos raise aqui para tentar ver se achou algo antes de falhar
 
-        else:
+        elif is_image:
             logger.info("Single image mode activated")
             all_extracted_products = await extract_products_from_image(
-                contents, file.content_type
+                contents, detected_mime or file.content_type
             )
 
         # 5. Validação Final
@@ -469,6 +493,8 @@ async def upload_catalog_from_file_endpoint(
 async def list_bot_orders(
     bot_id: int,
     status: str | None = None,  # Ex: ?status=paid
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
@@ -478,8 +504,22 @@ async def list_bot_orders(
     if not db_bot or db_bot.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Acesso negado.")
 
-    # 2. Busca os pedidos usando a função otimizada do CRUD
-    orders = await crud.list_orders_by_bot(session, bot_id=bot_id, status_filter=status)
+    # 2. Valida o status_filter contra o enum OrderStatus
+    status_enum = None
+    if status:
+        try:
+            status_enum = OrderStatus(status.lower())
+        except ValueError:
+            valid = [s.value for s in OrderStatus]
+            raise HTTPException(
+                status_code=422,
+                detail=f"Status inválido: '{status}'. Valores válidos: {valid}",
+            )
+
+    # 3. Busca os pedidos usando a função otimizada do CRUD
+    orders = await crud.list_orders_by_bot(
+        session, bot_id=bot_id, status_filter=status_enum, limit=limit, offset=offset
+    )
     return orders
 
 
@@ -579,7 +619,7 @@ async def update_order_status(
                 await send_whatsapp_message(
                     to=phone,
                     message=notify_msg,
-                    token=bot.whatsapp_token,
+                    token=decrypt_value(bot.whatsapp_token),
                     phone_id=bot.phone_number_id,
                 )
                 logger.info(
@@ -738,7 +778,7 @@ async def authenticate_whatsapp_bot(
 
         if existing_bot:
             if existing_bot.user_id == current_user.id:
-                existing_bot.whatsapp_token = access_token
+                existing_bot.whatsapp_token = encrypt_value(access_token)
                 existing_bot.phone_number_id = phone_number_id
                 session.add(existing_bot)
                 await session.commit()
@@ -966,7 +1006,7 @@ async def complete_onboarding(
             )
 
         # Atualiza bot existente
-        existing_bot.whatsapp_token = final_token
+        existing_bot.whatsapp_token = encrypt_value(final_token)
         existing_bot.phone_number_id = phone_number_id
         session.add(existing_bot)
         await session.commit()
@@ -979,7 +1019,7 @@ async def complete_onboarding(
 
         target_bot.whatsapp_number = clean_number
         target_bot.phone_number_id = phone_number_id
-        target_bot.whatsapp_token = final_token
+        target_bot.whatsapp_token = encrypt_value(final_token)
 
         if "Loja" in target_bot.restaurant_name or not target_bot.restaurant_name:
             target_bot.restaurant_name = f"Loja {clean_number}"

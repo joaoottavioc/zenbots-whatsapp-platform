@@ -28,7 +28,10 @@ def _get_client():
 
 
 async def is_spamming(
-    user_phone: str, limit: int = 15, window_seconds: int = 60
+    user_phone: str,
+    limit: int = 15,
+    window_seconds: int = 60,
+    bot_phone_id: str = "",
 ) -> bool:
     """
     Verifica se o usuário excedeu o limite de mensagens na janela de tempo.
@@ -37,8 +40,8 @@ async def is_spamming(
     if not user_phone:
         return False
 
-    # Cria uma chave única para este usuário
-    key = f"spam:{user_phone}"
+    # Cria uma chave única para este usuário, escopada por bot quando disponível
+    key = f"spam:{bot_phone_id}:{user_phone}" if bot_phone_id else f"spam:{user_phone}"
 
     try:
         r = _get_client()
@@ -94,6 +97,26 @@ async def is_rate_limited(key: str, limit: int, window_seconds: int) -> bool:
             "Redis rate limiter error in is_rate_limited for key=%s: %s", key, e
         )
         return True
+
+
+async def mark_reset_token_used(jti: str, ttl: int = 900) -> None:
+    """Mark a password-reset token JTI as used in Redis (TTL = token lifetime)."""
+    try:
+        r = _get_client()
+        await r.set(f"reset_used:{jti}", "1", ex=ttl)
+    except redis.RedisError as e:
+        logger.error("Redis error in mark_reset_token_used: %s", e)
+        # Fail open — allow reset even if Redis is down (token still has JWT expiry)
+
+
+async def is_reset_token_used(jti: str) -> bool:
+    """Check if a password-reset token JTI has already been used."""
+    try:
+        r = _get_client()
+        return await r.exists(f"reset_used:{jti}") > 0
+    except redis.RedisError as e:
+        logger.error("Redis error in is_reset_token_used: %s", e)
+        return False  # Fail open
 
 
 async def store_oauth_state(user_id: int, bot_id: int) -> str:

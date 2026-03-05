@@ -720,7 +720,7 @@ class TestPaymentMethodState(BaseConversationTest):
 
     @pytest.mark.asyncio
     async def test_pix_mp_failure_reverts_order(self):
-        """If MP returns None, order is deleted and user is asked to choose another method."""
+        """If MP returns None, session.rollback() is called and user is asked to choose another method."""
         from app.whatsapp import process_whatsapp_message
 
         payment_config = MagicMock()
@@ -734,9 +734,7 @@ class TestPaymentMethodState(BaseConversationTest):
         ):
             await process_whatsapp_message({}, build_whatsapp_payload(text="pix"))
 
-        self.crud_mock.delete_order.assert_called_once_with(
-            self.session, self.mock_order.id
-        )
+        self.session.rollback.assert_awaited_once()
         msg = get_sent_message(self.send_mock)
         assert "problema" in msg.lower() or "erro" in msg.lower()
 

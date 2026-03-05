@@ -20,12 +20,24 @@ conf = ConnectionConfig(
 )
 
 
+def validate_email_config():
+    """Raise RuntimeError if production is using default mailhog config."""
+    env = os.getenv("ENVIRONMENT", "development").lower()
+    mail_server = os.getenv("MAIL_SERVER", "mailhog").lower()
+    if env in ("production", "prod") and mail_server == "mailhog":
+        raise RuntimeError(
+            "Production environment must have MAIL_SERVER configured "
+            "(currently defaults to 'mailhog'). Set MAIL_SERVER env var."
+        )
+
+
 async def send_password_reset_email(email: EmailStr, token: str):
     """
     Envia o e-mail com o link de recuperação.
     """
-    # Link que aponta para o Frontend (vamos criar essa página depois)
-    reset_link = f"http://localhost:3000/redefinir-senha?token={token}"
+    # Link que aponta para o Frontend
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    reset_link = f"{frontend_url}/redefinir-senha?token={token}"
 
     html = f"""
     <html>
@@ -54,5 +66,9 @@ async def send_password_reset_email(email: EmailStr, token: str):
     )
 
     fm = FastMail(conf)
-    await fm.send_message(message)
+    try:
+        await fm.send_message(message)
+    except Exception:
+        logger.exception("Failed to send password reset email to %s via %s", email, conf.MAIL_SERVER)
+        raise
     logger.info("Password reset email sent via %s", conf.MAIL_SERVER)

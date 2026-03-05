@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import Response
 
 from app.auth import login_for_access_token
 
@@ -12,6 +13,11 @@ def mock_request():
     req = MagicMock()
     req.client.host = "192.168.1.1"
     return req
+
+
+@pytest.fixture
+def mock_response():
+    return Response()
 
 
 @pytest.fixture
@@ -28,7 +34,7 @@ def mock_session():
 
 
 @pytest.mark.asyncio
-async def test_failed_login_logs_warning(mock_request, mock_form_data, mock_session):
+async def test_failed_login_logs_warning(mock_request, mock_response, mock_form_data, mock_session):
     """Failed login should log AUTH_FAIL with email and IP."""
     with (
         patch(
@@ -41,6 +47,7 @@ async def test_failed_login_logs_warning(mock_request, mock_form_data, mock_sess
         with pytest.raises(HTTPException) as exc_info:
             await login_for_access_token(
                 request=mock_request,
+                response=mock_response,
                 form_data=mock_form_data,
                 session=mock_session,
             )
@@ -54,7 +61,7 @@ async def test_failed_login_logs_warning(mock_request, mock_form_data, mock_sess
 
 @pytest.mark.asyncio
 async def test_failed_login_wrong_password_logs_warning(
-    mock_request, mock_form_data, mock_session
+    mock_request, mock_response, mock_form_data, mock_session
 ):
     """Wrong password should also log AUTH_FAIL."""
     fake_user = MagicMock()
@@ -73,6 +80,7 @@ async def test_failed_login_wrong_password_logs_warning(
         with pytest.raises(HTTPException):
             await login_for_access_token(
                 request=mock_request,
+                response=mock_response,
                 form_data=mock_form_data,
                 session=mock_session,
             )
@@ -80,7 +88,7 @@ async def test_failed_login_wrong_password_logs_warning(
 
 
 @pytest.mark.asyncio
-async def test_successful_login_does_not_log(mock_request, mock_session):
+async def test_successful_login_does_not_log(mock_request, mock_response, mock_session):
     """Successful login should NOT log AUTH_FAIL."""
     fake_user = MagicMock()
     fake_user.hashed_password = "some_hash"
@@ -102,6 +110,7 @@ async def test_successful_login_does_not_log(mock_request, mock_session):
     ):
         result = await login_for_access_token(
             request=mock_request,
+            response=mock_response,
             form_data=form,
             session=mock_session,
         )

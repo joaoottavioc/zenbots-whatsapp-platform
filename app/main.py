@@ -25,10 +25,12 @@ import redis.asyncio as redis
 import asyncio
 import json
 from app import billing_routes
+from app import admin_routes
 from app import menu_router
 from app import health_routes
 from app import monitoring_routes
 from app.monitoring import start_flush_task, stop_flush_task
+from app.email_service import validate_email_config
 
 load_dotenv()
 
@@ -67,6 +69,7 @@ def validate_required_env_vars():
 async def lifespan(app: FastAPI):
     # --- INICIALIZAÇÃO (STARTUP) ---
     validate_required_env_vars()
+    validate_email_config()
     logger.info("Inicializando aplicacao...")
 
     # 1. Cria as tabelas do Banco de Dados
@@ -135,8 +138,13 @@ def build_cors_kwargs() -> dict:
     return kwargs
 
 
+from app.csrf import CSRFMiddleware
+
 _cors_kwargs = build_cors_kwargs()
+# Starlette LIFO: last added = outermost. CORS runs first (handles preflight),
+# then CSRF runs on the inner layer.
 app.add_middleware(CORSMiddleware, **_cors_kwargs)
+app.add_middleware(CSRFMiddleware)
 
 # --- Inclusão das Rotas ---
 app.include_router(whatsapp.router)
@@ -145,6 +153,7 @@ app.include_router(bot_routes.router)
 app.include_router(takeover_routes.router)
 app.include_router(payment_router)
 app.include_router(billing_routes.router)
+app.include_router(admin_routes.router)
 app.include_router(menu_router.router)
 app.include_router(utils.router)
 app.include_router(health_routes.router)
@@ -189,24 +198,35 @@ async def stream_events(
                     content={"detail": "User not found"}, status_code=401
                 )
     else:
-        # Extract JWT from Authorization header or token query param
-        bearer_token = None
-        auth_header = request.headers.get("authorization", "")
-        if auth_header.startswith("Bearer "):
-            bearer_token = auth_header[7:]
-
-        jwt_token = bearer_token or token
-        if jwt_token:
+        # Try cookie auth
+        cookie_token = request.cookies.get("access_token")
+        if cookie_token:
             async with async_session() as session:
-                user = await get_user_from_token(jwt_token, session)
+                user = await get_user_from_token(cookie_token, session)
                 if not user:
                     return JSONResponse(
                         content={"detail": "Invalid or expired token"}, status_code=401
                     )
-        else:
-            return JSONResponse(
-                content={"detail": "Authentication required"}, status_code=401
-            )
+
+        if not user:
+            # Extract JWT from Authorization header or token query param
+            bearer_token = None
+            auth_header = request.headers.get("authorization", "")
+            if auth_header.startswith("Bearer "):
+                bearer_token = auth_header[7:]
+
+            jwt_token = bearer_token or token
+            if jwt_token:
+                async with async_session() as session:
+                    user = await get_user_from_token(jwt_token, session)
+                    if not user:
+                        return JSONResponse(
+                            content={"detail": "Invalid or expired token"}, status_code=401
+                        )
+            else:
+                return JSONResponse(
+                    content={"detail": "Authentication required"}, status_code=401
+                )
 
     async with async_session() as session:
         bots = await crud.list_user_bots(session, user.id)

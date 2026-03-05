@@ -6,6 +6,7 @@ Strips URLs, emails, phone numbers, and dangerous Unicode characters
 to prevent prompt-injection attacks from producing phishing content.
 """
 
+import html
 import logging
 import re
 
@@ -77,5 +78,8 @@ def sanitize_llm_output(text: str) -> str:
     # 6. Truncate
     if len(text) > MAX_LENGTH:
         text = text[:MAX_LENGTH] + "..."
+
+    # 7. Escape HTML entities (defense-in-depth for dashboard display)
+    text = html.escape(text, quote=False)
 
     return text.strip()

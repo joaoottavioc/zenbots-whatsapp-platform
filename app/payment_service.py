@@ -66,7 +66,11 @@ async def refresh_mp_token(config, session) -> Optional[str]:
         session.add(config)
         await session.commit()
 
-        logger.info("MP token refreshed for PaymentConfig %s", config.id)
+        logger.info(
+            "OAUTH_TOKEN_REFRESH_SUCCESS config_id=%s bot_id=%s provider=mercadopago",
+            config.id,
+            config.bot_id,
+        )
         return new_access
 
     except Exception as e:

@@ -151,6 +151,11 @@ async def exchange_token(
         session.add(config)
 
     await session.commit()
+    logger.info(
+        "OAUTH_TOKEN_EXCHANGE_SUCCESS user_id=%s bot_id=%s provider=mercadopago",
+        current_user.id,
+        bot.id,
+    )
     return {"status": "connected", "bot_name": bot.restaurant_name}
 
 

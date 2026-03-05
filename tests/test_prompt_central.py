@@ -136,6 +136,43 @@ class TestCreateCentralPrompt:
         assert "vazio" in _system_content(messages).lower()
 
     # 7 -----------------------------------------------------------------------
+    # 8 -----------------------------------------------------------------------
+    def test_menu_context_capped_at_15_items(self):
+        """When more than 15 products are passed, only the first 15 appear in the system message."""
+        products = [
+            _make_product(product_id=i, name=f"Product_{i}", description=f"Desc {i}")
+            for i in range(30)
+        ]
+        messages = create_central_prompt(
+            user_query="quero algo",
+            history=[],
+            restaurant_name="Restaurante Teste",
+            cart_items=[],
+            search_results=products,
+        )
+        system = _system_content(messages)
+        for i in range(15):
+            assert f"Product_{i}" in system
+        for i in range(15, 30):
+            assert f"Product_{i}" not in system
+
+    # 9 -----------------------------------------------------------------------
+    def test_description_truncated_at_80_chars(self):
+        """Product descriptions longer than 80 chars should be truncated."""
+        long_desc = "A" * 200
+        products = [_make_product(product_id=1, name="Pizza", description=long_desc)]
+        messages = create_central_prompt(
+            user_query="quero pizza",
+            history=[],
+            restaurant_name="Restaurante Teste",
+            cart_items=[],
+            search_results=products,
+        )
+        system = _system_content(messages)
+        assert long_desc not in system
+        assert "A" * 80 in system
+
+    # 7 -----------------------------------------------------------------------
     def test_empty_search_results_shows_no_items_message(self):
         """When search_results is not provided the system message must mention 'Nenhum item'."""
         messages = create_central_prompt(

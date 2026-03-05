@@ -111,3 +111,22 @@ def test_none_input():
 def test_whitespace_collapse():
     result = sanitize_llm_output("Pedido   feito    com   sucesso")
     assert "  " not in result
+
+
+# ---------- HTML entity escaping ----------
+
+
+def test_escapes_html_script_tags():
+    result = sanitize_llm_output("Olá <script>alert('xss')</script>")
+    assert "<script>" not in result
+    assert "&lt;script&gt;" in result
+
+
+def test_escapes_html_ampersand():
+    result = sanitize_llm_output("A & B")
+    assert "&amp;" in result
+
+
+def test_preserves_quotes():
+    result = sanitize_llm_output('"obrigado"')
+    assert '"obrigado"' in result

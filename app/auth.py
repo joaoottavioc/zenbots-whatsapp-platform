@@ -1,11 +1,13 @@
 import logging
 import os
 import re
+import secrets
+import uuid
 from datetime import timedelta
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -18,7 +20,7 @@ from app.schemas import ForgotPasswordRequest
 from app.email_service import send_password_reset_email
 from sqlmodel import select
 from app.time import utcnow
-from app.rate_limiter import is_rate_limited, create_sse_ticket
+from app.rate_limiter import is_rate_limited, create_sse_ticket, mark_reset_token_used, is_reset_token_used
 
 
 logger = logging.getLogger(__name__)
@@ -35,7 +37,21 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 horas
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
+
+# --- Cookie configuration ---
+COOKIE_NAME = "access_token"
+CSRF_COOKIE_NAME = "csrf_token"
+COOKIE_MAX_AGE = 60 * 60 * 24  # 24h, matches JWT expiry
+COOKIE_SAMESITE = os.getenv("COOKIE_SAMESITE", "lax").lower()
+
+
+def _is_secure_cookie() -> bool:
+    # SameSite=None requires Secure=True (browser requirement)
+    if COOKIE_SAMESITE == "none":
+        return True
+    return os.getenv("ENVIRONMENT", "development") != "development"
+
 
 router = APIRouter()
 
@@ -200,6 +216,7 @@ async def register(
 )
 async def login_for_access_token(
     request: Request,
+    response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: AsyncSession = Depends(get_session),
     _rate_limit: None = Depends(_check_login_rate_limit),
@@ -215,24 +232,72 @@ async def login_for_access_token(
         )
 
     access_token = create_access_token(data={"sub": user.email})
-    return {"access_token": access_token, "token_type": "bearer"}
+    csrf_token = secrets.token_urlsafe(32)
+    secure = _is_secure_cookie()
+
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=access_token,
+        httponly=True,
+        secure=secure,
+        samesite=COOKIE_SAMESITE,
+        path="/",
+        max_age=COOKIE_MAX_AGE,
+    )
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME,
+        value=csrf_token,
+        httponly=False,
+        secure=secure,
+        samesite=COOKIE_SAMESITE,
+        path="/",
+        max_age=COOKIE_MAX_AGE,
+    )
+
+    return {"access_token": access_token, "token_type": "bearer", "csrf_token": csrf_token}
+
+
+# --- Logout ---
+
+
+@router.post("/logout", summary="Logout and clear auth cookies")
+async def logout(response: Response):
+    response.delete_cookie(key=COOKIE_NAME, path="/")
+    response.delete_cookie(key=CSRF_COOKIE_NAME, path="/")
+    return {"message": "Logged out successfully"}
 
 
 # --- Dependência de Autenticação ---
 
 
+def _extract_token(request: Request) -> Optional[str]:
+    """Extract JWT from cookie first, then Authorization header."""
+    token = request.cookies.get(COOKIE_NAME)
+    if token:
+        return token
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        return auth_header[7:]
+    return None
+
+
 async def get_current_user(
-    token: str = Depends(oauth2_scheme), session: AsyncSession = Depends(get_session)
+    request: Request, session: AsyncSession = Depends(get_session)
 ) -> models.User:
     """
     Dependência para ser usada em endpoints protegidos.
-    Valida o token JWT e retorna o objeto User completo do banco de dados.
+    Valida o token JWT (cookie ou Bearer header) e retorna o objeto User.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+    token = _extract_token(request)
+    if token is None:
+        raise credentials_exception
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: Optional[str] = payload.get("sub")
@@ -246,6 +311,15 @@ async def get_current_user(
         raise credentials_exception
 
     return user
+
+
+async def require_admin(
+    current_user: models.User = Depends(get_current_user),
+) -> models.User:
+    """Dependency that ensures the current user is an admin."""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    return current_user
 
 
 async def get_user_from_token(
@@ -284,9 +358,10 @@ async def forgot_password(
         logger.warning("Password reset attempted for non-existent email")
         return {"message": "Se o e-mail existir, um link foi enviado."}
 
-    # 3. Gera Token de Recuperação (15 min)
+    # 3. Gera Token de Recuperação (15 min) com JTI para revogação
     reset_token = create_access_token(
-        data={"sub": user.email, "type": "reset"}, expires_delta=timedelta(minutes=15)
+        data={"sub": user.email, "type": "reset", "jti": str(uuid.uuid4())},
+        expires_delta=timedelta(minutes=15),
     )
 
     # 4. Envia o E-mail
@@ -335,6 +410,14 @@ async def reset_password(
     except JWTError:
         raise credentials_exception
 
+    # 1b. Check if the reset token has already been used (via JTI)
+    jti: Optional[str] = data.get("jti")
+    if jti and await is_reset_token_used(jti):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Este link de redefinição já foi utilizado.",
+        )
+
     # 2. Buscar o Usuário
     statement = select(models.User).where(models.User.email == email)
     result = await session.execute(statement)
@@ -347,6 +430,10 @@ async def reset_password(
     user.hashed_password = get_password_hash(payload.new_password)
     session.add(user)
     await session.commit()
+
+    # 4. Mark the reset token as used so it cannot be replayed
+    if jti:
+        await mark_reset_token_used(jti, ttl=900)
 
     return {"message": "Senha atualizada com sucesso!"}
 

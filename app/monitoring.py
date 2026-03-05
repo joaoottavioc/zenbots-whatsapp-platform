@@ -101,7 +101,10 @@ async def record_llm_usage(
     """Record an LLM API call with token counts and cost."""
     # Resolve bot_id / contact_id from context if not passed
     if bot_id is None:
-        bot_id = current_bot_id.get(None) or 0
+        bot_id = current_bot_id.get(None)
+    if not bot_id:
+        logger.debug("Skipping LLM usage event for %s — no bot_id", operation)
+        return
     if contact_id is None:
         contact_id = current_contact_id.get(None)
 
@@ -142,7 +145,10 @@ async def record_api_usage(
 ) -> None:
     """Record a non-LLM external API call."""
     if bot_id is None:
-        bot_id = current_bot_id.get(None) or 0
+        bot_id = current_bot_id.get(None)
+    if not bot_id:
+        logger.debug("Skipping usage event for %s/%s — no bot_id", service, operation)
+        return
     if contact_id is None:
         contact_id = current_contact_id.get(None)
 

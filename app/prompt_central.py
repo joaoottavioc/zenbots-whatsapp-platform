@@ -20,8 +20,9 @@ def create_central_prompt(
     # --- CONTEXTO DO CARDÁPIO ---
     menu_context = "Nenhum item relevante encontrado."
     if search_results:
+        capped = search_results[:15]
         menu_context = "\n".join(
-            f"- {p.name} (ID: {p.id}) – {p.description or ''}" for p in search_results
+            f"- {p.name} (ID: {p.id}) – {(p.description or '')[:80]}" for p in capped
         )
 
     # --- CONTEXTO DO CARRINHO ---

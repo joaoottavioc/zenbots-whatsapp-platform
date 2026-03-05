@@ -1,7 +1,10 @@
-"""Tests for pending_action timezone handling."""
+"""Tests for pending_action timezone handling and error handling."""
 
+import logging
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from app.pending_action import _to_naive_utc, has_valid_pending, expire_if_needed
 
@@ -83,3 +86,27 @@ class TestExpireIfNeeded:
         expire_if_needed(cart)
         # Should NOT have been cleared
         assert cart.pending_action_tool == "test"
+
+
+class TestCorruptedPendingActionArgs:
+    @pytest.mark.asyncio
+    async def test_corrupted_json_logs_and_returns_error(self, caplog):
+        """Corrupted pending_action_args should log a warning and return user-friendly message."""
+        from app.whatsapp import _execute_pending_action
+
+        cart = MagicMock()
+        cart.id = 99
+        cart.pending_action_tool = "add_items_to_cart"
+        cart.pending_action_args = "{invalid"
+        cart.pending_action_question = "Adicionar pizza?"
+
+        bot = MagicMock()
+        bot.id = 1
+
+        session = AsyncMock()
+
+        with caplog.at_level(logging.WARNING, logger="app.whatsapp"):
+            result = await _execute_pending_action(session, cart, bot)
+
+        assert "Houve um erro ao processar sua confirmação" in result
+        assert "Corrupted pending_action_args" in caplog.text

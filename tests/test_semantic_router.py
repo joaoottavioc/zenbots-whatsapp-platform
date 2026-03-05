@@ -7,6 +7,8 @@ Covered:
 - semantic_intent  (async, embed_router mocked)
 """
 
+import asyncio
+
 import pytest
 from unittest.mock import AsyncMock, patch
 
@@ -181,3 +183,30 @@ class TestSemanticIntent:
 
         assert intent == "FINISH_ORDER"
         assert score == pytest.approx(0.9)
+
+    async def test_concurrent_cold_start_single_load(self):
+        """
+        When 5 tasks call semantic_intent concurrently on cold start,
+        embed_router should only be called len(PROTOS) times for proto
+        embeddings (not 5x), thanks to the asyncio.Lock.
+        """
+        n_protos = len(PROTOS)
+
+        call_count = 0
+
+        async def mock_embed(phrases):
+            nonlocal call_count
+            call_count += 1
+            # Small delay to simulate real work and increase race window
+            await asyncio.sleep(0.01)
+            return [[0.5, 0.5, 0.0]] * len(phrases)
+
+        mock_fn = AsyncMock(side_effect=mock_embed)
+
+        with patch("app.semantic_router.embed_router", mock_fn):
+            tasks = [semantic_intent(f"query {i}") for i in range(5)]
+            await asyncio.gather(*tasks)
+
+        # Proto embeddings: n_protos calls (only once, not 5x)
+        # Query embeddings: 5 calls (one per task)
+        assert mock_fn.call_count == n_protos + 5
