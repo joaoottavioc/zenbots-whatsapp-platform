@@ -124,6 +124,8 @@ module "ecs" {
     { name = "REDIS_PORT", value = "6379" },
     { name = "REDIS_URL", value = module.elasticache.redis_url },
     { name = "CORS_ORIGINS", value = "https://app.zenbotz.com.br" },
+    { name = "COOKIE_DOMAIN", value = ".zenbotz.com.br" },
+    { name = "FRONTEND_URL", value = "https://app.zenbotz.com.br" },
   ]
 
   backend_secrets = [

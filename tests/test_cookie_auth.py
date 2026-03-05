@@ -213,3 +213,100 @@ def test_invalid_cookie_token_returns_401(client, mock_session):
     )
 
     assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Cookie domain tests
+# ---------------------------------------------------------------------------
+
+
+def test_login_sets_cookie_domain_when_configured(user, mock_session):
+    """Login sets Domain=.zenbotz.com.br when COOKIE_DOMAIN is configured."""
+    with (
+        patch("app.auth.COOKIE_DOMAIN", ".zenbotz.com.br"),
+        patch("app.auth._is_secure_cookie", return_value=True),
+        patch(
+            "app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=user
+        ),
+        patch("app.auth.verify_password", return_value=True),
+        patch("app.auth.is_rate_limited", new_callable=AsyncMock, return_value=False),
+    ):
+        app = _make_app(mock_session)
+        client = TestClient(app)
+        resp = client.post(
+            "/auth/token",
+            data={"username": "test@example.com", "password": "Test1234!"},
+        )
+
+    assert resp.status_code == 200
+    set_cookies = resp.headers.get_list("set-cookie")
+    cookie_str = " ".join(set_cookies)
+    assert "domain=.zenbotz.com.br" in cookie_str.lower()
+
+
+def test_login_omits_domain_when_not_configured(user, mock_session):
+    """Login omits Domain attribute when COOKIE_DOMAIN is not set."""
+    with (
+        patch("app.auth.COOKIE_DOMAIN", None),
+        patch(
+            "app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=user
+        ),
+        patch("app.auth.verify_password", return_value=True),
+        patch("app.auth.is_rate_limited", new_callable=AsyncMock, return_value=False),
+    ):
+        app = _make_app(mock_session)
+        client = TestClient(app)
+        resp = client.post(
+            "/auth/token",
+            data={"username": "test@example.com", "password": "Test1234!"},
+        )
+
+    assert resp.status_code == 200
+    set_cookies = resp.headers.get_list("set-cookie")
+    cookie_str = " ".join(set_cookies)
+    assert "domain=" not in cookie_str.lower()
+
+
+def test_logout_includes_domain_when_configured(mock_session):
+    """Logout delete_cookie includes domain when COOKIE_DOMAIN is set."""
+    with patch("app.auth.COOKIE_DOMAIN", ".zenbotz.com.br"):
+        app = _make_app(mock_session)
+        client = TestClient(app)
+        resp = client.post(
+            "/auth/logout",
+            cookies={COOKIE_NAME: "old-jwt", CSRF_COOKIE_NAME: "old-csrf"},
+        )
+
+    assert resp.status_code == 200
+    set_cookies = resp.headers.get_list("set-cookie")
+    cookie_str = " ".join(set_cookies)
+    assert "domain=.zenbotz.com.br" in cookie_str.lower()
+
+
+# ---------------------------------------------------------------------------
+# _is_secure_cookie tests
+# ---------------------------------------------------------------------------
+
+
+def test_is_secure_cookie_true_when_cookie_domain_set():
+    """_is_secure_cookie returns True when COOKIE_DOMAIN is set + ENVIRONMENT=development."""
+    from app.auth import _is_secure_cookie
+
+    with (
+        patch("app.auth.COOKIE_SAMESITE", "lax"),
+        patch("app.auth.COOKIE_DOMAIN", ".zenbotz.com.br"),
+        patch.dict("os.environ", {"ENVIRONMENT": "development"}),
+    ):
+        assert _is_secure_cookie() is True
+
+
+def test_is_secure_cookie_false_in_pure_local_dev():
+    """_is_secure_cookie returns False in pure local dev (no domain, no samesite=none)."""
+    from app.auth import _is_secure_cookie
+
+    with (
+        patch("app.auth.COOKIE_SAMESITE", "lax"),
+        patch("app.auth.COOKIE_DOMAIN", None),
+        patch.dict("os.environ", {"ENVIRONMENT": "development"}),
+    ):
+        assert _is_secure_cookie() is False

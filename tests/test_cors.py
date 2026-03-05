@@ -89,3 +89,14 @@ class TestBuildCorsKwargs:
         )
         assert "allow_origins" in result
         assert "allow_origin_regex" not in result
+
+    def test_explicit_origins_overrides_dev_wildcard(self):
+        """Explicit CORS_ORIGINS overrides dev wildcard even when ENVIRONMENT=development."""
+        result = _build_cors_kwargs_isolated(
+            {
+                "ENVIRONMENT": "development",
+                "CORS_ORIGINS": "https://dev.zenbotz.com.br",
+            }
+        )
+        assert result["allow_origins"] == ["https://dev.zenbotz.com.br"]
+        assert "allow_origin_regex" not in result

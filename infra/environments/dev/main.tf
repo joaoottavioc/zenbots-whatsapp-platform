@@ -117,6 +117,9 @@ module "ecs" {
     { name = "REDIS_HOST", value = module.elasticache.redis_host },
     { name = "REDIS_PORT", value = "6379" },
     { name = "REDIS_URL", value = module.elasticache.redis_url },
+    { name = "CORS_ORIGINS", value = "https://dev.zenbotz.com.br" },
+    { name = "COOKIE_DOMAIN", value = ".zenbotz.com.br" },
+    { name = "FRONTEND_URL", value = "https://dev.zenbotz.com.br" },
   ]
 
   backend_secrets = [
@@ -132,6 +135,13 @@ module "ecs" {
     { name = "MP_CLIENT_SECRET", valueFrom = "${module.secrets.secret_arns["mercadopago"]}:client_secret::" },
     { name = "MP_ADMIN_ACCESS_TOKEN", valueFrom = "${module.secrets.secret_arns["mercadopago"]}:admin_token::" },
     { name = "GOOGLE_MAPS_API_KEY", valueFrom = "${module.secrets.secret_arns["google"]}:maps_api_key::" },
+    { name = "MAIL_SERVER", valueFrom = "${module.secrets.secret_arns["email"]}:server::" },
+    { name = "MAIL_PORT", valueFrom = "${module.secrets.secret_arns["email"]}:port::" },
+    { name = "MAIL_USERNAME", valueFrom = "${module.secrets.secret_arns["email"]}:username::" },
+    { name = "MAIL_PASSWORD", valueFrom = "${module.secrets.secret_arns["email"]}:password::" },
+    { name = "MAIL_FROM", valueFrom = "${module.secrets.secret_arns["email"]}:from::" },
+    { name = "MAIL_STARTTLS", valueFrom = "${module.secrets.secret_arns["email"]}:starttls::" },
+    { name = "USE_CREDENTIALS", valueFrom = "${module.secrets.secret_arns["email"]}:use_credentials::" },
   ]
 
   # Worker

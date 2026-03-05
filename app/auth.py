@@ -51,11 +51,15 @@ COOKIE_NAME = "access_token"
 CSRF_COOKIE_NAME = "csrf_token"
 COOKIE_MAX_AGE = 60 * 60 * 24  # 24h, matches JWT expiry
 COOKIE_SAMESITE = os.getenv("COOKIE_SAMESITE", "lax").lower()
+COOKIE_DOMAIN = os.getenv("COOKIE_DOMAIN", "") or None
 
 
 def _is_secure_cookie() -> bool:
     # SameSite=None requires Secure=True (browser requirement)
     if COOKIE_SAMESITE == "none":
+        return True
+    # Custom domain means HTTPS deployment (e.g. AWS dev with ENVIRONMENT=development)
+    if COOKIE_DOMAIN:
         return True
     return os.getenv("ENVIRONMENT", "development") != "development"
 
@@ -180,11 +184,23 @@ async def _check_auth_rate_limit(request: Request):
 
 
 async def _check_login_rate_limit(request: Request):
-    """5 requests per 5 minutes per IP for /token, /forgot-password, /reset-password."""
+    """10 requests per 5 minutes per IP for /token."""
     client_ip = request.client.host if request.client else "unknown"
     key = f"rl:login:{client_ip}"
-    if await is_rate_limited(key, limit=5, window_seconds=300):
+    if await is_rate_limited(key, limit=10, window_seconds=300):
         logger.warning("RATE_LIMIT login ip=%s", client_ip)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many requests. Please try again later.",
+        )
+
+
+async def _check_sensitive_rate_limit(request: Request):
+    """5 requests per 5 minutes per IP for /forgot-password, /reset-password."""
+    client_ip = request.client.host if request.client else "unknown"
+    key = f"rl:sensitive:{client_ip}"
+    if await is_rate_limited(key, limit=5, window_seconds=300):
+        logger.warning("RATE_LIMIT sensitive ip=%s", client_ip)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many requests. Please try again later.",
@@ -342,6 +358,7 @@ async def login_for_access_token(
         samesite=COOKIE_SAMESITE,
         path="/",
         max_age=COOKIE_MAX_AGE,
+        domain=COOKIE_DOMAIN,
     )
     response.set_cookie(
         key=CSRF_COOKIE_NAME,
@@ -351,6 +368,7 @@ async def login_for_access_token(
         samesite=COOKIE_SAMESITE,
         path="/",
         max_age=COOKIE_MAX_AGE,
+        domain=COOKIE_DOMAIN,
     )
 
     return {
@@ -365,8 +383,8 @@ async def login_for_access_token(
 
 @router.post("/logout", summary="Logout and clear auth cookies")
 async def logout(response: Response):
-    response.delete_cookie(key=COOKIE_NAME, path="/")
-    response.delete_cookie(key=CSRF_COOKIE_NAME, path="/")
+    response.delete_cookie(key=COOKIE_NAME, path="/", domain=COOKIE_DOMAIN)
+    response.delete_cookie(key=CSRF_COOKIE_NAME, path="/", domain=COOKIE_DOMAIN)
     return {"message": "Logged out successfully"}
 
 
@@ -448,7 +466,7 @@ async def get_user_from_token(
 async def forgot_password(
     payload: ForgotPasswordRequest,
     session: AsyncSession = Depends(get_session),
-    _rate_limit: None = Depends(_check_login_rate_limit),
+    _rate_limit: None = Depends(_check_sensitive_rate_limit),
 ):
     # 1. Busca o usuário
     # CORREÇÃO: Usando 'select' importado e 'models.User'
@@ -493,7 +511,7 @@ class ResetPasswordRequest(BaseModel):
 async def reset_password(
     payload: ResetPasswordRequest,
     session: AsyncSession = Depends(get_session),
-    _rate_limit: None = Depends(_check_login_rate_limit),
+    _rate_limit: None = Depends(_check_sensitive_rate_limit),
 ):
     # 1. Decodificar e Validar o Token
     credentials_exception = HTTPException(
