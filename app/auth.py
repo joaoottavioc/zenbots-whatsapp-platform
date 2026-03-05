@@ -289,7 +289,7 @@ async def resend_verification(
 ):
     # Rate limit per email: 3 per hour
     email_key = f"rl:resend_verification:{payload.email}"
-    if await is_rate_limited(email_key, limit=3, window_seconds=3600):
+    if await is_rate_limited(email_key, limit=10, window_seconds=3600):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Muitas tentativas. Tente novamente mais tarde.",
