@@ -1,6 +1,5 @@
 """Tests for email verification flow (registration, verify, resend, login gate)."""
 
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -229,7 +228,7 @@ async def test_resend_verification_sends_email(mock_request, mock_session, unver
         patch("app.auth.store_email_verification_token", new_callable=AsyncMock, return_value="new-token") as mock_store,
         patch("app.auth.send_verification_email", new_callable=AsyncMock) as mock_send,
     ):
-        result = await resend_verification(payload=payload, request=mock_request, session=mock_session)
+        await resend_verification(payload=payload, request=mock_request, session=mock_session)
 
     mock_store.assert_called_once()
     mock_send.assert_called_once()
