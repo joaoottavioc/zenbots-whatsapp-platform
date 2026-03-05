@@ -72,21 +72,9 @@ services:
       - .env
     environment:
       # URL para o Rate Limiter (Banco 0)
-      - REDIS_URL=redis://redis:6379/0 
+      - REDIS_URL=redis://redis:6379/0
       # Host para a Fila ARQ (Banco 1 configurado no código python)
       - REDIS_HOST=redis
-      
-      # Configurações de Email (Apontando para o MailHog)
-      - MAIL_USERNAME=test
-      - MAIL_PASSWORD=test
-      - MAIL_FROM=noreply@zenbots.com.br
-      - MAIL_PORT=1025
-      - MAIL_SERVER=mailhog
-      - MAIL_FROM_NAME="ZenBots Security"
-      - MAIL_STARTTLS=False
-      - MAIL_SSL_TLS=False
-      - USE_CREDENTIALS=False
-      - VALIDATE_CERTS=False
     restart: unless-stopped
 
   # WORKER (Consumidor de mensagens)
@@ -111,18 +99,6 @@ services:
       # Precisa das mesmas configs do backend para acessar Banco e Redis
       - REDIS_URL=redis://redis:6379/0
       - REDIS_HOST=redis
-      
-      # O Worker também precisa saber enviar e-mail
-      - MAIL_USERNAME=test
-      - MAIL_PASSWORD=test
-      - MAIL_FROM=noreply@zenbots.com.br
-      - MAIL_PORT=1025
-      - MAIL_SERVER=mailhog
-      - MAIL_FROM_NAME="ZenBots Security"
-      - MAIL_STARTTLS=False
-      - MAIL_SSL_TLS=False
-      - USE_CREDENTIALS=False
-      - VALIDATE_CERTS=False
     restart: unless-stopped
 
 volumes:

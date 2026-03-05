@@ -152,6 +152,39 @@ async def consume_oauth_state(token: str) -> Optional[Tuple[int, int]]:
         return None
 
 
+async def store_email_verification_token(user_id: int, email: str) -> str:
+    """
+    Generate a one-time-use email verification token.
+    Stores verification_token:{token} -> {user_id, email} with 24h TTL.
+    Returns the token string.
+    """
+    token = secrets.token_urlsafe(32)
+    key = f"verification_token:{token}"
+    value = json.dumps({"user_id": user_id, "email": email})
+    r = _get_client()
+    await r.set(key, value, ex=86400)  # 24 hours
+    return token
+
+
+async def consume_email_verification_token(token: str) -> Optional[Tuple[int, str]]:
+    """
+    Atomically retrieve and delete an email verification token.
+    Returns (user_id, email) or None if the token is invalid/expired.
+    """
+    if not token:
+        return None
+    key = f"verification_token:{token}"
+    r = _get_client()
+    raw = await r.getdel(key)
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        return (data["user_id"], data["email"])
+    except (json.JSONDecodeError, KeyError):
+        return None
+
+
 async def create_sse_ticket(user_id: int) -> str:
     """
     Create a short-lived, one-time-use ticket for SSE authentication.

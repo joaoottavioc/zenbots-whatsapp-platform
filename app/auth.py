@@ -17,7 +17,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app import crud, models, schemas
 from app.database import get_session
 from app.schemas import ForgotPasswordRequest
-from app.email_service import send_password_reset_email
+from app.email_service import send_password_reset_email, send_verification_email
 from sqlmodel import select
 from app.time import utcnow
 from app.rate_limiter import (
@@ -25,6 +25,8 @@ from app.rate_limiter import (
     create_sse_ticket,
     mark_reset_token_used,
     is_reset_token_used,
+    store_email_verification_token,
+    consume_email_verification_token,
 )
 
 
@@ -210,8 +212,88 @@ async def register(
 
     session.add(new_user)
     await session.commit()
+    await session.refresh(new_user)
 
-    return {"message": "User created successfully"}
+    # Send verification email (non-blocking — registration succeeds even if email fails)
+    try:
+        token = await store_email_verification_token(new_user.id, new_user.email)
+        await send_verification_email(new_user.email, token)
+    except Exception as e:
+        logger.error("Failed to send verification email on register: %s", e)
+
+    return {"message": "User created successfully. Please check your email to verify your account."}
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+
+@router.post("/verify-email", summary="Verifica o e-mail do usuário via token")
+async def verify_email(
+    payload: VerifyEmailRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await consume_email_verification_token(payload.token)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token inválido ou expirado.",
+        )
+
+    user_id, email = result
+    user = await crud.get_user_by_id(session, user_id)
+    if not user or user.email != email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token inválido ou expirado.",
+        )
+
+    if user.is_email_verified:
+        return {"message": "E-mail já verificado."}
+
+    user.is_email_verified = True
+    session.add(user)
+    await session.commit()
+
+    return {"message": "E-mail verificado com sucesso!"}
+
+
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
+
+
+@router.post("/resend-verification", summary="Reenvia o e-mail de verificação")
+async def resend_verification(
+    payload: ResendVerificationRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    _rate_limit: None = Depends(_check_auth_rate_limit),
+):
+    # Rate limit per email: 3 per hour
+    email_key = f"rl:resend_verification:{payload.email}"
+    if await is_rate_limited(email_key, limit=3, window_seconds=3600):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Muitas tentativas. Tente novamente mais tarde.",
+        )
+
+    user = await crud.get_user_by_email(session, email=payload.email)
+
+    # Don't reveal whether the email exists
+    if not user or user.is_email_verified:
+        return {"message": "Se o e-mail existir e não estiver verificado, um link foi enviado."}
+
+    try:
+        token = await store_email_verification_token(user.id, user.email)
+        await send_verification_email(user.email, token)
+    except Exception as e:
+        logger.error("Failed to send verification email on resend: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Falha ao enviar e-mail de verificação.",
+        )
+
+    return {"message": "Se o e-mail existir e não estiver verificado, um link foi enviado."}
 
 
 @router.post(
@@ -234,6 +316,12 @@ async def login_for_access_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not user.is_email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email não verificado. Verifique sua caixa de entrada ou solicite um novo link.",
         )
 
     access_token = create_access_token(data={"sub": user.email})

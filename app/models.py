@@ -31,6 +31,7 @@ class User(SQLModel, table=True):
     email: str = Field(unique=True, index=True)
     hashed_password: str
     is_admin: bool = Field(default=False)
+    is_email_verified: bool = Field(default=False)
 
     bots: List["Bot"] = Relationship(back_populates="user")
 
