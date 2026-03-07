@@ -1,13 +1,15 @@
 import logging
+from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app import crud, schemas
 from app.auth import require_admin
 from app.database import get_session
-from app.models import User
+from app.models import Bot, User
 
 logger = logging.getLogger(__name__)
 
@@ -67,3 +69,68 @@ async def delete_plan(
     deleted = await crud.delete_plan(session, plan_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Plan not found.")
+
+
+@router.get("/users/{user_id}/bots", response_model=List[schemas.AdminBotSummary])
+async def list_user_bots(
+    user_id: int,
+    _admin: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
+    user = await session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    result = await session.execute(select(Bot).where(Bot.user_id == user_id))
+    return result.scalars().all()
+
+
+@router.get("/users/by-email/{email}/bots", response_model=List[schemas.AdminBotSummary])
+async def list_user_bots_by_email(
+    email: str,
+    _admin: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(select(User).where(User.email == email))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    bots_result = await session.execute(select(Bot).where(Bot.user_id == user.id))
+    return bots_result.scalars().all()
+
+
+@router.put("/subscriptions/{bot_id}", response_model=schemas.SubscriptionStatusResponse)
+async def admin_upsert_subscription(
+    bot_id: int,
+    payload: schemas.AdminUpsertSubscription,
+    _admin: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_session),
+):
+    bot = await session.get(Bot, bot_id)
+    if not bot:
+        raise HTTPException(status_code=404, detail="Bot not found.")
+
+    plan = await crud.get_plan_by_key(session, payload.plan_type)
+    if not plan:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Plan '{payload.plan_type}' not found. Create it first via POST /admin/plans.",
+        )
+
+    sub = await crud.upsert_subscription(
+        session=session,
+        user_id=bot.user_id,
+        bot_id=bot.id,
+        mp_id=f"admin_grant_{bot.id}",
+        status=payload.status,
+        plan_type=payload.plan_type,
+    )
+    await session.commit()
+
+    remaining = (sub.current_period_end - datetime.now(timezone.utc)).days
+    return {
+        "status": sub.status,
+        "is_active": sub.status == "authorized" and remaining > -3,
+        "days_remaining": max(0, remaining),
+        "next_payment": sub.current_period_end,
+        "plan_type": sub.plan_type,
+    }

@@ -87,10 +87,9 @@ class BaseConversationTest:
             r.scalars.return_value.all.return_value = [value] if value else []
             return r
 
-        # Sequence: Bot lookup → Subscription → ProcessedMessage check → safe default
+        # Sequence: Bot lookup → ProcessedMessage check → safe default
         _execute_sequence = [
             _make_result(mock_bot),
-            _make_result(active_subscription),
             _make_result(None),  # ProcessedMessage (not yet processed)
         ]
         _execute_idx = 0
@@ -117,7 +116,13 @@ class BaseConversationTest:
         self.crud_mock.find_relevant_products = AsyncMock(return_value=[])
         self.crud_mock.save_address_to_cart = AsyncMock()
         self.crud_mock.save_customer_name_to_contact = AsyncMock()
-        self.crud_mock.get_products_by_bot_id = AsyncMock(return_value=[])
+        self.crud_mock.get_products_by_bot_id = AsyncMock(
+            return_value=[MagicMock(id=1, name="Burger", price=20.0)]
+        )
+        self.crud_mock.get_subscription_by_bot = AsyncMock(
+            return_value=active_subscription
+        )
+        self.crud_mock.is_plan_active = AsyncMock(return_value=True)
 
         with (
             patch(PATCH_SEND, self.send_mock),
@@ -195,15 +200,9 @@ class TestGates(BaseConversationTest):
         """Bot with expired subscription sends a maintenance notice and stops."""
         from app.whatsapp import process_whatsapp_message
 
-        def _make_result(value):
-            r = MagicMock()
-            r.scalars.return_value.first.return_value = value
-            return r
-
-        self.session.execute.side_effect = [
-            _make_result(self.bot),
-            _make_result(expired_subscription),
-        ]
+        self.crud_mock.get_subscription_by_bot = AsyncMock(
+            return_value=expired_subscription
+        )
 
         await process_whatsapp_message({}, build_whatsapp_payload())
 
@@ -367,18 +366,18 @@ class TestCepState(BaseConversationTest):
         assert self.cart.state == "GREETING"
 
     @pytest.mark.asyncio
-    async def test_pickup_keyword_switches_to_pix_only_payment(self):
+    async def test_pickup_keyword_switches_to_payment(self):
         from app.whatsapp import process_whatsapp_message
 
         await process_whatsapp_message({}, build_whatsapp_payload(text="retirada"))
         assert self.cart.state == "AWAITING_PAYMENT_METHOD"
         assert self.cart.delivery_method == "pickup"
-        assert self.cart.pix_only is True
         msg = get_sent_message(self.send_mock)
         assert "Test User" in msg
+        # Bot has pix_key, so all options should be shown
         assert "PIX" in msg
-        # Must NOT offer card or money
-        assert "Cartão" not in msg and "Dinheiro" not in msg
+        assert "Cartão" in msg
+        assert "Dinheiro" in msg
 
     @pytest.mark.asyncio
     async def test_pickup_keyword_in_cep_without_name_requests_name(self):
@@ -388,7 +387,6 @@ class TestCepState(BaseConversationTest):
         await process_whatsapp_message({}, build_whatsapp_payload(text="retirada"))
         assert self.cart.state == "AWAITING_CUSTOMER_NAME"
         assert self.cart.delivery_method == "pickup"
-        assert self.cart.pix_only is True
         msg = get_sent_message(self.send_mock)
         assert "nome" in msg.lower()
 
@@ -587,17 +585,19 @@ class TestCustomerNameState(BaseConversationTest):
         assert "PIX" in msg or "Cartão" in msg or "Dinheiro" in msg
 
     @pytest.mark.asyncio
-    async def test_saves_name_pix_only_shows_only_pix(self):
+    async def test_saves_name_no_pix_hides_pix_option(self):
+        """When bot has no PIX configured, only card and money are shown."""
         from app.whatsapp import process_whatsapp_message
 
-        self.cart.pix_only = True
+        self.bot.pix_key = None
+        self.bot.payment_config = None
         await process_whatsapp_message({}, build_whatsapp_payload(text="Maria Souza"))
 
         assert self.cart.state == "AWAITING_PAYMENT_METHOD"
         msg = get_sent_message(self.send_mock)
         assert "Maria" in msg
-        assert "PIX" in msg
-        assert "Cartão" not in msg and "Dinheiro" not in msg
+        assert "PIX" not in msg
+        assert "Cartão" in msg and "Dinheiro" in msg
 
 
 # ===========================================================================
@@ -631,27 +631,19 @@ class TestPaymentMethodState(BaseConversationTest):
         assert "PIX" in msg or "Cartão" in msg
 
     @pytest.mark.asyncio
-    async def test_pix_only_rejects_card(self):
+    async def test_pix_rejected_when_not_configured(self):
+        """PIX is rejected when bot has no pix_key and no MP payment_config."""
         from app.whatsapp import process_whatsapp_message
 
-        self.cart.pix_only = True
+        self.bot.pix_key = None
+        self.bot.payment_config = None
         with patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="ADD")):
-            await process_whatsapp_message({}, build_whatsapp_payload(text="cartão"))
+            await process_whatsapp_message({}, build_whatsapp_payload(text="pix"))
         assert self.cart.state == "AWAITING_PAYMENT_METHOD"
         msg = get_sent_message(self.send_mock)
-        assert "PIX" in msg
-        self.crud_mock.create_order.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_pix_only_rejects_money(self):
-        from app.whatsapp import process_whatsapp_message
-
-        self.cart.pix_only = True
-        with patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="ADD")):
-            await process_whatsapp_message({}, build_whatsapp_payload(text="dinheiro"))
-        assert self.cart.state == "AWAITING_PAYMENT_METHOD"
-        msg = get_sent_message(self.send_mock)
-        assert "PIX" in msg
+        assert "não está disponível" in msg
+        assert "Cartão" in msg
+        assert "Dinheiro" in msg
         self.crud_mock.create_order.assert_not_called()
 
     @pytest.mark.asyncio

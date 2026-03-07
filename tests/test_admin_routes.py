@@ -10,7 +10,7 @@ from app.admin_routes import router as admin_router
 from app.billing_routes import router as billing_router
 from app.auth import get_current_user, require_admin
 from app.database import get_session
-from app.models import Plan, User
+from app.models import Bot, Plan, Subscription, User
 
 
 # ---------------------------------------------------------------------------
@@ -35,6 +35,7 @@ def _make_plan(**overrides) -> Plan:
         price=199.0,
         currency="BRL",
         frequency=1,
+        allows_bot_usage=True,
     )
     defaults.update(overrides)
     plan = MagicMock(spec=Plan)
@@ -207,3 +208,74 @@ class TestPublicPlans:
             resp = public_client.get("/billing/plans")
         assert resp.status_code == 200
         assert resp.json() == []
+
+
+# ---------------------------------------------------------------------------
+# Admin subscription upsert
+# ---------------------------------------------------------------------------
+
+
+def _make_bot(bot_id=1, user_id=1) -> Bot:
+    bot = MagicMock(spec=Bot)
+    bot.id = bot_id
+    bot.user_id = user_id
+    return bot
+
+
+def _make_subscription(status="authorized", plan_type="pro", days_remaining=29):
+    from datetime import datetime, timezone, timedelta
+
+    sub = MagicMock(spec=Subscription)
+    sub.status = status
+    sub.plan_type = plan_type
+    sub.current_period_end = datetime.now(timezone.utc) + timedelta(days=days_remaining)
+    return sub
+
+
+class TestAdminUpsertSubscription:
+    def test_valid_plan_returns_200(self, admin_client):
+        bot = _make_bot()
+        plan = _make_plan(key="pro")
+        sub = _make_subscription()
+
+        with (
+            patch.object(
+                admin_client._mock_session, "get", new_callable=AsyncMock, return_value=bot
+            ),
+            patch("app.crud.get_plan_by_key", new_callable=AsyncMock, return_value=plan),
+            patch("app.crud.upsert_subscription", new_callable=AsyncMock, return_value=sub),
+        ):
+            resp = admin_client.put(
+                "/admin/subscriptions/1",
+                json={"status": "authorized", "plan_type": "pro"},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "authorized"
+        assert data["is_active"] is True
+
+    def test_invalid_plan_returns_400(self, admin_client):
+        bot = _make_bot()
+
+        with (
+            patch.object(
+                admin_client._mock_session, "get", new_callable=AsyncMock, return_value=bot
+            ),
+            patch("app.crud.get_plan_by_key", new_callable=AsyncMock, return_value=None),
+        ):
+            resp = admin_client.put(
+                "/admin/subscriptions/1",
+                json={"status": "authorized", "plan_type": "nonexistent"},
+            )
+        assert resp.status_code == 400
+        assert "not found" in resp.json()["detail"]
+
+    def test_bot_not_found_returns_404(self, admin_client):
+        with patch.object(
+            admin_client._mock_session, "get", new_callable=AsyncMock, return_value=None
+        ):
+            resp = admin_client.put(
+                "/admin/subscriptions/999",
+                json={"status": "authorized", "plan_type": "pro"},
+            )
+        assert resp.status_code == 404

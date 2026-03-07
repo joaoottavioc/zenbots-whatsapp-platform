@@ -62,15 +62,16 @@ class ConversationHistoryResponse(BaseModel):
 
 
 class BotCreate(BaseModel):
-    """Schema para criar um bot 'casca', apenas com os dados essenciais."""
+    """Schema para criar um bot 'casca', apenas com os dados essenciais.
+    WhatsApp credentials are optional — filled later via Embedded Signup."""
 
     restaurant_name: str = Field(max_length=150)
-    whatsapp_number: str = Field(max_length=20)
+    whatsapp_number: Optional[str] = Field(default=None, max_length=20)
     pix_key: Optional[str] = Field(default=None, max_length=100)
     delivery_fee: Optional[float] = Field(default=0.0, ge=0)
     min_order_value: Optional[float] = Field(default=0.0, ge=0)
-    whatsapp_token: str
-    phone_number_id: str = Field(max_length=30)
+    whatsapp_token: Optional[str] = None
+    phone_number_id: Optional[str] = Field(default=None, max_length=30)
     timezone: str = Field(default="America/Sao_Paulo")
 
     # NOVOS CAMPOS (Opcionais na criação, o usuário configura depois)
@@ -125,7 +126,7 @@ class BotResponse(BaseModel):
     id: int
     user_id: int
     restaurant_name: Optional[str] = None
-    whatsapp_number: str
+    whatsapp_number: Optional[str] = None
     created_at: datetime
     menu_url: Optional[str] = None
     pix_key: Optional[str] = None
@@ -147,8 +148,8 @@ class BotResponse(BaseModel):
     is_open: bool
     closing_message: str
     schedule: Dict[str, Any]
-    whatsapp_token: str
-    phone_number_id: str
+    whatsapp_token: Optional[str] = None
+    phone_number_id: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -156,7 +157,8 @@ class BotResponse(BaseModel):
     def decrypt_whatsapp_token(self) -> "BotResponse":
         from app.encryption import decrypt_value
 
-        self.whatsapp_token = decrypt_value(self.whatsapp_token)
+        if self.whatsapp_token:
+            self.whatsapp_token = decrypt_value(self.whatsapp_token)
         return self
 
 
@@ -282,6 +284,7 @@ class PlanResponse(BaseModel):
     price: float
     currency: str
     frequency: int
+    allows_bot_usage: bool
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -292,6 +295,7 @@ class PlanCreate(BaseModel):
     price: float = Field(gt=0)
     currency: str = Field(default="BRL", max_length=10)
     frequency: int = Field(default=1, ge=1)
+    allows_bot_usage: bool = Field(default=True)
 
 
 class PlanUpdate(BaseModel):
@@ -301,3 +305,18 @@ class PlanUpdate(BaseModel):
     price: Optional[float] = Field(default=None, gt=0)
     currency: Optional[str] = Field(default=None, max_length=10)
     frequency: Optional[int] = Field(default=None, ge=1)
+    allows_bot_usage: Optional[bool] = None
+
+
+class AdminUpsertSubscription(BaseModel):
+    status: str = Field(default="authorized", max_length=30)
+    plan_type: str = Field(default="pro", max_length=30)
+
+
+class AdminBotSummary(BaseModel):
+    id: int
+    restaurant_name: Optional[str] = None
+    whatsapp_number: Optional[str] = None
+    created_at: datetime
+    is_open: bool
+    model_config = ConfigDict(from_attributes=True)

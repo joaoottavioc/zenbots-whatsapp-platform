@@ -24,6 +24,7 @@ from app.crud import (
     delete_order,
     is_message_processed,
     upsert_subscription,
+    is_plan_active,
     find_relevant_products,
     add_items_to_db_cart,
     list_orders_by_bot,
@@ -840,3 +841,32 @@ class TestBulkCreateProductsValidation:
         if session.add.called:
             added_obj = session.add.call_args[0][0]
             assert len(added_obj.description) <= 500
+
+
+# ---------------------------------------------------------------------------
+# is_plan_active
+# ---------------------------------------------------------------------------
+
+
+class TestIsPlanActive:
+    @pytest.mark.asyncio
+    async def test_returns_true_when_plan_allows_bot_usage(self):
+        plan = MagicMock()
+        plan.allows_bot_usage = True
+        with patch("app.crud.get_plan_by_key", new_callable=AsyncMock, return_value=plan):
+            result = await is_plan_active(AsyncMock(), "pro")
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_returns_false_when_plan_disallows_bot_usage(self):
+        plan = MagicMock()
+        plan.allows_bot_usage = False
+        with patch("app.crud.get_plan_by_key", new_callable=AsyncMock, return_value=plan):
+            result = await is_plan_active(AsyncMock(), "free")
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_returns_false_when_plan_not_found(self):
+        with patch("app.crud.get_plan_by_key", new_callable=AsyncMock, return_value=None):
+            result = await is_plan_active(AsyncMock(), "nonexistent")
+        assert result is False

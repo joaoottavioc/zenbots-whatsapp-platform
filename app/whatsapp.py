@@ -100,6 +100,23 @@ _ITEM_FROM_Q_RE = re.compile(
 )
 
 
+async def _bot_has_pix(bot: "Bot", session: AsyncSession) -> bool:
+    """Check if the bot can accept PIX payments (MP connected or manual pix_key)."""
+    await session.refresh(bot, attribute_names=["payment_config"])
+    if bot.payment_config and bot.payment_config.is_active:
+        return True
+    if bot.pix_key:
+        return True
+    return False
+
+
+def _payment_prompt(has_pix: bool) -> str:
+    """Build the payment method prompt based on PIX availability."""
+    if has_pix:
+        return "Qual será a forma de pagamento?\n💠 *PIX* | 💳 *Cartão* | 💵 *Dinheiro*"
+    return "Qual será a forma de pagamento?\n💳 *Cartão* | 💵 *Dinheiro*"
+
+
 async def _check_rate_limit(contact_number: str, phone_id: str = "") -> bool:
     """Returns True if the sender is rate-limited (caller should stop)."""
     if await is_spamming(
@@ -135,11 +152,8 @@ async def _find_bot(
 async def _check_subscription(
     session: AsyncSession, bot: Bot, contact_number: str
 ) -> bool:
-    """Returns True if the bot owner's subscription is expired (caller should stop)."""
-    result_sub = await session.execute(
-        select(Subscription).where(Subscription.user_id == bot.user_id)
-    )
-    sub = result_sub.scalars().first()
+    """Returns True if the bot's subscription is expired/invalid (caller should stop)."""
+    sub = await crud.get_subscription_by_bot(session, bot.id)
 
     grace_period_days = 3
     is_blocked = False
@@ -152,6 +166,8 @@ async def _check_subscription(
             days=grace_period_days
         )
         if sub.status != "authorized" and now > expiration_limit:
+            is_blocked = True
+        elif not await crud.is_plan_active(session, sub.plan_type):
             is_blocked = True
 
     if is_blocked:
@@ -223,6 +239,28 @@ async def _handle_store_closed(
     )
     await crud.add_interaction_to_history(
         session, bot.id, contact_number, text_body, rich_closing_msg
+    )
+    return True
+
+
+async def _check_bot_has_products(
+    session: AsyncSession, bot: Bot, contact_number: str
+) -> bool:
+    """Returns True if the bot has no products (caller should stop)."""
+    products = await crud.get_products_by_bot_id(session, bot.id)
+    if products:
+        return False
+
+    logger.warning("No products configured: bot_id=%s", bot.id)
+    maintenance_msg = (
+        "Olá! 👋 Nosso atendimento automático está temporariamente indisponível.\n\n"
+        "Um de nossos atendentes irá retornar em breve para ajudá-lo. Agradecemos sua paciência! 🙏"
+    )
+    await send_whatsapp_message(
+        to=contact_number,
+        message=maintenance_msg,
+        token=decrypt_value(bot.whatsapp_token),
+        phone_id=bot.phone_number_id,
     )
     return True
 
@@ -314,10 +352,11 @@ async def _handle_delivery_method(mctx: MessageContext) -> str | None:
         if cart.contact and cart.contact.name:
             cart.state = CartState.AWAITING_PAYMENT_METHOD
             final_summary = _build_cart_summary_message(cart, bot, "🛍️")
+            has_pix = await _bot_has_pix(bot, session)
             response = (
                 f"Perfeito, retirada no balcão para *{cart.contact.name}*! 🛍️\n\n"
                 f"{final_summary}\n\n"
-                "Qual será a forma de pagamento?\n💠 *PIX* | 💳 *Cartão* | 💵 *Dinheiro*"
+                f"{_payment_prompt(has_pix)}"
             )
         else:
             cart.state = CartState.AWAITING_CUSTOMER_NAME
@@ -364,14 +403,14 @@ async def _handle_cep(mctx: MessageContext) -> str | None:
         cart.delivery_method = "pickup"
         cart.partial_address = None
         cart.pending_address = "Retirada no Balcão"
-        cart.pix_only = True
+        cart.pix_only = False
         await session.refresh(cart, attribute_names=["contact"])
         if cart.contact and cart.contact.name:
             cart.state = CartState.AWAITING_PAYMENT_METHOD
+            has_pix = await _bot_has_pix(bot, session)
             response = (
                 f"Combinado! Retirada no balcão para *{cart.contact.name}*, sem taxa de entrega. 🛍️\n\n"
-                "O pagamento para retirada é exclusivamente via *PIX*. 💠\n"
-                "Digite *PIX* para continuar."
+                f"{_payment_prompt(has_pix)}"
             )
         else:
             cart.state = CartState.AWAITING_CUSTOMER_NAME
@@ -543,12 +582,8 @@ async def _handle_customer_name(mctx: MessageContext) -> str | None:
     cart.state = CartState.AWAITING_PAYMENT_METHOD
     final_summary = _build_cart_summary_message(cart, bot, "📦")
 
-    if cart.pix_only:
-        payment_prompt = "O pagamento para retirada é exclusivamente via *PIX*. 💠\nDigite *PIX* para continuar."
-    else:
-        payment_prompt = (
-            "Qual será a forma de pagamento?\n💠 *PIX* | 💳 *Cartão* | 💵 *Dinheiro*"
-        )
+    has_pix = await _bot_has_pix(bot, session)
+    payment_prompt = _payment_prompt(has_pix)
 
     response = (
         f"Anotado, {customer_name.split(' ')[0]}! 😊 Confira o resumo do seu pedido:\n\n"
@@ -577,6 +612,7 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
     user_text = mctx.text_body.lower()
     order_created = False
     pix_code_to_send = None
+    has_pix = await _bot_has_pix(bot, session)
 
     detected_method = None
     if "pix" in user_text:
@@ -586,18 +622,17 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
     elif any(x in user_text for x in ["dinheiro", "nota", "troco"]):
         detected_method = "money"
 
-    if cart.pix_only and detected_method and detected_method != "pix":
-        response = "Para retirada, o pagamento é exclusivamente via *PIX*. 💠\nDigite *PIX* para continuar."
+    # Reject PIX if the bot doesn't support it
+    if detected_method == "pix" and not has_pix:
+        response = "Desculpe, o pagamento via PIX não está disponível no momento. 😅\nEscolha: *Cartão* ou *Dinheiro*."
         await send_whatsapp_message(
             mctx.contact_number, response, token=mctx.token, phone_id=mctx.phone_id
         )
         return response
 
     if not detected_method:
-        if cart.pix_only:
-            response = "Não entendi. 😅 Digite *PIX* para continuar com o pagamento."
-        else:
-            response = "Não entendi a forma de pagamento. 😅\nEscolha: *PIX*, *Cartão* ou *Dinheiro*."
+        prompt = _payment_prompt(has_pix)
+        response = f"Não entendi a forma de pagamento. 😅\n{prompt}"
         await send_whatsapp_message(
             mctx.contact_number, response, token=mctx.token, phone_id=mctx.phone_id
         )
@@ -851,11 +886,12 @@ async def _handle_finish_order(mctx: MessageContext, intent: str | None) -> str 
     elif cart.customer_address and cart.contact and cart.contact.name:
         logger.info("Address and name already saved, skipping to payment")
         cart.state = CartState.AWAITING_PAYMENT_METHOD
+        has_pix = await _bot_has_pix(bot, session)
         response = (
             f"Já tenho seus dados salvos! 😊\n\n"
             f"🏠 *{cart.customer_address}*\n"
             f"👤 *{cart.contact.name}*\n\n"
-            f"Qual será a forma de pagamento?\n💠 *PIX* | 💳 *Cartão* | 💵 *Dinheiro*"
+            f"{_payment_prompt(has_pix)}"
         )
     elif cart.customer_address:
         logger.info("Address saved but name missing, requesting name")
@@ -1500,6 +1536,10 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
 
             # Gate: Store closed
             if await _handle_store_closed(session, bot, contact_number, text_body):
+                return
+
+            # Gate: No products configured
+            if await _check_bot_has_products(session, bot, contact_number):
                 return
 
             contact = await crud.get_or_create_contact(session, bot.id, contact_number)

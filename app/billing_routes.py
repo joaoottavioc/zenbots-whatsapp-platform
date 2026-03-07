@@ -69,8 +69,8 @@ async def create_checkout(
             "currency_id": "BRL",
         },
         "payer_email": current_user.email,
-        # TRUQUE: Passamos "BOT_ID" na referência externa para saber quem ativar depois
-        "external_reference": f"BOT_{bot.id}",
+        # Encode bot_id and plan_key so the webhook can extract both
+        "external_reference": f"BOT_{bot.id}_{req.plan_key}",
         "back_url": f"{os.getenv('BASE_URL', 'http://localhost:3000')}/dashboard/settings",
         "status": "pending",
     }
@@ -112,26 +112,28 @@ async def billing_webhook(
             # Busca status atualizado no MP
             sub_info = _get_sdk().preapproval().get(preapproval_id)["response"]
             status = sub_info["status"]
-            external_ref = sub_info["external_reference"]  # Ex: "BOT_12"
+            external_ref = sub_info["external_reference"]  # Ex: "BOT_12_pro"
 
-            # --- LÓGICA DE ATIVAÇÃO POR BOT ---
+            # Parse external_reference: "BOT_{id}_{plan_key}" or legacy "BOT_{id}"
             if external_ref and external_ref.startswith("BOT_"):
-                bot_id = int(external_ref.split("_")[1])
+                parts = external_ref.split("_", 2)  # ["BOT", "12", "pro"]
+                bot_id = int(parts[1])
+                plan_key = parts[2] if len(parts) > 2 else "pro"
 
-                # Busca o dono do bot para registrar
                 bot = await session.get(Bot, bot_id)
                 if bot:
-                    # Upsert da assinatura vinculada ao BOT
                     await crud.upsert_subscription(
                         session=session,
                         user_id=bot.user_id,
-                        bot_id=bot.id,  # <--- Passa o ID do Bot
+                        bot_id=bot.id,
                         mp_id=preapproval_id,
                         status=status,
-                        plan_type="pro" if status == "authorized" else "free",
+                        plan_type=plan_key,
                     )
+                    await session.commit()
                     logger.info(
-                        "Subscription updated for bot_id=%s, status=%s", bot_id, status
+                        "Subscription updated for bot_id=%s, status=%s, plan=%s",
+                        bot_id, status, plan_key,
                     )
 
         return {"status": "ok"}

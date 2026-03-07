@@ -4,15 +4,12 @@ import math
 import time
 import httpx
 import os
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlmodel.ext.asyncio.session import AsyncSession
 from app.database import get_session
 from app.monitoring import record_api_usage
 
 logger = logging.getLogger(__name__)
-
-_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
 def mask_phone(phone: str) -> str:
@@ -259,19 +256,16 @@ async def get_address_from_cep(cep: str):
             return None
 
 
-async def _require_authenticated_user(
-    token: str = Depends(_oauth2_scheme),
-    session: AsyncSession = Depends(get_session),
-):
+async def _require_auth(request: Request, session: AsyncSession = Depends(get_session)):
     """Lazy import wrapper to avoid circular dependency (auth → crud → utils → auth)."""
     from app.auth import get_current_user
 
-    return await get_current_user(token=token, session=session)
+    return await get_current_user(request=request, session=session)
 
 
 @router.get("/lookup-cep/{cep}")
 async def lookup_cep_endpoint(
-    cep: str, current_user=Depends(_require_authenticated_user)
+    cep: str, current_user=Depends(_require_auth)
 ):
     """
     Endpoint público para consultar CEP via Frontend.

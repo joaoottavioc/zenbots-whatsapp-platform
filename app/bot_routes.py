@@ -662,17 +662,15 @@ async def get_best_sellers(
         raise HTTPException(status_code=403, detail="Acesso negado.")
 
     # 2. Validação de Plano (Feature Gating)
-    # Buscamos a assinatura vinculada ao bot
     sub = await crud.get_subscription_by_bot(session, bot_id)
 
-    # Regra: Se não tiver assinatura, ou se o status não for ativo/authorized, bloqueia.
-    # Você pode refinar isso para verificar "plan_type" também (ex: if sub.plan_type == 'basic')
-    is_pro = (
-        sub and sub.status == "authorized" and sub.plan_type in ["pro", "enterprise"]
+    is_active = (
+        sub
+        and sub.status == "authorized"
+        and await crud.is_plan_active(session, sub.plan_type)
     )
 
-    # Se você quiser retornar um erro 403 para o front tratar:
-    if not is_pro:
+    if not is_active:
         raise HTTPException(status_code=403, detail="SUBSCRIPTION_REQUIRED")
 
     # 3. Busca os dados (Se passou no gate)

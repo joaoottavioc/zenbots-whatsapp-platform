@@ -120,13 +120,15 @@ def build_cors_kwargs() -> dict:
     )
 
     if origins_raw:
-        kwargs["allow_origins"] = [
-            o.strip() for o in origins_raw.split(",") if o.strip()
-        ]
+        origins = [o.strip() for o in origins_raw.split(",") if o.strip()]
+        kwargs["allow_origins"] = origins
+        logger.info("CORS: explicit origins=%s", origins)
     elif origin_regex:
         kwargs["allow_origin_regex"] = origin_regex
+        logger.info("CORS: regex=%s", origin_regex)
     elif environment == "development":
         kwargs["allow_origin_regex"] = "https?://.*"
+        logger.info("CORS: development fallback (allow all http/https origins)")
     else:
         # Production without explicit origins: restrictive default
         logger.warning(
@@ -143,6 +145,9 @@ from app.csrf import CSRFMiddleware
 _cors_kwargs = build_cors_kwargs()
 # Starlette LIFO: last added = outermost. CORS must be outermost so it
 # adds headers to ALL responses (including CSRF 403 rejections).
+# CSRFMiddleware is pure ASGI (not BaseHTTPMiddleware) to avoid the known
+# Starlette bug where BaseHTTPMiddleware swallows CORS headers on
+# error/empty-body responses (e.g. DELETE 204).
 app.add_middleware(CSRFMiddleware)
 app.add_middleware(CORSMiddleware, **_cors_kwargs)
 

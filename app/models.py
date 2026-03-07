@@ -41,7 +41,7 @@ class User(SQLModel, table=True):
 class Bot(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     restaurant_name: Optional[str] = Field(default=None)
-    whatsapp_number: str = Field(unique=True, index=True)
+    whatsapp_number: Optional[str] = Field(default=None, unique=True, index=True)
 
     menu_url: Optional[str] = Field(
         default=None, description="URL pública do cardápio (PDF/Imagem) no S3"
@@ -99,6 +99,13 @@ class Bot(SQLModel, table=True):
     payment_config: Optional["PaymentConfig"] = Relationship(
         back_populates="bot",
         sa_relationship_kwargs={"uselist": False, "cascade": "all, delete-orphan"},
+    )
+
+    usage_events: List["UsageEvent"] = Relationship(
+        back_populates="bot", sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+    daily_cost_summaries: List["DailyCostSummary"] = Relationship(
+        back_populates="bot", sa_relationship_kwargs={"cascade": "all, delete-orphan"}
     )
 
 
@@ -347,6 +354,7 @@ class Plan(SQLModel, table=True):
     # Configurações opcionais
     currency: str = Field(default="BRL")
     frequency: int = Field(default=1)  # 1 mês
+    allows_bot_usage: bool = Field(default=True)
 
     created_at: datetime = Field(default_factory=utcnow)
 
@@ -367,6 +375,7 @@ class UsageEvent(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     bot_id: int = Field(foreign_key="bot.id", index=True)
+    bot: Optional["Bot"] = Relationship(back_populates="usage_events")
     service: str  # "openai" | "google_maps" | "aws_s3" | "whatsapp" | "mercado_pago" | "facebook"
     operation: str  # "get_ai_decision" | "geocode" | "s3_put" | "send_message" | ...
     model: Optional[str] = Field(default=None)  # "gpt-4o-mini" | "gpt-4o" | None
@@ -408,6 +417,7 @@ class DailyCostSummary(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     bot_id: int = Field(foreign_key="bot.id", index=True)
+    bot: Optional["Bot"] = Relationship(back_populates="daily_cost_summaries")
     date: date_type = Field(index=True)
     service: str
 

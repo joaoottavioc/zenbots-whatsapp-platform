@@ -374,26 +374,25 @@ async def get_user_by_id(session: AsyncSession, user_id: int) -> Optional[User]:
 async def create_bot(
     session: AsyncSession,
     user_id: int,
-    whatsapp_number: str,
-    restaurant_name: Optional[str],
-    pix_key: Optional[str],
-    # ▼▼▼ NEW ARGUMENTS ▼▼▼
-    whatsapp_token: str = "",
-    phone_number_id: str = "",
+    whatsapp_number: Optional[str] = None,
+    restaurant_name: Optional[str] = None,
+    pix_key: Optional[str] = None,
+    whatsapp_token: Optional[str] = None,
+    phone_number_id: Optional[str] = None,
     delivery_fee: float = 0.0,
     min_order_value: float = 0.0,
     is_open: bool = True,
     closing_message: Optional[str] = None,
     schedule: Optional[Dict[str, Any]] = None,
-    # ▲▲▲ END NEW ARGUMENTS ▲▲▲
 ) -> Optional[Bot]:
 
-    # Check if a bot with this number already exists
-    existing_bot_result = await session.execute(
-        select(Bot).where(Bot.whatsapp_number == whatsapp_number)
-    )
-    if existing_bot_result.scalars().first():
-        return None
+    # Check if a bot with this number already exists (skip if no number yet)
+    if whatsapp_number:
+        existing_bot_result = await session.execute(
+            select(Bot).where(Bot.whatsapp_number == whatsapp_number)
+        )
+        if existing_bot_result.scalars().first():
+            return None
 
     # Create the new Bot object with all fields
     new_bot = Bot(
@@ -403,7 +402,7 @@ async def create_bot(
         pix_key=pix_key,
         # ▼▼▼ ASSIGN NEW FIELDS ▼▼▼
         whatsapp_token=encrypt_value(whatsapp_token) if whatsapp_token else "",
-        phone_number_id=phone_number_id,
+        phone_number_id=phone_number_id or "",
         delivery_fee=delivery_fee,
         min_order_value=min_order_value,
         is_open=is_open,
@@ -1184,6 +1183,14 @@ async def get_plan_by_id(session: AsyncSession, plan_id: int) -> Optional[Plan]:
 async def get_plan_by_key(session: AsyncSession, key: str) -> Optional[Plan]:
     result = await session.execute(select(Plan).where(Plan.key == key))
     return result.scalars().first()
+
+
+async def is_plan_active(session: AsyncSession, plan_type: str) -> bool:
+    """Check if a plan key exists and allows bot usage."""
+    plan = await get_plan_by_key(session, plan_type)
+    if not plan:
+        return False
+    return plan.allows_bot_usage
 
 
 async def create_plan(session: AsyncSession, data: dict) -> Plan:
