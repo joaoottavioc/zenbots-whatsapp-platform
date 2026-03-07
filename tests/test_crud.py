@@ -853,7 +853,9 @@ class TestIsPlanActive:
     async def test_returns_true_when_plan_allows_bot_usage(self):
         plan = MagicMock()
         plan.allows_bot_usage = True
-        with patch("app.crud.get_plan_by_key", new_callable=AsyncMock, return_value=plan):
+        with patch(
+            "app.crud.get_plan_by_key", new_callable=AsyncMock, return_value=plan
+        ):
             result = await is_plan_active(AsyncMock(), "pro")
         assert result is True
 
@@ -861,12 +863,16 @@ class TestIsPlanActive:
     async def test_returns_false_when_plan_disallows_bot_usage(self):
         plan = MagicMock()
         plan.allows_bot_usage = False
-        with patch("app.crud.get_plan_by_key", new_callable=AsyncMock, return_value=plan):
+        with patch(
+            "app.crud.get_plan_by_key", new_callable=AsyncMock, return_value=plan
+        ):
             result = await is_plan_active(AsyncMock(), "free")
         assert result is False
 
     @pytest.mark.asyncio
     async def test_returns_false_when_plan_not_found(self):
-        with patch("app.crud.get_plan_by_key", new_callable=AsyncMock, return_value=None):
+        with patch(
+            "app.crud.get_plan_by_key", new_callable=AsyncMock, return_value=None
+        ):
             result = await is_plan_active(AsyncMock(), "nonexistent")
         assert result is False

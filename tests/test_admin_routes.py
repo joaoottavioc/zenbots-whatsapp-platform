@@ -240,10 +240,17 @@ class TestAdminUpsertSubscription:
 
         with (
             patch.object(
-                admin_client._mock_session, "get", new_callable=AsyncMock, return_value=bot
+                admin_client._mock_session,
+                "get",
+                new_callable=AsyncMock,
+                return_value=bot,
             ),
-            patch("app.crud.get_plan_by_key", new_callable=AsyncMock, return_value=plan),
-            patch("app.crud.upsert_subscription", new_callable=AsyncMock, return_value=sub),
+            patch(
+                "app.crud.get_plan_by_key", new_callable=AsyncMock, return_value=plan
+            ),
+            patch(
+                "app.crud.upsert_subscription", new_callable=AsyncMock, return_value=sub
+            ),
         ):
             resp = admin_client.put(
                 "/admin/subscriptions/1",
@@ -259,9 +266,14 @@ class TestAdminUpsertSubscription:
 
         with (
             patch.object(
-                admin_client._mock_session, "get", new_callable=AsyncMock, return_value=bot
+                admin_client._mock_session,
+                "get",
+                new_callable=AsyncMock,
+                return_value=bot,
             ),
-            patch("app.crud.get_plan_by_key", new_callable=AsyncMock, return_value=None),
+            patch(
+                "app.crud.get_plan_by_key", new_callable=AsyncMock, return_value=None
+            ),
         ):
             resp = admin_client.put(
                 "/admin/subscriptions/1",

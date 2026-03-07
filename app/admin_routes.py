@@ -84,7 +84,9 @@ async def list_user_bots(
     return result.scalars().all()
 
 
-@router.get("/users/by-email/{email}/bots", response_model=List[schemas.AdminBotSummary])
+@router.get(
+    "/users/by-email/{email}/bots", response_model=List[schemas.AdminBotSummary]
+)
 async def list_user_bots_by_email(
     email: str,
     _admin: User = Depends(require_admin),
@@ -98,7 +100,9 @@ async def list_user_bots_by_email(
     return bots_result.scalars().all()
 
 
-@router.put("/subscriptions/{bot_id}", response_model=schemas.SubscriptionStatusResponse)
+@router.put(
+    "/subscriptions/{bot_id}", response_model=schemas.SubscriptionStatusResponse
+)
 async def admin_upsert_subscription(
     bot_id: int,
     payload: schemas.AdminUpsertSubscription,

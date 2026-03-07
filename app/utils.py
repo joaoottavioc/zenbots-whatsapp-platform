@@ -264,9 +264,7 @@ async def _require_auth(request: Request, session: AsyncSession = Depends(get_se
 
 
 @router.get("/lookup-cep/{cep}")
-async def lookup_cep_endpoint(
-    cep: str, current_user=Depends(_require_auth)
-):
+async def lookup_cep_endpoint(cep: str, current_user=Depends(_require_auth)):
     """
     Endpoint público para consultar CEP via Frontend.
     """

@@ -133,7 +133,9 @@ async def billing_webhook(
                     await session.commit()
                     logger.info(
                         "Subscription updated for bot_id=%s, status=%s, plan=%s",
-                        bot_id, status, plan_key,
+                        bot_id,
+                        status,
+                        plan_key,
                     )
 
         return {"status": "ok"}
