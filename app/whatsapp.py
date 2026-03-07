@@ -34,7 +34,6 @@ from app.semantic_router import semantic_intent, THRESHOLDS
 from app.payment_service import create_pix_payment
 from sqlalchemy.exc import IntegrityError
 import mercadopago
-from app.models import Subscription
 import app.utils
 
 
