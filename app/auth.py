@@ -170,12 +170,15 @@ class RegisterRequest(BaseModel):
 
 # --- Rate Limit Dependencies ---
 
+_IS_DEV = os.getenv("ENVIRONMENT", "development") != "production"
+_DEV_MULTIPLIER = 2 if _IS_DEV else 1
+
 
 async def _check_auth_rate_limit(request: Request):
-    """10 requests per 5 minutes per IP for /register."""
+    """10 requests per 5 minutes per IP for /register (20 in dev)."""
     client_ip = request.client.host if request.client else "unknown"
     key = f"rl:auth:{client_ip}"
-    if await is_rate_limited(key, limit=10, window_seconds=300):
+    if await is_rate_limited(key, limit=10 * _DEV_MULTIPLIER, window_seconds=300):
         logger.warning("RATE_LIMIT auth ip=%s", client_ip)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -184,10 +187,10 @@ async def _check_auth_rate_limit(request: Request):
 
 
 async def _check_login_rate_limit(request: Request):
-    """10 requests per 5 minutes per IP for /token."""
+    """10 requests per 5 minutes per IP for /token (20 in dev)."""
     client_ip = request.client.host if request.client else "unknown"
     key = f"rl:login:{client_ip}"
-    if await is_rate_limited(key, limit=10, window_seconds=300):
+    if await is_rate_limited(key, limit=10 * _DEV_MULTIPLIER, window_seconds=300):
         logger.warning("RATE_LIMIT login ip=%s", client_ip)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -196,10 +199,10 @@ async def _check_login_rate_limit(request: Request):
 
 
 async def _check_sensitive_rate_limit(request: Request):
-    """5 requests per 5 minutes per IP for /forgot-password, /reset-password."""
+    """5 requests per 5 minutes per IP for /forgot-password, /reset-password (10 in dev)."""
     client_ip = request.client.host if request.client else "unknown"
     key = f"rl:sensitive:{client_ip}"
-    if await is_rate_limited(key, limit=5, window_seconds=300):
+    if await is_rate_limited(key, limit=5 * _DEV_MULTIPLIER, window_seconds=300):
         logger.warning("RATE_LIMIT sensitive ip=%s", client_ip)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,

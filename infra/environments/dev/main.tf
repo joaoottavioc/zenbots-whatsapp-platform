@@ -60,8 +60,9 @@ module "elasticache" {
 module "s3" {
   source = "../../modules/s3"
 
-  project     = var.project
-  environment = var.environment
+  project            = var.project
+  environment        = var.environment
+  versioning_enabled = false
 }
 
 # ------------------ ALB ------------------
@@ -77,13 +78,44 @@ module "alb" {
   certificate_arn   = var.certificate_arn
 }
 
-# ------------------ Secrets Manager ------------------
+# ------------------ Secrets Manager (kept for cleanup later) ------------------
 
 module "secrets" {
   source = "../../modules/secrets"
 
   project     = var.project
   environment = var.environment
+}
+
+# ------------------ SSM Parameter Store (replaces Secrets Manager for dev) --
+
+module "ssm_parameters" {
+  source = "../../modules/ssm-parameters"
+
+  project     = var.project
+  environment = var.environment
+
+  parameters = {
+    "database/url"              = "PostgreSQL connection URL"
+    "auth/secret_key"           = "JWT signing secret"
+    "auth/encryption_key"       = "Fernet encryption key for payment tokens"
+    "openai/api_key"            = "OpenAI API key"
+    "whatsapp/token"            = "WhatsApp Cloud API token"
+    "whatsapp/verify_token"     = "WhatsApp webhook verify token"
+    "whatsapp/fb_app_id"        = "Facebook App ID for Embedded Signup"
+    "whatsapp/fb_app_secret"    = "Facebook App Secret for Embedded Signup"
+    "mercadopago/client_id"     = "Mercado Pago OAuth client ID"
+    "mercadopago/client_secret" = "Mercado Pago OAuth client secret"
+    "mercadopago/admin_token"   = "Mercado Pago admin access token"
+    "google/maps_api_key"       = "Google Maps API key for CEP lookup"
+    "email/server"              = "SMTP server hostname"
+    "email/port"                = "SMTP server port"
+    "email/username"            = "SMTP username"
+    "email/password"            = "SMTP password"
+    "email/from"                = "Email sender address"
+    "email/starttls"            = "SMTP STARTTLS flag"
+    "email/use_credentials"     = "SMTP use credentials flag"
+  }
 }
 
 # ------------------ ECS ------------------
@@ -100,9 +132,10 @@ module "ecs" {
   ecs_security_group_id = module.vpc.ecs_security_group_id
   target_group_arn      = module.alb.target_group_arn
 
-  capacity_providers = ["FARGATE_SPOT"]
-  container_insights = true
-  cpu_architecture   = "ARM64"
+  capacity_providers  = ["FARGATE_SPOT"]
+  container_insights  = false
+  cpu_architecture    = "ARM64"
+  use_ssm_parameters  = true
 
   # Backend
   backend_image         = local.backend_image
@@ -123,25 +156,25 @@ module "ecs" {
   ]
 
   backend_secrets = [
-    { name = "DATABASE_URL", valueFrom = "${module.secrets.secret_arns["database"]}:url::" },
-    { name = "SECRET_KEY", valueFrom = "${module.secrets.secret_arns["auth"]}:secret_key::" },
-    { name = "ENCRYPTION_KEY", valueFrom = "${module.secrets.secret_arns["auth"]}:encryption_key::" },
-    { name = "OPENAI_API_KEY", valueFrom = "${module.secrets.secret_arns["openai"]}:api_key::" },
-    { name = "WHATSAPP_TOKEN", valueFrom = "${module.secrets.secret_arns["whatsapp"]}:token::" },
-    { name = "META_VERIFY_TOKEN", valueFrom = "${module.secrets.secret_arns["whatsapp"]}:verify_token::" },
-    { name = "FB_APP_ID", valueFrom = "${module.secrets.secret_arns["whatsapp"]}:fb_app_id::" },
-    { name = "FB_APP_SECRET", valueFrom = "${module.secrets.secret_arns["whatsapp"]}:fb_app_secret::" },
-    { name = "MP_CLIENT_ID", valueFrom = "${module.secrets.secret_arns["mercadopago"]}:client_id::" },
-    { name = "MP_CLIENT_SECRET", valueFrom = "${module.secrets.secret_arns["mercadopago"]}:client_secret::" },
-    { name = "MP_ADMIN_ACCESS_TOKEN", valueFrom = "${module.secrets.secret_arns["mercadopago"]}:admin_token::" },
-    { name = "GOOGLE_MAPS_API_KEY", valueFrom = "${module.secrets.secret_arns["google"]}:maps_api_key::" },
-    { name = "MAIL_SERVER", valueFrom = "${module.secrets.secret_arns["email"]}:server::" },
-    { name = "MAIL_PORT", valueFrom = "${module.secrets.secret_arns["email"]}:port::" },
-    { name = "MAIL_USERNAME", valueFrom = "${module.secrets.secret_arns["email"]}:username::" },
-    { name = "MAIL_PASSWORD", valueFrom = "${module.secrets.secret_arns["email"]}:password::" },
-    { name = "MAIL_FROM", valueFrom = "${module.secrets.secret_arns["email"]}:from::" },
-    { name = "MAIL_STARTTLS", valueFrom = "${module.secrets.secret_arns["email"]}:starttls::" },
-    { name = "USE_CREDENTIALS", valueFrom = "${module.secrets.secret_arns["email"]}:use_credentials::" },
+    { name = "DATABASE_URL", valueFrom = module.ssm_parameters.parameter_arns["database/url"] },
+    { name = "SECRET_KEY", valueFrom = module.ssm_parameters.parameter_arns["auth/secret_key"] },
+    { name = "ENCRYPTION_KEY", valueFrom = module.ssm_parameters.parameter_arns["auth/encryption_key"] },
+    { name = "OPENAI_API_KEY", valueFrom = module.ssm_parameters.parameter_arns["openai/api_key"] },
+    { name = "WHATSAPP_TOKEN", valueFrom = module.ssm_parameters.parameter_arns["whatsapp/token"] },
+    { name = "META_VERIFY_TOKEN", valueFrom = module.ssm_parameters.parameter_arns["whatsapp/verify_token"] },
+    { name = "FB_APP_ID", valueFrom = module.ssm_parameters.parameter_arns["whatsapp/fb_app_id"] },
+    { name = "FB_APP_SECRET", valueFrom = module.ssm_parameters.parameter_arns["whatsapp/fb_app_secret"] },
+    { name = "MP_CLIENT_ID", valueFrom = module.ssm_parameters.parameter_arns["mercadopago/client_id"] },
+    { name = "MP_CLIENT_SECRET", valueFrom = module.ssm_parameters.parameter_arns["mercadopago/client_secret"] },
+    { name = "MP_ADMIN_ACCESS_TOKEN", valueFrom = module.ssm_parameters.parameter_arns["mercadopago/admin_token"] },
+    { name = "GOOGLE_MAPS_API_KEY", valueFrom = module.ssm_parameters.parameter_arns["google/maps_api_key"] },
+    { name = "MAIL_SERVER", valueFrom = module.ssm_parameters.parameter_arns["email/server"] },
+    { name = "MAIL_PORT", valueFrom = module.ssm_parameters.parameter_arns["email/port"] },
+    { name = "MAIL_USERNAME", valueFrom = module.ssm_parameters.parameter_arns["email/username"] },
+    { name = "MAIL_PASSWORD", valueFrom = module.ssm_parameters.parameter_arns["email/password"] },
+    { name = "MAIL_FROM", valueFrom = module.ssm_parameters.parameter_arns["email/from"] },
+    { name = "MAIL_STARTTLS", valueFrom = module.ssm_parameters.parameter_arns["email/starttls"] },
+    { name = "USE_CREDENTIALS", valueFrom = module.ssm_parameters.parameter_arns["email/use_credentials"] },
   ]
 
   # Worker
@@ -161,15 +194,15 @@ module "ecs" {
   ]
 
   worker_secrets = [
-    { name = "DATABASE_URL", valueFrom = "${module.secrets.secret_arns["database"]}:url::" },
-    { name = "SECRET_KEY", valueFrom = "${module.secrets.secret_arns["auth"]}:secret_key::" },
-    { name = "ENCRYPTION_KEY", valueFrom = "${module.secrets.secret_arns["auth"]}:encryption_key::" },
-    { name = "OPENAI_API_KEY", valueFrom = "${module.secrets.secret_arns["openai"]}:api_key::" },
-    { name = "WHATSAPP_TOKEN", valueFrom = "${module.secrets.secret_arns["whatsapp"]}:token::" },
-    { name = "MP_CLIENT_ID", valueFrom = "${module.secrets.secret_arns["mercadopago"]}:client_id::" },
-    { name = "MP_CLIENT_SECRET", valueFrom = "${module.secrets.secret_arns["mercadopago"]}:client_secret::" },
-    { name = "MP_ADMIN_ACCESS_TOKEN", valueFrom = "${module.secrets.secret_arns["mercadopago"]}:admin_token::" },
-    { name = "GOOGLE_MAPS_API_KEY", valueFrom = "${module.secrets.secret_arns["google"]}:maps_api_key::" },
+    { name = "DATABASE_URL", valueFrom = module.ssm_parameters.parameter_arns["database/url"] },
+    { name = "SECRET_KEY", valueFrom = module.ssm_parameters.parameter_arns["auth/secret_key"] },
+    { name = "ENCRYPTION_KEY", valueFrom = module.ssm_parameters.parameter_arns["auth/encryption_key"] },
+    { name = "OPENAI_API_KEY", valueFrom = module.ssm_parameters.parameter_arns["openai/api_key"] },
+    { name = "WHATSAPP_TOKEN", valueFrom = module.ssm_parameters.parameter_arns["whatsapp/token"] },
+    { name = "MP_CLIENT_ID", valueFrom = module.ssm_parameters.parameter_arns["mercadopago/client_id"] },
+    { name = "MP_CLIENT_SECRET", valueFrom = module.ssm_parameters.parameter_arns["mercadopago/client_secret"] },
+    { name = "MP_ADMIN_ACCESS_TOKEN", valueFrom = module.ssm_parameters.parameter_arns["mercadopago/admin_token"] },
+    { name = "GOOGLE_MAPS_API_KEY", valueFrom = module.ssm_parameters.parameter_arns["google/maps_api_key"] },
   ]
 
   # Migrations
@@ -180,7 +213,7 @@ module "ecs" {
   maximum_percent         = 200
 
   # Logging
-  log_retention_days = 7
+  log_retention_days = 3
 
   # S3
   s3_bucket_name = module.s3.bucket_name

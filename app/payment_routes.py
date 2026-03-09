@@ -102,7 +102,11 @@ async def exchange_token(
         )
 
     if resp.status_code != 200:
-        logger.error("MP OAuth token exchange failed, status_code=%s", resp.status_code)
+        logger.error(
+            "MP OAuth token exchange failed, status_code=%s body=%s",
+            resp.status_code,
+            resp.text[:500],
+        )
         raise HTTPException(
             status_code=400, detail="Falha ao conectar com Mercado Pago."
         )
@@ -157,6 +161,34 @@ async def exchange_token(
         bot.id,
     )
     return {"status": "connected", "bot_name": bot.restaurant_name}
+
+
+@router.post("/disconnect")
+async def disconnect_payment(
+    bot_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Desativa a integração de pagamento de um bot."""
+    bot = await crud.get_bot_by_id(session, bot_id=bot_id)
+    if not bot or bot.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Acesso negado ao bot.")
+
+    await session.refresh(bot, attribute_names=["payment_config"])
+    if not bot.payment_config:
+        raise HTTPException(
+            status_code=404, detail="Nenhuma configuração de pagamento encontrada."
+        )
+
+    bot.payment_config.is_active = False
+    await session.commit()
+
+    logger.info(
+        "PAYMENT_DISCONNECT user_id=%s bot_id=%s provider=mercadopago",
+        current_user.id,
+        bot.id,
+    )
+    return {"status": "disconnected"}
 
 
 @router.get("/status")

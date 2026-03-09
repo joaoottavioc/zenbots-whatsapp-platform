@@ -10,7 +10,7 @@ resource "aws_s3_bucket" "menu" {
 resource "aws_s3_bucket_versioning" "menu" {
   bucket = aws_s3_bucket.menu.id
   versioning_configuration {
-    status = "Enabled"
+    status = var.versioning_enabled ? "Enabled" : "Suspended"
   }
 }
 

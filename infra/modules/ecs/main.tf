@@ -52,11 +52,21 @@ resource "aws_iam_policy" "secrets_read" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["secretsmanager:GetSecretValue"]
-      Resource = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:${var.project}/${var.environment}/*"
-    }]
+    Statement = concat(
+      var.use_ssm_parameters ? [] : [{
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:${var.project}/${var.environment}/*"
+      }],
+      var.use_ssm_parameters ? [{
+        Effect = "Allow"
+        Action = [
+          "ssm:GetParameters",
+          "ssm:GetParameter",
+        ]
+        Resource = "arn:aws:ssm:${var.region}:${var.account_id}:parameter/${var.project}/${var.environment}/*"
+      }] : []
+    )
   })
 }
 

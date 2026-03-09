@@ -40,6 +40,12 @@ variable "container_insights" {
   default = false
 }
 
+variable "use_ssm_parameters" {
+  description = "Use SSM Parameter Store instead of Secrets Manager for secret injection"
+  type        = bool
+  default     = false
+}
+
 # --- Runtime ---
 
 variable "cpu_architecture" {
