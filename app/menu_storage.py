@@ -13,18 +13,14 @@ logger = logging.getLogger(__name__)
 ALLOWED_EXTENSIONS = {"pdf", "jpg", "jpeg", "png", "webp"}
 
 # Carrega configurações
-AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY_ID")
-AWS_SECRET_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 BUCKET_NAME = os.getenv("AWS_BUCKET_NAME")
 REGION = os.getenv("AWS_REGION", "us-east-1")
 
-# Cria o cliente S3 uma única vez
-s3_client = boto3.client(
-    "s3",
-    aws_access_key_id=AWS_ACCESS_KEY,
-    aws_secret_access_key=AWS_SECRET_KEY,
-    region_name=REGION,
-)
+# Cria o cliente S3 uma única vez.
+# In ECS, credentials come from the task IAM role automatically.
+# Explicit keys (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY) are only needed
+# for local development and are picked up by boto3 from env vars if present.
+s3_client = boto3.client("s3", region_name=REGION)
 
 
 def upload_bytes_to_s3(

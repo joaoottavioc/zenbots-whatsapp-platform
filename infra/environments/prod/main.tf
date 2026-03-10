@@ -126,6 +126,7 @@ module "ecs" {
     { name = "CORS_ORIGINS", value = "https://app.zenbotz.com.br" },
     { name = "COOKIE_DOMAIN", value = ".zenbotz.com.br" },
     { name = "FRONTEND_URL", value = "https://app.zenbotz.com.br" },
+    { name = "AWS_BUCKET_NAME", value = "zenbots-prod-menus" },
   ]
 
   backend_secrets = [
