@@ -322,26 +322,24 @@ async def extract_products_from_image(
     image_bytes: bytes, media_type: str
 ) -> list[dict]:
     """
-    Envia uma imagem (cardápio) para o GPT-4o e extrai os produtos estruturados.
-    (Versão corrigida com asyncio.to_thread)
+    Envia uma imagem (cardápio) para o GPT-4o-mini e extrai os produtos estruturados.
+    Uses gpt-4o-mini for speed (~5-15s vs 30-60s with gpt-4o).
     """
     base64_image = encode_image(image_bytes)
 
-    prompt = """
-    Você é um assistente especializado em digitalizar cardápios.
-    Analise esta imagem. Extraia todos os itens de comida e bebida.
-    Para cada item, identifique: nome, descrição, preço e CATEGORIA.
-    
-    Regras de Categoria:
-    - Agrupe itens similares (ex: Coca, Água, Suco -> "Bebidas").
-    - Use nomes curtos e em Português.
-    - Ex: "Entradas", "Pratos Principais", "Sobremesas", "Pizzas Tradicionais", "Hot Dogs", "Lanches", "Porções".
-    """
+    prompt = (
+        "Você é um assistente especializado em digitalizar cardápios. "
+        "Analise esta imagem. Extraia todos os itens de comida e bebida. "
+        "Para cada item, identifique: nome, descrição, preço e CATEGORIA. "
+        "Regras de Categoria: agrupe itens similares (ex: Coca, Água, Suco -> 'Bebidas'). "
+        "Use nomes curtos e em Português. "
+        "Ex: 'Entradas', 'Pratos Principais', 'Sobremesas', 'Pizzas Tradicionais', "
+        "'Hot Dogs', 'Lanches', 'Porções'."
+    )
 
-    # 1. Definimos a chamada síncrona dentro de uma função interna
     def sync_call():
         return client_openai_api.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4o-mini",
             messages=[
                 {
                     "role": "user",
@@ -350,13 +348,13 @@ async def extract_products_from_image(
                         {
                             "type": "image_url",
                             "image_url": {
-                                "url": f"data:{media_type};base64,{base64_image}"
+                                "url": f"data:{media_type};base64,{base64_image}",
+                                "detail": "high",
                             },
                         },
                     ],
                 }
             ],
-            # Usa a variável que importamos do tools_definition.py
             tools=tools_extraction,
             tool_choice={
                 "type": "function",
@@ -367,13 +365,12 @@ async def extract_products_from_image(
 
     start = time.perf_counter_ns()
     try:
-        # 2. Executamos a função síncrona em uma thread para não travar o FastAPI
         response = await asyncio.to_thread(sync_call)
         elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
         await record_llm_usage(
             bot_id=None,
             operation="extract_products_from_image",
-            model="gpt-4o",
+            model="gpt-4o-mini",
             usage=response.usage,
             duration_ms=elapsed_ms,
         )
@@ -389,7 +386,7 @@ async def extract_products_from_image(
         await record_llm_usage(
             bot_id=None,
             operation="extract_products_from_image",
-            model="gpt-4o",
+            model="gpt-4o-mini",
             usage=None,
             duration_ms=elapsed_ms,
             success=False,
