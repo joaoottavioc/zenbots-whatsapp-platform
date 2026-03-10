@@ -19,7 +19,7 @@ load_dotenv()
 client_openai_api = OpenAI(
     # A biblioteca lê a chave OPENAI_API_KEY automaticamente das variáveis de ambiente
     api_key=os.getenv("OPENAI_API_KEY"),
-    timeout=30.0,
+    timeout=120.0,
 )
 
 
