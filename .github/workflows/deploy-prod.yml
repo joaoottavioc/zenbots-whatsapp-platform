@@ -25,7 +25,7 @@ env:
 jobs:
   # ── Build & push to ECR ───────────────────────────────────────
   build-and-push:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       id-token: write
       contents: read
@@ -42,10 +42,6 @@ jobs:
       - uses: aws-actions/amazon-ecr-login@v2
         id: ecr-login
 
-      - uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
       - uses: docker/setup-buildx-action@v3
 
       - name: Set image tag
@@ -57,38 +53,35 @@ jobs:
         with:
           context: .
           target: backend
-          platforms: linux/arm64
           push: true
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }}
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest-prod
-          cache-from: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest-prod
-          cache-to: type=inline
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Build and push worker image
         uses: docker/build-push-action@v5
         with:
           context: .
           target: worker
-          platforms: linux/arm64
           push: true
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }}-worker
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest-prod-worker
-          cache-from: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest-prod
-          cache-to: type=inline
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Build and push migrations image
         uses: docker/build-push-action@v5
         with:
           context: .
           target: migrations
-          platforms: linux/arm64
           push: true
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }}-migrations
-          cache-from: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest-prod
-          cache-to: type=inline
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   # ── Manual approval gate ──────────────────────────────────────
   approval:

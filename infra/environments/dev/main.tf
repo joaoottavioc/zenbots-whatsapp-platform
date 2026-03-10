@@ -253,6 +253,19 @@ module "scheduling" {
   worker_desired_count  = 1
 }
 
+# ------------------ RDS Scheduling (off-hours stop/start) --
+
+module "rds_scheduling" {
+  source = "../../modules/rds-scheduling"
+
+  project           = var.project
+  environment       = var.environment
+  region            = var.region
+  account_id        = var.account_id
+  enable_scheduling = true
+  rds_instance_id   = "${var.project}-${var.environment}"
+}
+
 # ------------------ Route 53 (optional) ------------------
 
 resource "aws_route53_record" "dev_api" {

@@ -185,24 +185,24 @@ class TestBuildCartSummaryMessage:
         assert "Pizza" in result
         assert "60,00" in result or "60.00" in result
         # No delivery fee for pickup
-        assert "Taxa de Entrega" not in result
-        assert "Total: *R$ 60" in result
+        assert "Entrega:" not in result
+        assert "*Total: R$ 60" in result
 
     def test_delivery_adds_fee(self):
         items = [make_cart_item(1, "Hamburguer", 25.0, quantity=1)]
         cart = self._make_cart(items, delivery_method=DeliveryMethod.DELIVERY)
         result = _build_cart_summary_message(cart, self._make_bot(delivery_fee=5.0))
 
-        assert "Taxa de Entrega: R$ 5.00" in result
-        assert "Total: *R$ 30" in result
+        assert "Entrega: R$ 5.00" in result
+        assert "*Total: R$ 30" in result
 
     def test_delivery_with_zero_fee_no_fee_line(self):
         items = [make_cart_item(1, "Açaí", 15.0, quantity=1)]
         cart = self._make_cart(items, delivery_method=DeliveryMethod.DELIVERY)
         result = _build_cart_summary_message(cart, self._make_bot(delivery_fee=0.0))
 
-        assert "Taxa de Entrega" not in result
-        assert "Total: *R$ 15" in result
+        assert "Entrega:" not in result
+        assert "*Total: R$ 15" in result
 
     def test_item_with_notes_included_in_output(self):
         items = [make_cart_item(1, "Pizza", 30.0, quantity=1, notes="sem cebola")]

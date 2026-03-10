@@ -60,7 +60,7 @@ def verified_user():
 
 
 @pytest.mark.asyncio
-async def test_register_sends_verification_email(mock_session):
+async def test_register_sends_verification_email(mock_session, mock_response):
     """Registration should send a verification email."""
     register_data = RegisterRequest(email="new@example.com", password="StrongPass1!")
 
@@ -76,15 +76,17 @@ async def test_register_sends_verification_email(mock_session):
         ) as mock_store,
         patch("app.auth.send_verification_email", new_callable=AsyncMock) as mock_send,
     ):
-        result = await register(register_data=register_data, session=mock_session)
+        result = await register(
+            register_data=register_data, response=mock_response, session=mock_session
+        )
 
-    assert "verify" in result["message"].lower() or "check" in result["message"].lower()
+    assert "message" in result
     mock_store.assert_called_once()
     mock_send.assert_called_once_with("new@example.com", "test-token")
 
 
 @pytest.mark.asyncio
-async def test_register_succeeds_even_if_email_fails(mock_session):
+async def test_register_succeeds_even_if_email_fails(mock_session, mock_response):
     """Registration should succeed even if the verification email fails to send."""
     register_data = RegisterRequest(email="new@example.com", password="StrongPass1!")
 
@@ -99,7 +101,9 @@ async def test_register_succeeds_even_if_email_fails(mock_session):
             side_effect=Exception("Redis down"),
         ),
     ):
-        result = await register(register_data=register_data, session=mock_session)
+        result = await register(
+            register_data=register_data, response=mock_response, session=mock_session
+        )
 
     # Registration still succeeds
     assert "message" in result
@@ -120,6 +124,7 @@ async def test_login_blocked_when_email_not_verified(
     form.password = "StrongPass1!"
 
     with (
+        patch("app.auth.is_rate_limited", new_callable=AsyncMock, return_value=False),
         patch(
             "app.auth.crud.get_user_by_email",
             new_callable=AsyncMock,
@@ -149,6 +154,7 @@ async def test_login_allowed_when_email_verified(
     form.password = "StrongPass1!"
 
     with (
+        patch("app.auth.is_rate_limited", new_callable=AsyncMock, return_value=False),
         patch(
             "app.auth.crud.get_user_by_email",
             new_callable=AsyncMock,

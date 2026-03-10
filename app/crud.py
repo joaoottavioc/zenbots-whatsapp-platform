@@ -9,6 +9,7 @@ from datetime import timedelta
 from app.utils import normalize_phone, mask_phone
 from app.time import utcnow
 from sqlalchemy import func, desc
+from sqlalchemy.exc import IntegrityError
 from app.models import (
     Bot,
     User,
@@ -80,8 +81,22 @@ async def get_or_create_contact(
     if not contact:
         contact = Contact(phone_number=contact_number, bot_id=bot_id)
         session.add(contact)
-        await session.flush()
-        await session.refresh(contact)
+        try:
+            await session.flush()
+        except IntegrityError:
+            # Race condition: another request created the same contact concurrently.
+            # Roll back the failed INSERT and fetch the existing record.
+            await session.rollback()
+            result = await session.execute(
+                select(Contact).where(
+                    Contact.phone_number == contact_number, Contact.bot_id == bot_id
+                )
+            )
+            contact = result.scalar_one_or_none()
+            if not contact:
+                raise
+        else:
+            await session.refresh(contact)
 
     return contact
 
@@ -109,8 +124,9 @@ async def add_items_to_db_cart(
     cart_id: int,
     items_to_add: List[Dict],
     bot_id: int | None = None,
+    skipped_items: List[str] | None = None,
 ) -> Optional[ShoppingCart]:
-    """Adiciona itens ao carrinho, ignorando produtos indisponíveis."""
+    """Adiciona itens ao carrinho, reportando produtos indisponíveis via skipped_items."""
     # Carrega o carrinho e seus itens
     cart = await session.get(
         ShoppingCart, cart_id, options=[selectinload(ShoppingCart.items)]
@@ -129,9 +145,16 @@ async def add_items_to_db_cart(
         # 1. Carrega o produto para verificar disponibilidade
         product = await session.get(Product, product_id)
 
-        # 2. SE O PRODUTO NÃO EXISTIR OU ESTIVER INDISPONÍVEL, PULA
+        # 2. SE O PRODUTO NÃO EXISTIR OU ESTIVER INDISPONÍVEL, REPORTA
         if not product or not product.is_available:
             logger.warning("Attempt to add unavailable product: %s", product_id)
+            if skipped_items is not None:
+                name = (
+                    product.name
+                    if product
+                    else (item_data.get("product_name") or f"produto #{product_id}")
+                )
+                skipped_items.append(name)
             continue
 
         # 3. SE bot_id FORNECIDO, VERIFICA SE O PRODUTO PERTENCE AO BOT CORRETO
@@ -142,6 +165,8 @@ async def add_items_to_db_cart(
                 product.bot_id,
                 bot_id,
             )
+            if skipped_items is not None:
+                skipped_items.append(product.name)
             continue
 
         existing_item = next(

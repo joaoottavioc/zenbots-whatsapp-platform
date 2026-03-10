@@ -110,6 +110,10 @@ class Bot(SQLModel, table=True):
 
 
 class Contact(SQLModel, table=True):
+    __table_args__ = (
+        UniqueConstraint("bot_id", "phone_number", name="uq_contact_bot_phone"),
+    )
+
     id: Optional[int] = Field(default=None, primary_key=True)
     phone_number: str = Field(index=True)
 
@@ -177,6 +181,7 @@ class OrderStatus(str, enum.Enum):
     READY = "ready"
     COMPLETED = "completed"
     CANCELED = "canceled"
+    REFUNDED = "refunded"
 
 
 class ShoppingCart(SQLModel, table=True):

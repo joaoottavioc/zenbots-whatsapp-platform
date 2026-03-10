@@ -953,7 +953,7 @@ class TestCartManagementIntents(BaseConversationTest):
 
         self.crud_mock.clear_db_cart.assert_called_once()
         msg = get_sent_message(self.send_mock)
-        assert "esvaziado" in msg.lower() or "vazio" in msg.lower()
+        assert "limpo" in msg.lower() or "vazio" in msg.lower()
 
     @pytest.mark.asyncio
     async def test_show_cart_returns_summary(self):

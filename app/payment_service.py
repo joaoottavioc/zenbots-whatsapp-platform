@@ -81,10 +81,45 @@ async def refresh_mp_token(config, session) -> Optional[str]:
 async def get_valid_access_token(config, session) -> Optional[str]:
     """
     Return a valid plaintext access token, refreshing if expired.
+    Uses a distributed lock to prevent concurrent refresh race conditions.
     """
     if config.token_expires_at and utcnow() >= config.token_expires_at:
         logger.info("MP token expired for PaymentConfig %s, refreshing...", config.id)
-        return await refresh_mp_token(config, session)
+        from app.distributed_lock import _get_client
+
+        lock = _get_client().lock(
+            name=f"mp_token_refresh:{config.id}",
+            timeout=30,
+            blocking_timeout=35,
+            sleep=0.5,
+        )
+        try:
+            if await lock.acquire(blocking=True):
+                try:
+                    # Re-check after acquiring lock (another process may have refreshed)
+                    await session.refresh(config)
+                    if config.token_expires_at and utcnow() >= config.token_expires_at:
+                        return await refresh_mp_token(config, session)
+                    # Token was refreshed by another process while we waited
+                    return (
+                        decrypt_value(config.access_token)
+                        if config.access_token
+                        else None
+                    )
+                finally:
+                    await lock.release()
+            else:
+                # Lock not acquired within timeout; re-read and try to use current token
+                logger.warning(
+                    "Could not acquire refresh lock for PaymentConfig %s", config.id
+                )
+                await session.refresh(config)
+                return (
+                    decrypt_value(config.access_token) if config.access_token else None
+                )
+        except Exception as e:
+            logger.error("Error during locked token refresh: %s", e)
+            return None
     return decrypt_value(config.access_token) if config.access_token else None
 
 

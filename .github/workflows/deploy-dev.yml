@@ -71,7 +71,7 @@ jobs:
   # ── Build & push to ECR ───────────────────────────────────────
   build-and-push:
     needs: checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     environment: dev
     permissions:
       id-token: write
@@ -89,11 +89,6 @@ jobs:
       - uses: aws-actions/amazon-ecr-login@v2
         id: ecr-login
 
-      # ARM64 cross-compilation (matches Graviton Fargate)
-      - uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
       - uses: docker/setup-buildx-action@v3
 
       - name: Set image tag
@@ -105,39 +100,36 @@ jobs:
         with:
           context: .
           target: backend
-          platforms: linux/arm64
           push: true
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }}
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest-dev
-          cache-from: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest-dev
-          cache-to: type=inline
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Build and push worker image
         uses: docker/build-push-action@v5
         with:
           context: .
           target: worker
-          platforms: linux/arm64
           push: true
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }}-worker
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest-dev-worker
-          cache-from: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest-dev
-          cache-to: type=inline
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Build and push migrations image
         uses: docker/build-push-action@v5
         with:
           context: .
           target: migrations
-          platforms: linux/arm64
           push: true
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }}-migrations
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest-dev-migrations
-          cache-from: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest-dev
-          cache-to: type=inline
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   # ── Run database migrations ───────────────────────────────────
   migrate:
@@ -152,6 +144,29 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_DEV_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Ensure RDS is available
+        run: |
+          RDS_STATUS=$(aws rds describe-db-instances \
+            --db-instance-identifier zenbots-dev \
+            --query 'DBInstances[0].DBInstanceStatus' \
+            --output text)
+
+          echo "RDS status: $RDS_STATUS"
+
+          if [ "$RDS_STATUS" = "stopped" ]; then
+            echo "RDS is stopped, starting it..."
+            aws rds start-db-instance --db-instance-identifier zenbots-dev
+          fi
+
+          if [ "$RDS_STATUS" != "available" ]; then
+            echo "Waiting for RDS to become available (up to 10 min)..."
+            aws rds wait db-instance-available \
+              --db-instance-identifier zenbots-dev
+            echo "RDS is now available"
+          else
+            echo "RDS is already available"
+          fi
 
       - name: Run database migration via ECS RunTask
         run: |

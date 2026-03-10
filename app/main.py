@@ -16,7 +16,7 @@ from app.payment_routes import router as payment_router
 from app import utils
 
 # Importações dos seus módulos locais
-from app.database import create_db_and_tables, engine
+from app.database import engine
 from app import whatsapp, auth, bot_routes, takeover_routes
 from app.auth import get_user_from_token
 from app import crud
@@ -72,11 +72,10 @@ async def lifespan(app: FastAPI):
     validate_email_config()
     logger.info("Inicializando aplicacao...")
 
-    # 1. Cria as tabelas do Banco de Dados
-    await create_db_and_tables()
-    logger.info("Banco de dados verificado.")
+    # Schema management is handled by Alembic migrations (alembic upgrade head)
+    # in CI/CD pipeline — no runtime DDL needed.
 
-    # 2. Cria o pool de conexão com o Redis da Fila (ARQ)
+    # 1. Cria o pool de conexão com o Redis da Fila (ARQ)
     logger.info("Conectando ao Redis Queue...")
     try:
         app.state.arq_redis = await create_pool(
@@ -174,15 +173,14 @@ async def root():
 @app.get("/stream")
 async def stream_events(
     request: Request,
-    token: str = Query(default=None),
     ticket: str = Query(default=None),
 ):
     """
     Authenticated SSE endpoint.
-    Supports three auth methods (checked in order):
+    Supports auth methods (checked in order):
       1. ticket query param — short-lived, one-time-use (best practice)
-      2. Authorization: Bearer <jwt> header — standard header auth
-      3. token query param — JWT in URL (legacy fallback)
+      2. Cookie (access_token) — browser session auth
+      3. Authorization: Bearer <jwt> header — standard header auth
     """
     from app.database import async_session
 
@@ -214,16 +212,15 @@ async def stream_events(
                     )
 
         if not user:
-            # Extract JWT from Authorization header or token query param
+            # Extract JWT from Authorization header
             bearer_token = None
             auth_header = request.headers.get("authorization", "")
             if auth_header.startswith("Bearer "):
                 bearer_token = auth_header[7:]
 
-            jwt_token = bearer_token or token
-            if jwt_token:
+            if bearer_token:
                 async with async_session() as session:
-                    user = await get_user_from_token(jwt_token, session)
+                    user = await get_user_from_token(bearer_token, session)
                     if not user:
                         return JSONResponse(
                             content={"detail": "Invalid or expired token"},

@@ -39,6 +39,7 @@ async def test_failed_login_logs_warning(
 ):
     """Failed login should log AUTH_FAIL with email and IP."""
     with (
+        patch("app.auth.is_rate_limited", new_callable=AsyncMock, return_value=False),
         patch(
             "app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=None
         ),
@@ -69,6 +70,7 @@ async def test_failed_login_wrong_password_logs_warning(
     fake_user = MagicMock()
     fake_user.hashed_password = "some_hash"
     with (
+        patch("app.auth.is_rate_limited", new_callable=AsyncMock, return_value=False),
         patch(
             "app.auth.crud.get_user_by_email",
             new_callable=AsyncMock,
@@ -101,6 +103,7 @@ async def test_successful_login_does_not_log(mock_request, mock_response, mock_s
     form.password = "Correct1"
 
     with (
+        patch("app.auth.is_rate_limited", new_callable=AsyncMock, return_value=False),
         patch(
             "app.auth.crud.get_user_by_email",
             new_callable=AsyncMock,

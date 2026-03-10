@@ -218,14 +218,17 @@ async def _check_sensitive_rate_limit(request: Request):
 )
 async def register(
     register_data: RegisterRequest,
+    response: Response,
     session: AsyncSession = Depends(get_session),
     _rate_limit: None = Depends(_check_auth_rate_limit),
 ):
     user = await crud.get_user_by_email(session, email=register_data.email)
     if user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
-        )
+        # Return same status + message as success to prevent user enumeration
+        response.status_code = status.HTTP_201_CREATED
+        return {
+            "message": "If this email is available, a verification link has been sent."
+        }
     hashed_password = get_password_hash(register_data.password)
     new_user = models.User(email=register_data.email, hashed_password=hashed_password)
 
@@ -240,9 +243,7 @@ async def register(
     except Exception as e:
         logger.error("Failed to send verification email on register: %s", e)
 
-    return {
-        "message": "User created successfully. Please check your email to verify your account."
-    }
+    return {"message": "If this email is available, a verification link has been sent."}
 
 
 class VerifyEmailRequest(BaseModel):
@@ -333,6 +334,15 @@ async def login_for_access_token(
     session: AsyncSession = Depends(get_session),
     _rate_limit: None = Depends(_check_login_rate_limit),
 ):
+    # Per-account rate limit (prevents targeted brute-force on a single email)
+    email_key = f"rl:login:email:{form_data.username.lower()}"
+    if await is_rate_limited(email_key, limit=5 * _DEV_MULTIPLIER, window_seconds=300):
+        logger.warning("RATE_LIMIT login_email email=%s", form_data.username)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many login attempts for this account. Please try again later.",
+        )
+
     user = await crud.get_user_by_email(session, email=form_data.username)
     if not user or not verify_password(form_data.password, user.hashed_password):
         client_ip = request.client.host if request.client else "unknown"

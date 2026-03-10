@@ -8,6 +8,7 @@ from app.database import get_session
 from app.models import User, OrderStatus
 from app.auth import get_current_user
 from app.schemas import WhatsAppAuthRequest
+import json
 import re
 import logging
 
@@ -22,6 +23,7 @@ import asyncio
 from app.menu_storage import upload_bytes_to_s3
 from app.whatsapp import send_whatsapp_message
 from app.encryption import encrypt_value, decrypt_value
+from app.webhook_security import verify_whatsapp_signature, FB_APP_SECRET
 
 logger = logging.getLogger(__name__)
 
@@ -1056,7 +1058,25 @@ async def receive_whatsapp_message(request: Request):
     Recebe o evento da Meta e joga para o Worker processar em background.
     """
     try:
-        payload = await request.json()
+        # Read raw body first (needed for signature verification)
+        raw_body = await request.body()
+
+        # Verify Meta's X-Hub-Signature-256 if FB_APP_SECRET is configured
+        if FB_APP_SECRET:
+            signature = request.headers.get("X-Hub-Signature-256", "")
+            if not verify_whatsapp_signature(raw_body, signature, FB_APP_SECRET):
+                logger.warning(
+                    "Invalid WhatsApp webhook signature from IP %s",
+                    request.client.host if request.client else "unknown",
+                )
+                # Return 200 to prevent Meta from retrying forged/invalid requests
+                return {"status": "invalid_signature"}
+        else:
+            logger.warning(
+                "FB_APP_SECRET not configured — skipping webhook signature verification"
+            )
+
+        payload = json.loads(raw_body)
 
         # Validação básica: é um evento de mensagem de WhatsApp?
         if payload.get("object") == "whatsapp_business_account" and payload.get(

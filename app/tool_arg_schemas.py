@@ -9,6 +9,7 @@ class CartItemInput(BaseModel):
     product_id: int
     quantity: int = Field(ge=1, le=50)
     notes: Optional[str] = Field(default=None, max_length=200)
+    product_name: Optional[str] = Field(default=None, max_length=200)
 
 
 class AddItemsArgs(BaseModel):

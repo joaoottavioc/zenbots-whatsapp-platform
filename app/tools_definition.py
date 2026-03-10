@@ -9,28 +9,28 @@ tools_schema = [
     {
         "type": "function",
         "function": {
-            "name": "add_items_to_cart",  # Nome no plural
-            "description": "Adiciona UM OU MAIS itens ao carrinho. Use para todos os produtos que o cliente pedir em uma única mensagem.",
+            "name": "add_items_to_cart",
+            "description": "Adiciona um ou mais itens ao carrinho.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "items": {
                         "type": "array",
-                        "description": "Uma lista de itens para adicionar, cada um com ID e quantidade.",
+                        "description": "Itens para adicionar (ID, quantidade, nome).",
                         "items": {
                             "type": "object",
                             "properties": {
                                 "product_id": {
                                     "type": "integer",
-                                    "description": "O ID do produto.",
+                                    "description": "ID do produto.",
                                 },
                                 "notes": {
                                     "type": "string",
-                                    "description": "Observações do cliente para este item. Ex: 'Sem cebola', 'Ponto da carne'.",
+                                    "description": "Observações. Ex: 'sem cebola'.",
                                 },
                                 "quantity": {
                                     "type": "integer",
-                                    "description": "A quantidade.",
+                                    "description": "Quantidade.",
                                 },
                             },
                             "required": ["product_id", "quantity"],
@@ -45,7 +45,7 @@ tools_schema = [
         "type": "function",
         "function": {
             "name": "answer_conversationally",
-            "description": "Use para responder a saudações e perguntas relacionadas ao cardápio, pratos, pedidos e funcionamento do restaurante. Ignore perguntas não relacionadas.",
+            "description": "Responde saudações e perguntas sobre o restaurante.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -58,14 +58,14 @@ tools_schema = [
     {
         "type": "function",
         "function": {
-            "name": "remove_items_from_cart",  # <-- NOME NO PLURAL
-            "description": "Remove UM OU MAIS itens do carrinho. Use quando o cliente pedir para remover, tirar ou cancelar itens.",
+            "name": "remove_items_from_cart",
+            "description": "Remove um ou mais itens do carrinho.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "product_ids": {  # <-- ACEITA UMA LISTA
+                    "product_ids": {
                         "type": "array",
-                        "description": "Uma lista de IDs dos produtos a serem completamente removidos.",
+                        "description": "IDs dos produtos a remover.",
                         "items": {"type": "integer"},
                     }
                 },
@@ -77,17 +77,17 @@ tools_schema = [
         "type": "function",
         "function": {
             "name": "modify_item_quantity",
-            "description": "Use esta ferramenta quando o cliente quiser ALTERAR A QUANTIDADE de um item que já está no carrinho, mencionando um NOVO NÚMERO. Ex: 'na verdade, quero 2 polvos', 'pode ser só 1 terrine'.",
+            "description": "Altera a quantidade de um item já no carrinho. 0 = remover.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "product_id": {
                         "type": "integer",
-                        "description": "O ID do produto cuja quantidade será modificada.",
+                        "description": "ID do produto.",
                     },
                     "new_quantity": {
                         "type": "integer",
-                        "description": "A nova quantidade final para o produto. Se a nova quantidade for 0, o item será removido.",
+                        "description": "Nova quantidade final.",
                     },
                 },
                 "required": ["product_id", "new_quantity"],
@@ -98,17 +98,17 @@ tools_schema = [
         "type": "function",
         "function": {
             "name": "propose_and_confirm_action",
-            "description": "Use esta ferramenta QUANDO a busca por um item falhar e você quiser sugerir uma alternativa. A ferramenta fará a pergunta de confirmação e aguardará um 'sim' ou 'não'.",
+            "description": "Sugere alternativa quando item não encontrado. Aguarda confirmação.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "confirmation_question": {
                         "type": "string",
-                        "description": "A pergunta exata a ser feita ao usuário. Ex: 'Não temos espaguete, mas posso adicionar 2 Gnocchis em vez disso. Pode ser?'",
+                        "description": "Pergunta de confirmação ao usuário.",
                     },
                     "proposed_action": {
                         "type": "object",
-                        "description": "A ação de ferramenta que será executada se o cliente disser 'sim'.",
+                        "description": "Ação a executar se confirmado.",
                         "properties": {
                             "tool_name": {
                                 "type": "string",
@@ -116,7 +116,7 @@ tools_schema = [
                             },
                             "tool_args": {
                                 "type": "object",
-                                "description": "Os argumentos para a ferramenta proposta.",
+                                "description": "Argumentos da ferramenta proposta.",
                             },
                         },
                         "required": ["tool_name", "tool_args"],
@@ -130,14 +130,14 @@ tools_schema = [
         "type": "function",
         "function": {
             "name": "answer_with_found_products",
-            "description": "Sugere produtos com base na busca semântica",
+            "description": "Sugere produtos encontrados pela busca semântica.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "product_names": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Lista de nomes dos produtos sugeridos",
+                        "description": "Nomes dos produtos sugeridos.",
                     }
                 },
                 "required": ["product_names"],
@@ -148,7 +148,7 @@ tools_schema = [
         "type": "function",
         "function": {
             "name": "bulk_modify_quantities",
-            "description": "Altera quantidades de vários itens de uma só vez. Use números absolutos (new_quantity).",
+            "description": "Altera quantidades de vários itens do carrinho de uma vez.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -172,13 +172,13 @@ tools_schema = [
         "type": "function",
         "function": {
             "name": "search_catalog_for_suggestions",
-            "description": "Use esta ferramenta quando o usuário pedir uma sugestão genérica de comida ou bebida (ex: 'tem sobremesa?', 'algo com peixe', 'queria ver os vinhos'). Extraia APENAS o conceito principal da comida/bebida para a busca.",
+            "description": "Busca sugestões genéricas no cardápio. Extraia o conceito principal.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "search_concept": {
                         "type": "string",
-                        "description": "O conceito principal e limpo da busca. Ex: 'sobremesa', 'peixe', 'vinho', 'pato', 'massa com frutos do mar'.",
+                        "description": "Conceito da busca. Ex: 'sobremesa', 'peixe', 'vinho'.",
                     }
                 },
                 "required": ["search_concept"],
@@ -189,17 +189,17 @@ tools_schema = [
         "type": "function",
         "function": {
             "name": "update_item_observation",
-            "description": "Atualiza ou adiciona uma observação a um item que JÁ está no carrinho. Use quando o cliente corrigir ou adicionar um detalhe depois.",
+            "description": "Atualiza observação de item já no carrinho.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "product_id": {
                         "type": "integer",
-                        "description": "ID do produto para adicionar a nota",
+                        "description": "ID do produto.",
                     },
                     "notes": {
                         "type": "string",
-                        "description": "A nova observação completa. Ex: 'Sem maionese'",
+                        "description": "Nova observação. Ex: 'sem maionese'.",
                     },
                 },
                 "required": ["product_id", "notes"],

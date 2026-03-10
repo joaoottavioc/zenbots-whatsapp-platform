@@ -1,0 +1,65 @@
+version: '3.9'
+
+# Production-like compose for staging/testing (no --reload, no volume mount).
+# For actual production, use ECS Fargate (see infra/).
+
+services:
+  db:
+    image: pgvector/pgvector:pg14
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: botbuilder
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init-vector.sql
+    restart: unless-stopped
+
+  redis:
+    image: redis:alpine
+    container_name: zenbots_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      target: backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      target: worker
+    command: arq app.worker.WorkerSettings
+    depends_on:
+      - db
+      - redis
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  redis_data:

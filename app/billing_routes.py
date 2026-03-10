@@ -59,7 +59,44 @@ async def create_checkout(
     if not selected_plan:
         raise HTTPException(status_code=404, detail="Plano não encontrado")
 
-    # 3. Cria Preferência no Mercado Pago
+    # 3. Handle existing subscriptions
+    existing_sub = await crud.get_subscription_by_bot(session, req.bot_id)
+    if existing_sub:
+        # Admin-granted subscriptions are managed via admin endpoints only
+        if existing_sub.mp_subscription_id.startswith("admin_grant_"):
+            raise HTTPException(
+                status_code=409,
+                detail="Assinatura gerenciada por administrador.",
+            )
+        # Same plan already active → block duplicate
+        if (
+            existing_sub.status == "authorized"
+            and existing_sub.plan_type == req.plan_key
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Este bot já possui uma assinatura ativa.",
+            )
+        # Pending subscription (clicked but never paid) → cancel old on MP before creating new
+        if existing_sub.status == "pending":
+            try:
+                _get_sdk().preapproval().update(
+                    existing_sub.mp_subscription_id, {"status": "cancelled"}
+                )
+                logger.info(
+                    "Cancelled stale pending MP sub %s for bot_id=%s",
+                    existing_sub.mp_subscription_id,
+                    req.bot_id,
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to cancel pending MP sub %s",
+                    existing_sub.mp_subscription_id,
+                )
+        # authorized + different plan = upgrade attempt → allowed, new MP sub created
+        # cancelled/paused = re-subscribe → allowed
+
+    # 4. Cria Preferência no Mercado Pago
     subscription_data = {
         "reason": f"{selected_plan.title} - {bot.restaurant_name}",
         "auto_recurring": {
@@ -83,14 +120,22 @@ async def create_checkout(
                 "message", "Erro desconhecido"
             )
             logger.error("Mercado Pago preapproval creation failed: %s", error_detail)
-            raise HTTPException(status_code=400, detail=f"Erro MP: {error_detail}")
+            raise HTTPException(
+                status_code=400,
+                detail="Erro ao processar pagamento. Tente novamente.",
+            )
 
         checkout_link = result["response"]["init_point"]
         return {"checkout_url": checkout_link}
 
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception:
         logger.exception("Checkout creation failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail="Erro interno ao processar pagamento. Tente novamente mais tarde.",
+        )
 
 
 @router.post("/webhook")
@@ -122,6 +167,69 @@ async def billing_webhook(
 
                 bot = await session.get(Bot, bot_id)
                 if bot:
+                    existing_sub = await crud.get_subscription_by_bot(session, bot_id)
+
+                    # Skip if current subscription is admin-granted
+                    if existing_sub and existing_sub.mp_subscription_id.startswith(
+                        "admin_grant_"
+                    ):
+                        logger.info(
+                            "Ignoring MP webhook for admin-granted subscription, bot_id=%s",
+                            bot_id,
+                        )
+                        return {"status": "ok"}
+
+                    # If mp_id doesn't match existing sub, decide whether to accept
+                    if (
+                        existing_sub
+                        and existing_sub.mp_subscription_id != preapproval_id
+                    ):
+                        if status == "authorized":
+                            # Confirmed upgrade/new subscription — cancel old MP sub
+                            try:
+                                _get_sdk().preapproval().update(
+                                    existing_sub.mp_subscription_id,
+                                    {"status": "cancelled"},
+                                )
+                                logger.info(
+                                    "Cancelled old MP sub %s (replaced by %s) for bot_id=%s",
+                                    existing_sub.mp_subscription_id,
+                                    preapproval_id,
+                                    bot_id,
+                                )
+                            except Exception:
+                                logger.warning(
+                                    "Failed to cancel old MP sub %s",
+                                    existing_sub.mp_subscription_id,
+                                )
+                        else:
+                            # Stale webhook from orphan/old subscription — skip
+                            logger.info(
+                                "Ignoring stale webhook: mp_id=%s status=%s, "
+                                "current mp_id=%s for bot_id=%s",
+                                preapproval_id,
+                                status,
+                                existing_sub.mp_subscription_id,
+                                bot_id,
+                            )
+                            return {"status": "ok"}
+
+                    # Use existing plan_type as fallback for legacy external_references
+                    if plan_key == "pro" and len(parts) <= 2 and existing_sub:
+                        plan_key = existing_sub.plan_type
+
+                    # Extract subscription frequency from MP response
+                    auto_recurring = sub_info.get("auto_recurring", {})
+                    frequency = auto_recurring.get("frequency", 1)
+                    frequency_type = auto_recurring.get("frequency_type", "months")
+                    # Convert to months (MP uses "months" or "days")
+                    if frequency_type == "months":
+                        plan_frequency_months = frequency
+                    elif frequency_type == "days":
+                        plan_frequency_months = max(1, frequency // 30)
+                    else:
+                        plan_frequency_months = 1
+
                     await crud.upsert_subscription(
                         session=session,
                         user_id=bot.user_id,
@@ -129,6 +237,7 @@ async def billing_webhook(
                         mp_id=preapproval_id,
                         status=status,
                         plan_type=plan_key,
+                        plan_frequency_months=plan_frequency_months,
                     )
                     await session.commit()
                     logger.info(

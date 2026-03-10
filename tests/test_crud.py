@@ -175,6 +175,35 @@ class TestGetOrCreateContact:
         # The returned object is the same instance that was passed to add().
         assert result is added_obj
 
+    async def test_handles_integrity_error_on_duplicate(self):
+        """When a concurrent insert causes IntegrityError, rollback and fetch the existing contact."""
+        from sqlalchemy.exc import IntegrityError
+
+        session = _make_session()
+        existing = _make_contact(contact_id=10, phone="11777777777", bot_id=1)
+
+        # First execute: no contact found (returns None) → triggers INSERT
+        # Second execute (after rollback): finds the existing contact
+        first_result = MagicMock()
+        first_result.scalar_one_or_none.return_value = None
+        second_result = MagicMock()
+        second_result.scalar_one_or_none.return_value = existing
+        session.execute = AsyncMock(side_effect=[first_result, second_result])
+
+        # flush raises IntegrityError (duplicate key)
+        session.flush = AsyncMock(
+            side_effect=IntegrityError("duplicate", params=None, orig=Exception())
+        )
+
+        result = await get_or_create_contact(
+            session, bot_id=1, contact_number="5511777777777"
+        )
+
+        assert result is existing
+        session.rollback.assert_awaited_once()
+        # execute called twice: first lookup + retry after rollback
+        assert session.execute.await_count == 2
+
 
 # ===========================================================================
 # TestClearDbCart

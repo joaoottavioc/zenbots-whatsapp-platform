@@ -45,8 +45,8 @@ def create_central_prompt(
             f"{suggestion_context}\n"
         )
 
-    # --- MENSAGEM DO SISTEMA ---
-    system_message = {
+    # --- T1-1: STATIC SYSTEM MESSAGE (cacheable prefix) ---
+    static_system_message = {
         "role": "system",
         "content": f"""
 Você é um assistente de pedidos para o restaurante '{restaurant_name}'.
@@ -57,7 +57,7 @@ Prioridade:
 2. Se mencionar produtos → associe aos IDs corretos do cardápio ou das sugestões recentes.
    - Se for alteração de quantidade de APENAS UM item já no carrinho → use `modify_item_quantity`.
    - Se for alteração de quantidade de MAIS DE UM item já no carrinho → use `bulk_modify_quantities` com `updates` contendo todos os pares product_id/new_quantity.
-   - Se os itens AINDA NÃO estiverem no carrinho → use SEMPRE `add_items_to_cart`.
+   - Se os itens AINDA NÃO estiverem no carrinho → use SEMPRE `add_items_to_cart`. SEMPRE inclua `product_name` com o nome do produto como o cliente pediu.
    - Se for alteração de quantidade de itens que JÁ ESTÃO no carrinho → use `modify_item_quantity` (um item) ou `bulk_modify_quantities` (vários).
 
 --- REGRAS PARA PEDIDOS E OBSERVAÇÕES (IMPORTANTE) ---
@@ -88,7 +88,13 @@ Se um item pedido não existir ou estiver indisponível, use a ferramenta `answe
 - Exemplo de resposta: “Puxa, [Nome do Item] não faz parte do nosso cardápio no momento. Gostaria de ver nossas opções de sobremesa ou alguma outra sugestão?”
 - "proposed_action" preenchida com a tool real e argumentos resolvidos (IDs/quantidades).
 Após a confirmação do cliente, NÃO gere outra resposta: o backend executará a ação proposta.
----
+""",
+    }
+
+    # --- T1-1: DYNAMIC SYSTEM MESSAGE (per-request context, not cached) ---
+    dynamic_system_message = {
+        "role": "system",
+        "content": f"""---
 **Cardápio relevante (RAG):**
 {menu_context}
 
@@ -101,6 +107,10 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
     }
 
     # --- EXEMPLOS MULTISHOT (com tool_calls + role:"tool") ---
+    # T1-2: Reduced from 13 to 10 examples by removing redundant ones:
+    # - Removed ex7 (ordinals with numbers, covered by ex_ordinais_extenso)
+    # - Removed ex_ordinals (ordinals with numbers, covered by ex_ordinais_extenso)
+    # - Removed ex_notes_simple (simple notes, covered by ex_notes_complex)
 
     # ADD
     ex1_user = {"role": "user", "content": "quero 2 pizzas marguerita e 1 coca-cola"}
@@ -176,7 +186,11 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
     }
 
     # BULK MODIFY
-    {
+    ex3b_user = {
+        "role": "user",
+        "content": "muda a pizza pra 10 e o prato do dia pra 9",
+    }
+    ex3b_assistant = {
         "role": "assistant",
         "content": None,
         "tool_calls": [
@@ -196,6 +210,11 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
                 },
             }
         ],
+    }
+    ex3b_tool = {
+        "role": "tool",
+        "tool_call_id": "call-ex3b",
+        "content": "Quantidades atualizadas.",
     }
 
     # GREETING
@@ -278,75 +297,9 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
         "content": "Sugestões enviadas ao usuário.",
     }
 
-    ex7_user = {"role": "user", "content": "quero cinco do primeiro e três do segundo"}
-    ex7_assistant = {
-        "role": "assistant",
-        "content": None,
-        "tool_calls": [
-            {
-                "id": "call-ex7",
-                "type": "function",
-                "function": {
-                    "name": "add_items_to_cart",
-                    "arguments": json.dumps(
-                        {
-                            # Assumindo que nas Sugestões recentes estão algo como:
-                            # 1. Oeuf Poche Paul Bocuse (ID: 111)
-                            # 2. Magret de Canard (ID: 222)
-                            "items": [
-                                {"product_id": 111, "quantity": 5},
-                                {"product_id": 222, "quantity": 3},
-                            ]
-                        }
-                    ),
-                },
-            }
-        ],
-    }
-    ex7_tool = {
-        "role": "tool",
-        "tool_call_id": "call-ex7",
-        "content": "Itens adicionados.",
-    }
+    # T1-2: Removed ex7 and ex_ordinals (redundant with ex_ordinais_extenso)
 
-    # Exemplo: usuário escolhe itens usando "primeiro/segundo" da lista de sugestões recentes
-    ex_ordinals_user = {"role": "user", "content": "quero 2 do segundo e 7 do quarto"}
-
-    # Sugestões recentes imaginárias para o exemplo
-    # 1. Crevettes à la Provençale (ID: 22)
-    # 2. Poulpe à la Plancha (ID: 15)
-    # 3. Oeuf Poche Paul Bocuse (ID: 9)
-    # 4. Gnocchis de la Mémé Forte (ID: 23)
-
-    ex_ordinals_assistant = {
-        "role": "assistant",
-        "content": None,
-        "tool_calls": [
-            {
-                "id": "call-ex-ordinais",
-                "type": "function",
-                "function": {
-                    "name": "add_items_to_cart",
-                    "arguments": json.dumps(
-                        {
-                            "items": [
-                                {"product_id": 15, "quantity": 2},
-                                {"product_id": 23, "quantity": 7},
-                            ]
-                        }
-                    ),
-                },
-            }
-        ],
-    }
-
-    ex_ordinals_tool = {
-        "role": "tool",
-        "tool_call_id": "call-ex-ordinais",
-        "content": "Itens adicionados.",
-    }
-
-    # Exemplo: quantidades por extenso + ordinais
+    # Exemplo: quantidades por extenso + ordinais (covers both ordinals and written-out numbers)
     ex_ordinais_extenso_user = {
         "role": "user",
         "content": "quero treze do terceiro e quinze do primeiro",
@@ -410,38 +363,9 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
         "content": "Busca por 'sobremesa' realizada.",
     }
 
-    # ▼▼▼ NOVOS EXEMPLOS PARA OBSERVAÇÕES (NOTES) ▼▼▼
+    # T1-2: Removed ex_notes_simple (redundant with ex_notes_complex)
 
-    # Exemplo 1: Adicionar com observação simples
-    ex_notes_simple_user = {"role": "user", "content": "Quero um X-Salada sem tomate"}
-    ex_notes_simple_assistant = {
-        "role": "assistant",
-        "content": None,
-        "tool_calls": [
-            {
-                "id": "call-ex-notes-simple",
-                "type": "function",
-                "function": {
-                    "name": "add_items_to_cart",
-                    "arguments": json.dumps(
-                        {
-                            "items": [
-                                # Assumindo ID 12 para X-Salada
-                                {"product_id": 12, "quantity": 1, "notes": "sem tomate"}
-                            ]
-                        }
-                    ),
-                },
-            }
-        ],
-    }
-    ex_notes_simple_tool = {
-        "role": "tool",
-        "tool_call_id": "call-ex-notes-simple",
-        "content": "Item adicionado com nota.",
-    }
-
-    # Exemplo 2: Adicionar com observação complexa
+    # Exemplo: Adicionar com observação complexa
     ex_notes_complex_user = {
         "role": "user",
         "content": "Me vê um Hot Dog Mexicano mas tira a salsicha e coloca purê extra",
@@ -509,8 +433,9 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
     }
 
     # --- MONTAGEM FINAL ---
-    # Examples go right after system, then history (closer to LLM output boundary),
-    # then the current user query last.
+    # T1-1: Order optimized for prefix caching:
+    #   static system -> examples -> dynamic system -> history -> user query
+    # T1-2: 11 examples (reduced from 13, but fixed ex3b which was dead code)
     examples = [
         ex1_user,
         ex1_assistant,
@@ -521,6 +446,9 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
         ex3_user,
         ex3_assistant,
         ex3_tool,
+        ex3b_user,
+        ex3b_assistant,
+        ex3b_tool,
         ex4_user,
         ex4_assistant,
         ex4_tool,
@@ -530,21 +458,12 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
         ex5b_user,
         ex5b_assistant,
         ex5b_tool,
-        ex7_user,
-        ex7_assistant,
-        ex7_tool,
-        ex_ordinals_user,
-        ex_ordinals_assistant,
-        ex_ordinals_tool,
         ex_ordinais_extenso_user,
         ex_ordinais_extenso_assistant,
         ex_ordinais_extenso_tool,
         ex_suggestion_user,
         ex_suggestion_assistant,
         ex_suggestion_tool,
-        ex_notes_simple_user,
-        ex_notes_simple_assistant,
-        ex_notes_simple_tool,
         ex_notes_complex_user,
         ex_notes_complex_assistant,
         ex_notes_complex_tool,
@@ -554,8 +473,9 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
     ]
 
     prompt = (
-        [system_message]
+        [static_system_message]
         + examples
+        + [dynamic_system_message]
         + history[-5:]
         + [{"role": "user", "content": user_query}]
     )
