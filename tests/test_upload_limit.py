@@ -25,7 +25,6 @@ async def test_upload_within_limit_no_413():
     mock_file = MagicMock()
     mock_file.filename = "menu.png"
     mock_file.content_type = "image/png"
-    # Simulate read(): first call returns data, second returns empty (EOF)
     mock_file.read = AsyncMock(side_effect=[small_content, b""])
 
     mock_session = AsyncMock()
@@ -36,10 +35,6 @@ async def test_upload_within_limit_no_413():
     mock_bot.user_id = 1
     mock_bot.menu_url = None
 
-    # Mock request with arq_redis on app.state
-    mock_request = MagicMock()
-    mock_request.app.state.arq_redis = AsyncMock()
-
     with (
         patch(
             "app.bot_routes.crud.get_bot_by_id", new=AsyncMock(return_value=mock_bot)
@@ -48,28 +43,47 @@ async def test_upload_within_limit_no_413():
             "app.bot_routes.asyncio.to_thread",
             new=AsyncMock(return_value="https://s3.example.com/menu.png"),
         ),
+        patch(
+            "app.bot_routes._detect_file_type",
+            return_value=(False, True, "image/png"),
+        ),
+        patch(
+            "app.bot_routes._resize_and_compress",
+            return_value=(small_content, "image/jpeg"),
+        ),
+        patch(
+            "app.bot_routes.extract_products_from_image",
+            new=AsyncMock(return_value=[{"name": "Pizza", "price": 10.0}]),
+        ),
+        patch(
+            "app.bot_routes._enrich_products",
+            return_value=[
+                {
+                    "name": "Pizza",
+                    "price": 10.0,
+                    "keywords": ["pizza"],
+                    "is_available": True,
+                }
+            ],
+        ),
+        patch(
+            "app.bot_routes.crud.bulk_create_products",
+            new=AsyncMock(return_value=1),
+        ),
     ):
         result = await upload_catalog_from_file_endpoint(
-            request=mock_request,
-            bot_id=1,
-            file=mock_file,
-            session=mock_session,
-            current_user=mock_user,
+            bot_id=1, file=mock_file, session=mock_session, current_user=mock_user
         )
 
-    assert result["status"] == "processing"
-    # Verify extraction job was enqueued
-    mock_request.app.state.arq_redis.enqueue_job.assert_called_once()
+    assert "Sucesso" in result["message"]
 
 
 async def test_upload_exceeding_limit_raises_413():
     """An upload exceeding MAX_UPLOAD_SIZE must raise HTTP 413."""
     from app.bot_routes import upload_catalog_from_file_endpoint, MAX_UPLOAD_SIZE
 
-    # Each chunk is 8 KB; we need enough to exceed 10 MB
     chunk_size = 8192
     oversized_chunk = b"x" * chunk_size
-    # Simulate a file that keeps returning data forever
     call_count = 0
     needed_chunks = (MAX_UPLOAD_SIZE // chunk_size) + 2
 
@@ -92,18 +106,11 @@ async def test_upload_exceeding_limit_raises_413():
     mock_bot = MagicMock()
     mock_bot.user_id = 1
 
-    mock_request = MagicMock()
-    mock_request.app.state.arq_redis = AsyncMock()
-
     with patch(
         "app.bot_routes.crud.get_bot_by_id", new=AsyncMock(return_value=mock_bot)
     ):
         with pytest.raises(HTTPException) as exc_info:
             await upload_catalog_from_file_endpoint(
-                request=mock_request,
-                bot_id=1,
-                file=mock_file,
-                session=mock_session,
-                current_user=mock_user,
+                bot_id=1, file=mock_file, session=mock_session, current_user=mock_user
             )
         assert exc_info.value.status_code == 413

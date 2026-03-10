@@ -12,8 +12,6 @@ import logging
 import re
 from typing import List, Dict
 
-import fitz  # PyMuPDF
-
 from app.broadcast import broadcast_order_update
 from app.crud import bulk_create_products
 from app.database import async_session
@@ -72,6 +70,8 @@ def _detect_file_type(
 
 def _extract_text_from_pdf(contents: bytes) -> str:
     """Try to extract selectable text from PDF using fitz."""
+    import fitz
+
     doc = fitz.open(stream=contents, filetype="pdf")
     text_parts = []
     for i in range(min(len(doc), 5)):
@@ -84,6 +84,8 @@ def _extract_text_from_pdf(contents: bytes) -> str:
 
 def _pdf_to_images(contents: bytes) -> list[bytes]:
     """Convert PDF pages to JPEG images at 150 DPI, resized and compressed."""
+    import fitz
+
     doc = fitz.open(stream=contents, filetype="pdf")
     images = []
     max_pages = 5

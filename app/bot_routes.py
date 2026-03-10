@@ -19,6 +19,15 @@ import httpx
 from arq import ArqRedis
 import asyncio
 from app.menu_storage import upload_bytes_to_s3
+from app.menu_extraction import (
+    _detect_file_type,
+    _extract_text_from_pdf,
+    _pdf_to_images,
+    _resize_and_compress,
+    _enrich_products,
+)
+from app.openai_client import extract_products_from_image
+from app.data_extractor import extract_products_from_text
 from app.whatsapp import send_whatsapp_message
 from app.encryption import encrypt_value, decrypt_value
 from app.webhook_security import verify_whatsapp_signature, FB_APP_SECRET
@@ -328,101 +337,115 @@ async def bulk_delete_products_endpoint(
     return {"message": f"{deleted_count} produtos foram excluídos com sucesso."}
 
 
-@router.post("/bots/{bot_id}/catalog/upload-from-file", status_code=202)
+@router.post("/bots/{bot_id}/catalog/upload-from-file", status_code=201)
 async def upload_catalog_from_file_endpoint(
-    request: Request,
     bot_id: int,
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    """Accept menu file and enqueue extraction job. Returns immediately."""
-
+    """Upload menu file, extract products via AI, and save to DB."""
     # 1. Validação de Segurança
     db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
     if not db_bot or db_bot.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Acesso negado.")
 
     # 2. Leitura Segura do Arquivo com limite de tamanho
-    logger.info("File received: %s | Type: %s", file.filename, file.content_type)
-    chunks = []
-    total_size = 0
-    while True:
-        chunk = await file.read(8192)
-        if not chunk:
-            break
-        total_size += len(chunk)
-        if total_size > MAX_UPLOAD_SIZE:
-            raise HTTPException(
-                status_code=413,
-                detail=f"Arquivo excede o limite de {MAX_UPLOAD_SIZE // (1024 * 1024)} MB.",
-            )
-        chunks.append(chunk)
-    contents = b"".join(chunks)
-
-    # 3. Validate file type before enqueuing
-    _detect_file_type(contents, file.filename, file.content_type)
-
-    # 4. Upload para S3 (inline, fast)
     try:
-        s3_url = await asyncio.to_thread(
-            upload_bytes_to_s3,
-            contents,
-            file.filename,
-            file.content_type,
-            f"menus/bot_{bot_id}",
+        logger.info("File received: %s | Type: %s", file.filename, file.content_type)
+        chunks = []
+        total_size = 0
+        while True:
+            chunk = await file.read(8192)
+            if not chunk:
+                break
+            total_size += len(chunk)
+            if total_size > MAX_UPLOAD_SIZE:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Arquivo excede o limite de {MAX_UPLOAD_SIZE // (1024 * 1024)} MB.",
+                )
+            chunks.append(chunk)
+        contents = b"".join(chunks)
+
+        # 3. Validate file type
+        is_pdf, is_image, detected_mime = _detect_file_type(
+            contents, file.filename, file.content_type
         )
-        logger.info("S3 upload successful: %s", s3_url)
-        db_bot.menu_url = s3_url
-        session.add(db_bot)
-        await session.commit()
+        if not is_pdf and not is_image:
+            raise HTTPException(
+                status_code=400,
+                detail="Tipo de arquivo não suportado. Envie PDF, JPEG, PNG ou WebP.",
+            )
+
+        # 4. Upload para S3
+        try:
+            s3_url = await asyncio.to_thread(
+                upload_bytes_to_s3,
+                contents,
+                file.filename,
+                file.content_type,
+                f"menus/bot_{bot_id}",
+            )
+            logger.info("S3 upload successful: %s", s3_url)
+            db_bot.menu_url = s3_url
+            session.add(db_bot)
+            await session.commit()
+        except Exception as e:
+            logger.warning("S3 upload failed, proceeding with extraction: %s", e)
+
+        # 5. Extração de produtos (otimizada)
+        all_extracted_products = []
+
+        if is_pdf:
+            # Try text extraction first (skips vision API for text-selectable PDFs)
+            pdf_text = _extract_text_from_pdf(contents)
+
+            if len(pdf_text) > 100:
+                logger.info(
+                    "PDF has selectable text (%d chars), using text extraction",
+                    len(pdf_text),
+                )
+                all_extracted_products = await extract_products_from_text(pdf_text)
+            else:
+                # Scanned PDF — vision API with optimized images (150 DPI, JPEG)
+                logger.info("PDF is scanned/image-based, using vision API")
+                page_images = _pdf_to_images(contents)
+                tasks = [
+                    extract_products_from_image(img, "image/jpeg")
+                    for img in page_images
+                ]
+                results = await asyncio.gather(*tasks)
+                for page_products in results:
+                    if page_products:
+                        all_extracted_products.extend(page_products)
+
+        elif is_image:
+            logger.info("Single image mode activated")
+            compressed, mime = _resize_and_compress(contents)
+            all_extracted_products = await extract_products_from_image(compressed, mime)
+
+        # 6. Validação Final
+        if not all_extracted_products:
+            msg = "O arquivo foi salvo, mas a IA não identificou nenhum produto. Verifique se a imagem está legível."
+            logger.error("Extraction failed: %s", msg)
+            raise HTTPException(status_code=400, detail=msg)
+
+        # 7. Salvar no Banco (Batch)
+        enriched_products = _enrich_products(all_extracted_products)
+        count = await crud.bulk_create_products(
+            session=session, bot_id=bot_id, products_data=enriched_products
+        )
+
+        return {
+            "message": f"Sucesso! {count} produtos cadastrados a partir do cardápio."
+        }
+
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.warning("S3 upload failed, proceeding with extraction: %s", e)
-
-    # 5. Enqueue extraction job to ARQ worker
-    import base64
-
-    file_b64 = base64.b64encode(contents).decode("ascii")
-    redis_queue: ArqRedis = request.app.state.arq_redis
-    await redis_queue.enqueue_job(
-        "process_menu_extraction",
-        bot_id,
-        file_b64,
-        file.filename,
-        file.content_type,
-    )
-    logger.info("Menu extraction job enqueued for bot_id=%d", bot_id)
-
-    return {
-        "message": "Arquivo recebido! Processando cardápio em segundo plano...",
-        "status": "processing",
-    }
-
-
-def _detect_file_type(
-    contents: bytes, filename: str | None, content_type: str | None
-) -> tuple[bool, bool, str | None]:
-    """Validate and detect file type. Raises HTTPException if unsupported."""
-    if contents[:4] == b"%PDF":
-        return True, False, None
-    if contents[:3] == b"\xff\xd8\xff":
-        return False, True, "image/jpeg"
-    if contents[:8] == b"\x89PNG\r\n\x1a\n":
-        return False, True, "image/png"
-    if len(contents) >= 12 and contents[:4] == b"RIFF" and contents[8:12] == b"WEBP":
-        return False, True, "image/webp"
-
-    ext = (filename or "").lower().rsplit(".", 1)[-1] if filename else ""
-    ct = (content_type or "").lower()
-    if ext == "pdf" or "pdf" in ct:
-        return True, False, None
-    if ext in ("jpg", "jpeg", "png", "webp") or ct.startswith("image/"):
-        return False, True, content_type
-
-    raise HTTPException(
-        status_code=400,
-        detail="Tipo de arquivo não suportado. Envie PDF, JPEG, PNG ou WebP.",
-    )
+        logger.error("Unhandled error in upload route: %s", e)
+        raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
 
 
 # --- Rotas de Pedidos (KDS) ---
