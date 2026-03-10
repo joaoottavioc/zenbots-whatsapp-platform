@@ -36,6 +36,10 @@ async def test_upload_within_limit_no_413():
     mock_bot.user_id = 1
     mock_bot.menu_url = None
 
+    # Mock request with arq_redis on app.state
+    mock_request = MagicMock()
+    mock_request.app.state.arq_redis = AsyncMock()
+
     with (
         patch(
             "app.bot_routes.crud.get_bot_by_id", new=AsyncMock(return_value=mock_bot)
@@ -44,19 +48,18 @@ async def test_upload_within_limit_no_413():
             "app.bot_routes.asyncio.to_thread",
             new=AsyncMock(return_value="https://s3.example.com/menu.png"),
         ),
-        patch(
-            "app.bot_routes.extract_products_from_image",
-            new=AsyncMock(return_value=[{"name": "Pizza", "price": 10.0}]),
-        ),
-        patch(
-            "app.bot_routes.crud.bulk_create_products", new=AsyncMock(return_value=1)
-        ),
     ):
         result = await upload_catalog_from_file_endpoint(
-            bot_id=1, file=mock_file, session=mock_session, current_user=mock_user
+            request=mock_request,
+            bot_id=1,
+            file=mock_file,
+            session=mock_session,
+            current_user=mock_user,
         )
 
-    assert "413" not in str(result)
+    assert result["status"] == "processing"
+    # Verify extraction job was enqueued
+    mock_request.app.state.arq_redis.enqueue_job.assert_called_once()
 
 
 async def test_upload_exceeding_limit_raises_413():
@@ -89,11 +92,18 @@ async def test_upload_exceeding_limit_raises_413():
     mock_bot = MagicMock()
     mock_bot.user_id = 1
 
+    mock_request = MagicMock()
+    mock_request.app.state.arq_redis = AsyncMock()
+
     with patch(
         "app.bot_routes.crud.get_bot_by_id", new=AsyncMock(return_value=mock_bot)
     ):
         with pytest.raises(HTTPException) as exc_info:
             await upload_catalog_from_file_endpoint(
-                bot_id=1, file=mock_file, session=mock_session, current_user=mock_user
+                request=mock_request,
+                bot_id=1,
+                file=mock_file,
+                session=mock_session,
+                current_user=mock_user,
             )
         assert exc_info.value.status_code == 413
