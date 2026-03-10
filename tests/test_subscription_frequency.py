@@ -51,6 +51,11 @@ class TestSubscriptionFrequency:
             patch("app.billing_routes._get_sdk", return_value=mock_sdk),
             patch("app.billing_routes.require_mp_signature", return_value=None),
             patch(
+                "app.billing_routes.crud.get_subscription_by_bot",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
                 "app.billing_routes.crud.upsert_subscription", new_callable=AsyncMock
             ) as mock_upsert,
         ):

@@ -208,7 +208,7 @@ class TestGates(BaseConversationTest):
 
         self.send_mock.assert_called_once()
         msg = get_sent_message(self.send_mock)
-        assert "indisponível" in msg.lower()
+        assert "manutenção" in msg.lower()
 
     @pytest.mark.asyncio
     async def test_duplicate_message_ignored(self):
@@ -1056,7 +1056,7 @@ class TestDistributedLock(BaseConversationTest):
 
         msg = get_sent_message(self.send_mock)
         assert "processando" in msg.lower()
-        assert "aguarde" in msg.lower()
+        assert "momento" in msg.lower()
 
     @pytest.mark.asyncio
     async def test_lock_released_even_on_exception(self):

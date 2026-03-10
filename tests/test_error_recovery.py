@@ -59,13 +59,13 @@ class TestClassifyErrorMessage:
 
         exc = OpenAIAPIError("rate limit exceeded")
         msg = _classify_error_message(exc)
-        assert "assistente" in msg.lower()
+        assert "processar" in msg.lower()
 
     def test_rate_limit_error_returns_assistant_message(self):
         """Exception with 'rate_limit' in message → assistant difficulty message."""
         exc = Exception("rate_limit exceeded for model")
         msg = _classify_error_message(exc)
-        assert "assistente" in msg.lower()
+        assert "processar" in msg.lower()
 
     def test_payment_error_returns_payment_message(self):
         """Exception with 'mercadopago' in message → payment error message."""
@@ -83,7 +83,7 @@ class TestClassifyErrorMessage:
         """Unknown exception type → generic fallback message."""
         exc = ValueError("something unexpected")
         msg = _classify_error_message(exc)
-        assert "erro" in msg.lower()
+        assert "deu errado" in msg.lower()
         assert "tente novamente" in msg.lower()
 
     def test_all_messages_are_in_portuguese(self):
