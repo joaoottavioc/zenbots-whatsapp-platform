@@ -110,15 +110,17 @@ module "ecs" {
   container_insights = true
   cpu_architecture   = "ARM64"
 
-  # Backend — 2 tasks for HA + auto-scaling up to 4
+  # Backend — start with 1 task, auto-scale to 4. Bump to 2-task baseline at >20 customers.
+  # 1024/2048 required: SentenceTransformer + PyTorch loads ~500MB per worker process
   backend_image         = local.backend_image
-  backend_cpu           = 512  # Prod: 0.5 vCPU (vs 0.25 for dev)
-  backend_memory        = 1024 # Prod: 1 GB (vs 512 MB for dev)
-  backend_desired_count = 2
+  backend_cpu           = 1024 # 1 vCPU (SentenceTransformer needs headroom)
+  backend_memory        = 2048 # 2 GB (model ~500MB + app ~200MB + headroom)
+  backend_desired_count = 1    # Start lean, auto-scale handles spikes
   backend_max_count     = 4
 
   backend_environment = [
     { name = "ENVIRONMENT", value = "production" },
+    { name = "WEB_WORKERS", value = "1" },
     { name = "LOG_FORMAT", value = "json" },
     { name = "REDIS_HOST", value = module.elasticache.redis_host },
     { name = "REDIS_PORT", value = "6379" },
@@ -126,6 +128,7 @@ module "ecs" {
     { name = "CORS_ORIGINS", value = "https://app.zenbotz.com.br" },
     { name = "COOKIE_DOMAIN", value = ".zenbotz.com.br" },
     { name = "FRONTEND_URL", value = "https://app.zenbotz.com.br" },
+    { name = "MP_REDIRECT_URI", value = "https://app.zenbotz.com.br/pagamentos" },
     { name = "AWS_BUCKET_NAME", value = "zenbots-prod-menus" },
   ]
 
@@ -145,9 +148,10 @@ module "ecs" {
   ]
 
   # Worker — 1 task + auto-scaling up to 2
+  # Worker doesn't load SentenceTransformer (lazy imports), 256/512 is enough
   worker_image         = local.worker_image
-  worker_cpu           = 512
-  worker_memory        = 1024
+  worker_cpu           = 256
+  worker_memory        = 512
   worker_desired_count = 1
   worker_max_count     = 2
   worker_stop_timeout  = 120
