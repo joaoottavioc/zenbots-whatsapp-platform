@@ -161,6 +161,14 @@ class BotResponse(BaseModel):
             self.whatsapp_token = decrypt_value(self.whatsapp_token)
         return self
 
+    @model_validator(mode="after")
+    def presign_menu_url(self) -> "BotResponse":
+        if self.menu_url:
+            from app.menu_storage import generate_presigned_url
+
+            self.menu_url = generate_presigned_url(self.menu_url)
+        return self
+
 
 # --- Schemas de Autenticação e Usuário ---
 

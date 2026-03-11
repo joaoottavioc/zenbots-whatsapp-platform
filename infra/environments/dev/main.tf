@@ -73,9 +73,10 @@ module "redis_ecs" {
 module "s3" {
   source = "../../modules/s3"
 
-  project            = var.project
-  environment        = var.environment
-  versioning_enabled = false
+  project              = var.project
+  environment          = var.environment
+  versioning_enabled   = false
+  cors_allowed_origins = ["https://dev.zenbotz.com.br"]
 }
 
 # ------------------ ALB ------------------

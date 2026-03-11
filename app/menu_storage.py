@@ -93,6 +93,22 @@ def upload_bytes_to_s3(
         raise HTTPException(status_code=500, detail="Falha ao fazer upload para S3")
 
 
+def generate_presigned_url(s3_url: str, expiration: int = 3600) -> str:
+    """Convert a raw S3 URL to a presigned URL (default 1h expiry)."""
+    if not s3_url or not BUCKET_NAME:
+        return s3_url or ""
+    # Extract the S3 key from the URL
+    prefix = f"https://{BUCKET_NAME}.s3.{REGION}.amazonaws.com/"
+    if not s3_url.startswith(prefix):
+        return s3_url
+    key = s3_url[len(prefix) :]
+    return s3_client.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": BUCKET_NAME, "Key": key},
+        ExpiresIn=expiration,
+    )
+
+
 # Mantemos a antiga para compatibilidade se usada em outros lugares
 def upload_file_to_s3(file: UploadFile, folder: str = "uploads") -> str:
     return upload_bytes_to_s3(

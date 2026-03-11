@@ -23,6 +23,17 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "menu" {
   }
 }
 
+resource "aws_s3_bucket_cors_configuration" "menu" {
+  bucket = aws_s3_bucket.menu.id
+
+  cors_rule {
+    allowed_origins = var.cors_allowed_origins
+    allowed_methods = ["GET", "HEAD"]
+    allowed_headers = ["*"]
+    max_age_seconds = 3600
+  }
+}
+
 resource "aws_s3_bucket_public_access_block" "menu" {
   bucket = aws_s3_bucket.menu.id
 
