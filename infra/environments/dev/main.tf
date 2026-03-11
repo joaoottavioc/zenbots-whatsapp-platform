@@ -42,17 +42,30 @@ module "rds" {
   multi_az          = false
 }
 
-# ------------------ ElastiCache ------------------
+# ------------------ Redis on ECS (replaces ElastiCache for dev) --
 
-module "elasticache" {
-  source = "../../modules/elasticache"
+module "redis_ecs" {
+  source = "../../modules/redis-ecs"
 
-  project            = var.project
-  environment        = var.environment
-  subnet_ids         = module.vpc.isolated_subnet_ids
-  security_group_id  = module.vpc.redis_security_group_id
-  node_type          = "cache.t4g.micro"
-  num_cache_clusters = 1
+  project     = var.project
+  environment = var.environment
+  region      = var.region
+
+  vpc_id                = module.vpc.vpc_id
+  private_subnet_ids    = module.vpc.private_subnet_ids
+  ecs_security_group_id = module.vpc.ecs_security_group_id
+
+  cluster_name       = module.ecs.cluster_name
+  capacity_providers = ["FARGATE_SPOT"]
+  execution_role_arn = module.ecs.execution_role_arn
+  cpu_architecture   = "ARM64"
+
+  cpu           = 256
+  memory        = 512
+  maxmemory     = 384
+  desired_count = 1
+
+  log_retention_days = 3
 }
 
 # ------------------ S3 ------------------
@@ -139,17 +152,17 @@ module "ecs" {
 
   # Backend
   backend_image         = local.backend_image
-  backend_cpu           = 256
-  backend_memory        = 512
+  backend_cpu           = 512
+  backend_memory        = 1024
   backend_desired_count = 1
   backend_max_count     = 1
 
   backend_environment = [
     { name = "ENVIRONMENT", value = "development" },
     { name = "LOG_FORMAT", value = "json" },
-    { name = "REDIS_HOST", value = module.elasticache.redis_host },
+    { name = "REDIS_HOST", value = module.redis_ecs.redis_host },
     { name = "REDIS_PORT", value = "6379" },
-    { name = "REDIS_URL", value = module.elasticache.redis_url },
+    { name = "REDIS_URL", value = module.redis_ecs.redis_url },
     { name = "CORS_ORIGINS", value = "https://dev.zenbotz.com.br" },
     { name = "COOKIE_DOMAIN", value = ".zenbotz.com.br" },
     { name = "FRONTEND_URL", value = "https://dev.zenbotz.com.br" },
@@ -189,9 +202,9 @@ module "ecs" {
   worker_environment = [
     { name = "ENVIRONMENT", value = "development" },
     { name = "LOG_FORMAT", value = "json" },
-    { name = "REDIS_HOST", value = module.elasticache.redis_host },
+    { name = "REDIS_HOST", value = module.redis_ecs.redis_host },
     { name = "REDIS_PORT", value = "6379" },
-    { name = "REDIS_URL", value = module.elasticache.redis_url },
+    { name = "REDIS_URL", value = module.redis_ecs.redis_url },
   ]
 
   worker_secrets = [
@@ -234,7 +247,7 @@ module "monitoring" {
   alb_arn_suffix       = module.alb.alb_arn_suffix
   target_group_arn_suffix = module.alb.target_group_arn_suffix
   rds_instance_id      = "${var.project}-${var.environment}"
-  elasticache_replication_group_id = module.elasticache.replication_group_id
+  elasticache_replication_group_id = "" # Dev uses Redis on ECS, no ElastiCache alarms
 }
 
 # ------------------ Scheduling (off-hours) ------------------
@@ -252,6 +265,10 @@ module "scheduling" {
   worker_service_name  = module.ecs.worker_service_name
   backend_desired_count = 1
   worker_desired_count  = 1
+
+  # Redis ECS scheduling (starts before backend/worker, stops after)
+  redis_service_name  = module.redis_ecs.service_name
+  redis_desired_count = 1
 }
 
 # ------------------ RDS Scheduling (off-hours stop/start) --

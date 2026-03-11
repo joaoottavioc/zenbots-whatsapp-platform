@@ -85,7 +85,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error("Falha ao conectar no Redis: %s", e)
 
-    # 3. Start monitoring flush background task
+    # 3. Pre-warm embedding model in background thread (avoids blocking
+    #    health checks on first request)
+    from app.embedding_service import _get_products_model
+
+    loop = asyncio.get_running_loop()
+    loop.run_in_executor(None, _get_products_model)
+    logger.info("Embedding model pre-warm scheduled (background thread).")
+
+    # 4. Start monitoring flush background task
     start_flush_task()
 
     yield  # O servidor roda aqui e atende as requisições
