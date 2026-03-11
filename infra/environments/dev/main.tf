@@ -152,13 +152,14 @@ module "ecs" {
 
   # Backend
   backend_image         = local.backend_image
-  backend_cpu           = 512
-  backend_memory        = 1024
+  backend_cpu           = 1024
+  backend_memory        = 2048
   backend_desired_count = 1
   backend_max_count     = 1
 
   backend_environment = [
     { name = "ENVIRONMENT", value = "development" },
+    { name = "WEB_WORKERS", value = "1" },
     { name = "LOG_FORMAT", value = "json" },
     { name = "REDIS_HOST", value = module.redis_ecs.redis_host },
     { name = "REDIS_PORT", value = "6379" },
