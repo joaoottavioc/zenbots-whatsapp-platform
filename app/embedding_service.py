@@ -7,7 +7,6 @@ import difflib
 import math
 import asyncio
 import regex as re
-from sentence_transformers import SentenceTransformer
 import threading  # <--- ADICIONADO PARA PROTEÇÃO
 
 logger = logging.getLogger(__name__)
@@ -20,8 +19,8 @@ _PRODUCTS_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"  # 384 dims
 _ROUTER_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
 
 # Lazy-load
-_model_products: SentenceTransformer | None = None
-_model_router: SentenceTransformer | None = None
+_model_products = None
+_model_router = None
 
 # ▼▼▼ CADEADOS DE SEGURANÇA (LOCKS) ▼▼▼
 # Isso impede que 10 requisições carreguem o modelo ao mesmo tempo
@@ -29,7 +28,7 @@ _products_lock = threading.Lock()
 _router_lock = threading.Lock()
 
 
-def _get_products_model() -> SentenceTransformer:
+def _get_products_model():
     global _model_products
     # Primeira verificação (rápida, sem bloqueio)
     if _model_products is None:
@@ -38,16 +37,20 @@ def _get_products_model() -> SentenceTransformer:
             # Segunda verificação (garante que ninguém carregou enquanto esperávamos)
             if _model_products is None:
                 logger.info("Loading products embedding model (thread-safe)")
+                from sentence_transformers import SentenceTransformer
+
                 _model_products = SentenceTransformer(_PRODUCTS_MODEL_NAME)
     return _model_products
 
 
-def _get_router_model() -> SentenceTransformer:
+def _get_router_model():
     global _model_router
     if _model_router is None:
         with _router_lock:
             if _model_router is None:
                 logger.info("Loading router embedding model (thread-safe)")
+                from sentence_transformers import SentenceTransformer
+
                 _model_router = SentenceTransformer(_ROUTER_MODEL_NAME)
     return _model_router
 
