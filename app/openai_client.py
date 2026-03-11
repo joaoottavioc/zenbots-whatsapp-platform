@@ -23,17 +23,20 @@ client_openai_api = OpenAI(
 )
 
 
-async def get_extraction_response(messages: List[Dict]) -> str:
+async def get_extraction_response(
+    messages: List[Dict], model: str = "gpt-4o-mini"
+) -> str:
     """
-    Usa um modelo potente da API da OpenAI para a tarefa de extração de dados,
-    garantindo máxima precisão.
+    Calls the OpenAI API for structured data extraction (JSON mode).
+    Defaults to gpt-4o-mini for cost/speed balance. Use model="gpt-4o"
+    when higher accuracy is needed (e.g., complex image-based menus).
     """
 
     def sync_call():
         return client_openai_api.chat.completions.create(
-            model="gpt-4o",  # Modelo mais potente para extração
+            model=model,
             messages=messages,
-            temperature=0.0,  # Zero criatividade para extração precisa
+            temperature=0.0,
             response_format={"type": "json_object"},
         )
 
@@ -44,7 +47,7 @@ async def get_extraction_response(messages: List[Dict]) -> str:
         await record_llm_usage(
             bot_id=None,
             operation="get_extraction_response",
-            model="gpt-4o",
+            model=model,
             usage=response.usage,
             duration_ms=elapsed_ms,
         )
@@ -54,13 +57,13 @@ async def get_extraction_response(messages: List[Dict]) -> str:
         await record_llm_usage(
             bot_id=None,
             operation="get_extraction_response",
-            model="gpt-4o",
+            model=model,
             usage=None,
             duration_ms=elapsed_ms,
             success=False,
         )
         logger.error("Extraction model call failed: %s", e)
-        return "[]"  # Retorna um array JSON vazio em caso de erro
+        return "[]"
 
 
 async def get_chat_response_gpt(messages: List[Dict]) -> str:
@@ -329,12 +332,14 @@ async def extract_products_from_image(
 
     prompt = (
         "Você é um assistente especializado em digitalizar cardápios. "
-        "Analise esta imagem. Extraia todos os itens de comida e bebida. "
+        "Analise esta imagem. Extraia TODOS os itens que possuem preço, "
+        "incluindo adicionais, complementos, extras, acompanhamentos, combos e promoções. "
         "Para cada item, identifique: nome, descrição, preço e CATEGORIA. "
         "Regras de Categoria: agrupe itens similares (ex: Coca, Água, Suco -> 'Bebidas'). "
+        "Adicionais/extras devem ter categoria 'Adicionais'. "
+        "Use APENAS categorias que existem no cardápio. NÃO invente categorias. "
         "Use nomes curtos e em Português. "
-        "Ex: 'Entradas', 'Pratos Principais', 'Sobremesas', 'Pizzas Tradicionais', "
-        "'Hot Dogs', 'Lanches', 'Porções'."
+        "Ex: 'Entradas', 'Pratos Principais', 'Sobremesas', 'Lanches', 'Porções', 'Adicionais'."
     )
 
     def sync_call():
@@ -361,6 +366,7 @@ async def extract_products_from_image(
                 "function": {"name": "save_extracted_products"},
             },
             temperature=0.2,
+            max_tokens=16384,
         )
 
     start = time.perf_counter_ns()
