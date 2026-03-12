@@ -42,7 +42,7 @@ async def send_verification_email(email: EmailStr, token: str):
     <html>
         <body style="font-family: Arial, sans-serif; color: #333;">
             <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
-                <h2 style="color: #059669;">Bem-vindo ao ZenBots!</h2>
+                <h2 style="color: #059669;">Bem-vindo ao ZenBotZ!</h2>
                 <p>Olá,</p>
                 <p>Obrigado por se cadastrar! Para ativar sua conta, confirme seu e-mail clicando no botão abaixo:</p>
                 <div style="text-align: center; margin: 30px 0;">
@@ -50,14 +50,14 @@ async def send_verification_email(email: EmailStr, token: str):
                         Verificar Meu E-mail
                     </a>
                 </div>
-                <p style="font-size: 12px; color: #666;">Este link expira em 24 horas. Se você não criou uma conta no ZenBots, ignore este e-mail.</p>
+                <p style="font-size: 12px; color: #666;">Este link expira em 24 horas. Se você não criou uma conta no ZenBotZ, ignore este e-mail.</p>
             </div>
         </body>
     </html>
     """
 
     message = MessageSchema(
-        subject="Confirme seu e-mail - ZenBots AI",
+        subject="Confirme seu e-mail - ZenBotZ AI",
         recipients=[email],
         body=html,
         subtype=MessageType.html,
@@ -88,7 +88,7 @@ async def send_password_reset_email(email: EmailStr, token: str):
             <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
                 <h2 style="color: #059669;">Recuperação de Senha</h2>
                 <p>Olá,</p>
-                <p>Recebemos um pedido para redefinir a senha da sua conta ZenBots.</p>
+                <p>Recebemos um pedido para redefinir a senha da sua conta ZenBotZ.</p>
                 <p>Clique no botão abaixo para criar uma nova senha:</p>
                 <div style="text-align: center; margin: 30px 0;">
                     <a href="{reset_link}" style="background-color: #059669; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">
@@ -102,7 +102,7 @@ async def send_password_reset_email(email: EmailStr, token: str):
     """
 
     message = MessageSchema(
-        subject="Redefinir sua senha - ZenBots AI",
+        subject="Redefinir sua senha - ZenBotZ AI",
         recipients=[email],
         body=html,
         subtype=MessageType.html,
