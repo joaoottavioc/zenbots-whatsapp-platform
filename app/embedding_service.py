@@ -11,48 +11,29 @@ import threading  # <--- ADICIONADO PARA PROTEÇÃO
 
 logger = logging.getLogger(__name__)
 
-# ========= Config dos modelos (384d em ambos) =========
-# Catálogo (mantém o que você já tem)
-_PRODUCTS_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"  # 384 dims
+# ========= Config do modelo (384d, compartilhado entre router e catálogo) =========
+_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"  # 384 dims
 
-# Router de intenções (mais robusto a PT/typos; também 384d)
-_ROUTER_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
-
-# Lazy-load
-_model_products = None
-_model_router = None
-
-# ▼▼▼ CADEADOS DE SEGURANÇA (LOCKS) ▼▼▼
-# Isso impede que 10 requisições carreguem o modelo ao mesmo tempo
-_products_lock = threading.Lock()
-_router_lock = threading.Lock()
+# Lazy-load: single shared instance (same model for router + products)
+_model = None
+_model_lock = threading.Lock()
 
 
-def _get_products_model():
-    global _model_products
-    # Primeira verificação (rápida, sem bloqueio)
-    if _model_products is None:
-        # Bloqueia a thread para carregar com segurança
-        with _products_lock:
-            # Segunda verificação (garante que ninguém carregou enquanto esperávamos)
-            if _model_products is None:
-                logger.info("Loading products embedding model (thread-safe)")
+def _get_model():
+    global _model
+    if _model is None:
+        with _model_lock:
+            if _model is None:
+                logger.info("Loading embedding model (thread-safe)")
                 from sentence_transformers import SentenceTransformer
 
-                _model_products = SentenceTransformer(_PRODUCTS_MODEL_NAME)
-    return _model_products
+                _model = SentenceTransformer(_MODEL_NAME)
+    return _model
 
 
-def _get_router_model():
-    global _model_router
-    if _model_router is None:
-        with _router_lock:
-            if _model_router is None:
-                logger.info("Loading router embedding model (thread-safe)")
-                from sentence_transformers import SentenceTransformer
-
-                _model_router = SentenceTransformer(_ROUTER_MODEL_NAME)
-    return _model_router
+# Public aliases for backward compat (both return the same instance)
+_get_products_model = _get_model
+_get_router_model = _get_model
 
 
 # ========= Normalização focada em PT (para robustez a typos) =========
@@ -116,14 +97,13 @@ def _l2_norm(v: List[float]) -> List[float]:
 
 
 def _encode_sync(texts: List[str], space: str, normalize: bool) -> List[List[float]]:
+    model = _get_model()
     if space == "router":
-        model = _get_router_model()
         if normalize:
             texts = [normalize_pt(t if t is not None else "") for t in texts]
         else:
             texts = [t if t is not None else "" for t in texts]
     elif space == "products":
-        model = _get_products_model()
         # ⚠️ Catálogo NÃO deve passar por normalize_pt (para não sujar busca)
         texts = [t if t is not None else "" for t in texts]
     else:
