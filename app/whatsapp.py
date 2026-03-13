@@ -1736,11 +1736,22 @@ async def send_whatsapp_message(
         data = {"messaging_product": "whatsapp", "to": to, "text": {"body": message}}
 
     _start = _time.perf_counter_ns()
+    logger.info(
+        "Sending WhatsApp message to=%s phone_id=%s media=%s",
+        to,
+        phone_id,
+        bool(media_url),
+    )
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             response = await client.post(url, headers=headers, json=data)
             response.raise_for_status()
             _elapsed = (_time.perf_counter_ns() - _start) // 1_000_000
+            logger.info(
+                "WhatsApp send OK: status=%s body=%s",
+                response.status_code,
+                response.text[:500],
+            )
             await record_api_usage(
                 None, "whatsapp", "send_message", cost_usd=0.05, duration_ms=_elapsed
             )
