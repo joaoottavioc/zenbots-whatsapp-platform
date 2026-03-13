@@ -26,6 +26,7 @@ from app.openai_client import (
     extract_potential_items,
 )
 from app.item_extraction import extract_items_local
+from app.menu_storage import generate_presigned_url
 from app.prompt_central import create_central_prompt
 from app.tools_definition import tools_schema
 from datetime import datetime, timedelta
@@ -218,10 +219,12 @@ async def _handle_store_closed(
     )
 
     next_opening = get_next_opening_text(bot)
-    menu_url = bot.menu_url
+    menu_url = (
+        generate_presigned_url(bot.menu_url, expiration=86400) if bot.menu_url else None
+    )
     media_type = None
     if menu_url:
-        media_type = "document" if menu_url.lower().endswith(".pdf") else "image"
+        media_type = "document" if bot.menu_url.lower().endswith(".pdf") else "image"
 
     base_msg = bot.closing_message or "No momento não estamos atendendo. 🌙"
     rich_closing_msg = (
@@ -287,10 +290,12 @@ async def _send_welcome_with_menu(session, bot, cart, contact_number, text_body)
         "Dá uma olhada no cardápio e me conta o que vai querer — pode digitar ou mandar áudio!\n\n"
         f"{example_text}"
     )
-    menu_url = bot.menu_url
+    menu_url = (
+        generate_presigned_url(bot.menu_url, expiration=86400) if bot.menu_url else None
+    )
     media_type = None
     if menu_url:
-        media_type = "document" if menu_url.lower().endswith(".pdf") else "image"
+        media_type = "document" if bot.menu_url.lower().endswith(".pdf") else "image"
 
     await send_whatsapp_message(
         to=contact_number,
