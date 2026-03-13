@@ -1569,6 +1569,17 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
             value = changes.get("value", {})
 
             if "messages" not in value:
+                # Debug: log status updates to diagnose delivery failures
+                statuses = value.get("statuses", [])
+                if statuses:
+                    for s in statuses:
+                        logger.info(
+                            "WhatsApp status update: id=%s status=%s recipient=%s errors=%s",
+                            s.get("id"),
+                            s.get("status"),
+                            s.get("recipient_id"),
+                            s.get("errors"),
+                        )
                 return
 
             message_data = value["messages"][0]
