@@ -162,6 +162,7 @@ module "ecs" {
     { name = "REDIS_HOST", value = module.elasticache.redis_host },
     { name = "REDIS_PORT", value = "6379" },
     { name = "REDIS_URL", value = module.elasticache.redis_url },
+    { name = "AWS_BUCKET_NAME", value = "zenbots-prod-menus" },
   ]
 
   worker_secrets = [

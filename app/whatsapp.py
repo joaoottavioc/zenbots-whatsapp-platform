@@ -79,6 +79,19 @@ load_dotenv()
 router = APIRouter()
 
 
+def _presign_menu_url(raw_url: str | None) -> str | None:
+    """Return a presigned S3 URL for the menu, or None if presigning is unavailable."""
+    if not raw_url:
+        return None
+    presigned = generate_presigned_url(raw_url, expiration=86400)
+    if presigned == raw_url:
+        logger.warning(
+            "Presigning skipped (AWS_BUCKET_NAME not set), sending text-only"
+        )
+        return None
+    return presigned
+
+
 @dataclass
 class MessageContext:
     """Bundles the variables threaded through process_whatsapp_message handlers."""
@@ -219,9 +232,7 @@ async def _handle_store_closed(
     )
 
     next_opening = get_next_opening_text(bot)
-    menu_url = (
-        generate_presigned_url(bot.menu_url, expiration=86400) if bot.menu_url else None
-    )
+    menu_url = _presign_menu_url(bot.menu_url)
     media_type = None
     if menu_url:
         media_type = "document" if bot.menu_url.lower().endswith(".pdf") else "image"
@@ -290,9 +301,7 @@ async def _send_welcome_with_menu(session, bot, cart, contact_number, text_body)
         "Dá uma olhada no cardápio e me conta o que vai querer — pode digitar ou mandar áudio!\n\n"
         f"{example_text}"
     )
-    menu_url = (
-        generate_presigned_url(bot.menu_url, expiration=86400) if bot.menu_url else None
-    )
+    menu_url = _presign_menu_url(bot.menu_url)
     media_type = None
     if menu_url:
         media_type = "document" if bot.menu_url.lower().endswith(".pdf") else "image"

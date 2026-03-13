@@ -14,7 +14,7 @@ module "vpc" {
   region      = var.region
 }
 
-# ------------------ NAT ------------------
+# ------------------ NAT + Caddy Reverse Proxy ------------------
 
 module "nat" {
   source = "../../modules/nat"
@@ -26,6 +26,11 @@ module "nat" {
   public_subnet_id        = module.vpc.public_subnet_ids[0]
   private_route_table_ids = module.vpc.private_route_table_ids
   nat_type                = var.nat_type
+
+  # Caddy reverse proxy replaces ALB for dev ($0 vs $16/mo)
+  enable_reverse_proxy   = true
+  reverse_proxy_domain   = "${var.domain_prefix}.zenbotz.com.br"
+  reverse_proxy_upstream = "backend.${var.project}-${var.environment}.local:8000"
 }
 
 # ------------------ RDS ------------------
@@ -79,29 +84,41 @@ module "s3" {
   cors_allowed_origins = ["https://dev.zenbotz.com.br"]
 }
 
-# ------------------ ALB ------------------
+# ------------------ Cloud Map Backend Service Discovery ------------------
+# Reuses the namespace created by redis-ecs module (zenbots-dev.local)
 
-module "alb" {
-  source = "../../modules/alb"
+resource "aws_service_discovery_service" "backend" {
+  name = "backend"
 
-  project           = var.project
-  environment       = var.environment
-  vpc_id            = module.vpc.vpc_id
-  public_subnet_ids = module.vpc.public_subnet_ids
-  security_group_id = module.vpc.alb_security_group_id
-  certificate_arn   = var.certificate_arn
+  dns_config {
+    namespace_id = module.redis_ecs.namespace_id
+
+    dns_records {
+      ttl  = 10
+      type = "A"
+    }
+
+    routing_policy = "MULTIVALUE"
+  }
+
+  health_check_custom_config {
+    failure_threshold = 1
+  }
 }
 
-# ------------------ Secrets Manager (kept for cleanup later) ------------------
+# ------------------ SG Rule: NAT → ECS backend ------------------
 
-module "secrets" {
-  source = "../../modules/secrets"
-
-  project     = var.project
-  environment = var.environment
+resource "aws_security_group_rule" "ecs_from_nat" {
+  type                     = "ingress"
+  from_port                = 8000
+  to_port                  = 8000
+  protocol                 = "tcp"
+  security_group_id        = module.vpc.ecs_security_group_id
+  source_security_group_id = module.nat.nat_security_group_id
+  description              = "Allow Caddy on NAT instance to reach ECS backend"
 }
 
-# ------------------ SSM Parameter Store (replaces Secrets Manager for dev) --
+# ------------------ SSM Parameter Store --
 
 module "ssm_parameters" {
   source = "../../modules/ssm-parameters"
@@ -144,7 +161,9 @@ module "ecs" {
 
   private_subnet_ids    = module.vpc.private_subnet_ids
   ecs_security_group_id = module.vpc.ecs_security_group_id
-  target_group_arn      = module.alb.target_group_arn
+  target_group_arn      = ""
+  enable_alb            = false
+  service_discovery_arn = aws_service_discovery_service.backend.arn
 
   capacity_providers  = ["FARGATE_SPOT"]
   container_insights  = false
@@ -196,8 +215,8 @@ module "ecs" {
 
   # Worker
   worker_image         = local.worker_image
-  worker_cpu           = 256
-  worker_memory        = 512
+  worker_cpu           = 512
+  worker_memory        = 1024
   worker_desired_count = 1
   worker_max_count     = 1
   worker_stop_timeout  = 120
@@ -208,6 +227,8 @@ module "ecs" {
     { name = "REDIS_HOST", value = module.redis_ecs.redis_host },
     { name = "REDIS_PORT", value = "6379" },
     { name = "REDIS_URL", value = module.redis_ecs.redis_url },
+    { name = "OMP_NUM_THREADS", value = "1" },
+    { name = "AWS_BUCKET_NAME", value = "zenbots-dev-menus" },
   ]
 
   worker_secrets = [
@@ -247,8 +268,8 @@ module "monitoring" {
   ecs_cluster_name     = module.ecs.cluster_name
   backend_service_name = module.ecs.backend_service_name
   worker_service_name  = module.ecs.worker_service_name
-  alb_arn_suffix       = module.alb.alb_arn_suffix
-  target_group_arn_suffix = module.alb.target_group_arn_suffix
+  alb_arn_suffix         = ""
+  target_group_arn_suffix = ""
   rds_instance_id      = "${var.project}-${var.environment}"
   elasticache_replication_group_id = "" # Dev uses Redis on ECS, no ElastiCache alarms
 }
@@ -294,10 +315,6 @@ resource "aws_route53_record" "dev_api" {
   zone_id = var.route53_zone_id
   name    = "${var.domain_prefix}.zenbotz.com.br"
   type    = "A"
-
-  alias {
-    name                   = module.alb.alb_dns_name
-    zone_id                = module.alb.alb_zone_id
-    evaluate_target_health = true
-  }
+  ttl     = 300
+  records = [module.nat.nat_eip_public_ip]
 }
