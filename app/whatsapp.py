@@ -84,12 +84,16 @@ def _presign_menu_url(raw_url: str | None) -> str | None:
     if not raw_url:
         return None
     presigned = generate_presigned_url(raw_url, expiration=86400)
-    if presigned == raw_url:
+    if presigned != raw_url:
+        return presigned
+    # URL unchanged — if it's a private S3 URL that couldn't be presigned, skip media
+    if ".s3." in raw_url and ".amazonaws.com" in raw_url:
         logger.warning(
-            "Presigning skipped (AWS_BUCKET_NAME not set), sending text-only"
+            "Presigning skipped for S3 URL (AWS_BUCKET_NAME not set?), sending text-only"
         )
         return None
-    return presigned
+    # Non-S3 URL (already public), pass through
+    return raw_url
 
 
 @dataclass
