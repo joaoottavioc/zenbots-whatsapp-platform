@@ -691,32 +691,55 @@ async def authenticate_whatsapp_bot(
                 detail="Nenhuma conta de WhatsApp Business encontrada. Verifique se o cadastro no Facebook foi concluído.",
             )
 
-        # No Embedded Signup, o token geralmente dá acesso a apenas uma WABA recém-criada/selecionada
-        target_waba = waba_data["data"][0]
-        waba_id = target_waba["id"]
-        waba_name = target_waba.get("name", "WhatsApp Bot")
-        logger.info("WABA found: %s (ID: %s)", waba_name, waba_id)
-
-        # ⚠️ Passo 3: Pegar Números da WABA
-        phone_url = f"https://graph.facebook.com/v19.0/{waba_id}/phone_numbers"
-        phone_resp = await client.get(phone_url, params={"access_token": access_token})
-        phone_data = phone_resp.json()
-
+        # ⚠️ Passo 3: Iterar TODAS as WABAs para achar uma com número
+        logger.info(
+            "Found %d WABA(s), scanning for phone numbers",
+            len(waba_data["data"]),
+        )
         phone_number_id = None
         display_number = None
+        waba_id = None
+        waba_name = "WhatsApp Bot"
 
-        if phone_data.get("data"):
-            # Pega o primeiro número disponível
-            num_obj = phone_data["data"][0]
-            phone_number_id = num_obj["id"]
-            display_number = num_obj["display_phone_number"]
+        for waba_candidate in waba_data["data"]:
+            candidate_id = waba_candidate["id"]
+            candidate_name = waba_candidate.get("name", "WhatsApp Bot")
             logger.info(
-                "Phone number found: %s (ID: %s)", display_number, phone_number_id
+                "Checking WABA %s (%s) for phone numbers",
+                candidate_name,
+                candidate_id,
             )
-        else:
+            phone_url = f"https://graph.facebook.com/v19.0/{candidate_id}/phone_numbers"
+            phone_resp = await client.get(
+                phone_url, params={"access_token": access_token}
+            )
+            phone_data = phone_resp.json()
+
+            if phone_data.get("data"):
+                num_obj = phone_data["data"][0]
+                phone_number_id = num_obj["id"]
+                display_number = num_obj["display_phone_number"]
+                waba_id = candidate_id
+                waba_name = candidate_name
+                logger.info(
+                    "Phone number found: %s (ID: %s) from WABA %s (%s)",
+                    display_number,
+                    phone_number_id,
+                    candidate_name,
+                    candidate_id,
+                )
+                break
+            else:
+                logger.info(
+                    "WABA %s (%s) has no phone numbers, skipping",
+                    candidate_name,
+                    candidate_id,
+                )
+
+        if not phone_number_id:
             raise HTTPException(
                 status_code=400,
-                detail="WABA encontrada, mas sem número de telefone associado.",
+                detail="Nenhuma conta WhatsApp com número de telefone encontrada.",
             )
 
         # ⚠️ Passo 4: Inscrever Webhook Automaticamente
@@ -907,30 +930,49 @@ async def complete_onboarding(
                         detail="Empresa encontrada, mas sem conta WhatsApp.",
                     )
 
-                target_waba_id = waba_data["data"][0]["id"]
-
-                # 3. Buscar Números da WABA
-                phones_resp = await client.get(
-                    f"https://graph.facebook.com/v19.0/{target_waba_id}/phone_numbers",
-                    params={"access_token": final_token},
-                )
-                phones_data = phones_resp.json()
-
-                if not phones_data.get("data"):
-                    raise HTTPException(
-                        status_code=400, detail="Conta WhatsApp sem número cadastrado."
-                    )
-
-                # Pega o primeiro número disponível
-                target_phone = phones_data["data"][0]
-                phone_number_id = target_phone["id"]
-                display_phone_number = target_phone["display_phone_number"]
-
+                # 3. Buscar Números — iterar TODAS as WABAs (business pode ter múltiplas)
                 logger.info(
-                    "Discovery success: %s (ID: %s)",
-                    display_phone_number,
-                    phone_number_id,
+                    "Found %d WABA(s), scanning for phone numbers",
+                    len(waba_data["data"]),
                 )
+                for waba_candidate in waba_data["data"]:
+                    candidate_id = waba_candidate["id"]
+                    candidate_name = waba_candidate.get("name", "?")
+                    logger.info(
+                        "Checking WABA %s (%s) for phone numbers",
+                        candidate_name,
+                        candidate_id,
+                    )
+                    phones_resp = await client.get(
+                        f"https://graph.facebook.com/v19.0/{candidate_id}/phone_numbers",
+                        params={"access_token": final_token},
+                    )
+                    phones_data = phones_resp.json()
+
+                    if phones_data.get("data"):
+                        target_phone = phones_data["data"][0]
+                        phone_number_id = target_phone["id"]
+                        display_phone_number = target_phone["display_phone_number"]
+                        logger.info(
+                            "Discovery success: %s (ID: %s) from WABA %s (%s)",
+                            display_phone_number,
+                            phone_number_id,
+                            candidate_name,
+                            candidate_id,
+                        )
+                        break
+                    else:
+                        logger.info(
+                            "WABA %s (%s) has no phone numbers, skipping",
+                            candidate_name,
+                            candidate_id,
+                        )
+
+                if not phone_number_id:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Nenhuma conta WhatsApp com número cadastrado encontrada.",
+                    )
 
             except HTTPException as he:
                 raise he
