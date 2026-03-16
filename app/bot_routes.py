@@ -883,6 +883,7 @@ async def complete_onboarding(
     # --- FASE 2: DESCOBERTA DE IDS (Se necessário) ---
     phone_number_id = data.phone_number_id
     display_phone_number = data.display_phone_number
+    discovered_waba_id = data.waba_id
 
     # Se faltar dados (Fallback), o Backend assume a responsabilidade de descobrir
     if not phone_number_id or not display_phone_number:
@@ -959,6 +960,7 @@ async def complete_onboarding(
                         target_phone = phones_data["data"][0]
                         phone_number_id = target_phone["id"]
                         display_phone_number = target_phone["display_phone_number"]
+                        discovered_waba_id = candidate_id
                         logger.info(
                             "Discovery success: %s (ID: %s) from WABA %s (%s)",
                             display_phone_number,
@@ -990,17 +992,25 @@ async def complete_onboarding(
 
     # --- FASE 3: PERSISTÊNCIA E INSCRIÇÃO ---
 
-    # Inscrever Webhook (Importante para garantir recebimento de mensagens)
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        try:
-            # Precisamos do WABA ID. Se veio do frontend, ok. Se não, pegamos do Discovery ou deduzimos.
-            # Para simplificar a inscrição, usamos o phone_number_id para achar a WABA se necessário,
-            # mas o ideal é ter o waba_id. Se veio do discovery, já temos target_waba_id.
-            pass
-            # Nota: A inscrição de webhook geralmente é automática no Embedded Signup,
-            # mas em reconexões manuais pode ser bom reforçar. Fica como melhoria futura.
-        except Exception:
-            logger.error("Webhook subscription failed during onboarding", exc_info=True)
+    # Inscrever Webhook na WABA
+    if discovered_waba_id:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                sub_url = f"https://graph.facebook.com/v19.0/{discovered_waba_id}/subscribed_apps"
+                sub_resp = await client.post(
+                    sub_url, params={"access_token": final_token}
+                )
+                if sub_resp.status_code == 200:
+                    logger.info(
+                        "Webhook subscribed to WABA %s successfully",
+                        discovered_waba_id,
+                    )
+                else:
+                    logger.warning("Webhook subscription response: %s", sub_resp.json())
+            except Exception:
+                logger.error(
+                    "Webhook subscription failed during onboarding", exc_info=True
+                )
 
     clean_number = re.sub(r"\D", "", display_phone_number)
 
