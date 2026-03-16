@@ -633,6 +633,98 @@ async def get_best_sellers(
     return [{"name": row[0], "quantity": row[1], "revenue": row[2]} for row in results]
 
 
+@router.put("/bots/{bot_id}/whatsapp-profile-picture")
+async def update_whatsapp_profile_picture(
+    bot_id: int,
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Upload a profile picture to the bot's WhatsApp Business account."""
+    # 1. Ownership check
+    bot = await crud.get_bot_by_id(session, bot_id=bot_id)
+    if not bot or bot.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Acesso negado.")
+
+    if not bot.whatsapp_token or not bot.phone_number_id:
+        raise HTTPException(status_code=400, detail="Bot não conectado ao WhatsApp.")
+
+    # 2. Validate file
+    allowed_types = {"image/jpeg", "image/png"}
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Apenas JPG ou PNG são permitidos.")
+
+    file_bytes = await file.read()
+    if len(file_bytes) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Imagem deve ter no máximo 5 MB.")
+
+    token = decrypt_value(bot.whatsapp_token)
+    app_id = os.getenv("FB_APP_ID")
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # 3. Create upload session
+        upload_resp = await client.post(
+            f"https://graph.facebook.com/v19.0/{app_id}/uploads",
+            params={
+                "access_token": token,
+                "file_length": len(file_bytes),
+                "file_type": file.content_type,
+            },
+        )
+        upload_data = upload_resp.json()
+
+        if "id" not in upload_data:
+            logger.error("Upload session creation failed: %s", upload_data)
+            raise HTTPException(
+                status_code=502,
+                detail="Falha ao iniciar upload na Meta.",
+            )
+
+        upload_session_id = upload_data["id"]
+
+        # 4. Upload the file bytes
+        file_resp = await client.post(
+            f"https://graph.facebook.com/v19.0/{upload_session_id}",
+            headers={
+                "Authorization": f"OAuth {token}",
+                "file_offset": "0",
+                "Content-Type": file.content_type,
+            },
+            content=file_bytes,
+        )
+        file_data = file_resp.json()
+
+        if "h" not in file_data:
+            logger.error("File upload failed: %s", file_data)
+            raise HTTPException(
+                status_code=502,
+                detail="Falha ao enviar imagem para a Meta.",
+            )
+
+        file_handle = file_data["h"]
+
+        # 5. Update the WhatsApp Business Profile with the handle
+        profile_resp = await client.post(
+            f"https://graph.facebook.com/v19.0/{bot.phone_number_id}/whatsapp_business_profile",
+            params={"access_token": token},
+            json={
+                "messaging_product": "whatsapp",
+                "profile_picture_handle": file_handle,
+            },
+        )
+        profile_data = profile_resp.json()
+
+        if not profile_data.get("success"):
+            logger.error("Profile picture update failed: %s", profile_data)
+            raise HTTPException(
+                status_code=502,
+                detail="Falha ao atualizar foto de perfil.",
+            )
+
+    logger.info("WhatsApp profile picture updated for bot #%s", bot_id)
+    return {"status": "updated", "bot_id": bot_id}
+
+
 @router.post("/bots/whatsapp/auth", status_code=201)
 async def authenticate_whatsapp_bot(
     auth_data: WhatsAppAuthRequest,
