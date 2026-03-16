@@ -897,18 +897,30 @@ async def complete_onboarding(
                     params={"access_token": final_token},
                 )
                 biz_data = biz_resp.json()
+                logger.info("GET /me/businesses response: %s", biz_data)
 
                 if not biz_data.get("data"):
                     # Edge case: Usuário pode ter acesso direto sem business (raro, mas possível via tasks)
                     # Nesse caso tentamos o endpoint direto como último recurso
+                    logger.info(
+                        "No businesses found, trying /me/whatsapp_business_accounts fallback"
+                    )
                     fallback_waba = await client.get(
                         "https://graph.facebook.com/v19.0/me/whatsapp_business_accounts",
                         params={"access_token": final_token},
                     )
-                    if fallback_waba.json().get("data"):
-                        waba_data = fallback_waba.json()
+                    fallback_data = fallback_waba.json()
+                    logger.info(
+                        "Fallback /me/whatsapp_business_accounts response: %s",
+                        fallback_data,
+                    )
+                    if fallback_data.get("data"):
+                        waba_data = fallback_data
                         logger.warning("WABA found outside of Business")
                     else:
+                        logger.error(
+                            "Discovery failed: no businesses and no WABAs found"
+                        )
                         raise HTTPException(
                             status_code=400,
                             detail="Nenhuma empresa ou conta WhatsApp encontrada.",
@@ -916,6 +928,7 @@ async def complete_onboarding(
                 else:
                     # Pega o primeiro Business (Assumimos fluxo simplificado)
                     target_biz_id = biz_data["data"][0]["id"]
+                    logger.info("Using business ID: %s", target_biz_id)
 
                     # 2. Buscar WABAs desse Business
                     waba_resp = await client.get(
@@ -923,8 +936,14 @@ async def complete_onboarding(
                         params={"access_token": final_token},
                     )
                     waba_data = waba_resp.json()
+                    logger.info(
+                        "GET /%s/owned_whatsapp_business_accounts response: %s",
+                        target_biz_id,
+                        waba_data,
+                    )
 
                 if not waba_data.get("data"):
+                    logger.error("Discovery failed: business found but no WABAs")
                     raise HTTPException(
                         status_code=400,
                         detail="Empresa encontrada, mas sem conta WhatsApp.",
