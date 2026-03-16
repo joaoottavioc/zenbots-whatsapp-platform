@@ -892,76 +892,63 @@ async def complete_onboarding(
             try:
                 # 1. Buscar Empresas (Businesses)
                 # O endpoint /me/whatsapp_business_accounts é instável. Usamos /me/businesses primeiro.
+                # 1. Buscar Empresas (Businesses)
                 biz_resp = await client.get(
                     "https://graph.facebook.com/v19.0/me/businesses",
                     params={"access_token": final_token},
                 )
                 biz_data = biz_resp.json()
-                logger.info("GET /me/businesses response: %s", biz_data)
+                businesses = biz_data.get("data", [])
+                logger.info(
+                    "GET /me/businesses: found %d business(es): %s",
+                    len(businesses),
+                    [b.get("name") for b in businesses],
+                )
 
-                if not biz_data.get("data"):
-                    # Edge case: Usuário pode ter acesso direto sem business (raro, mas possível via tasks)
-                    # Nesse caso tentamos o endpoint direto como último recurso
-                    logger.info(
-                        "No businesses found, trying /me/whatsapp_business_accounts fallback"
-                    )
-                    fallback_waba = await client.get(
-                        "https://graph.facebook.com/v19.0/me/whatsapp_business_accounts",
-                        params={"access_token": final_token},
-                    )
-                    fallback_data = fallback_waba.json()
-                    logger.info(
-                        "Fallback /me/whatsapp_business_accounts response: %s",
-                        fallback_data,
-                    )
-                    if fallback_data.get("data"):
-                        waba_data = fallback_data
-                        logger.warning("WABA found outside of Business")
-                    else:
-                        logger.error(
-                            "Discovery failed: no businesses and no WABAs found"
-                        )
-                        raise HTTPException(
-                            status_code=400,
-                            detail="Nenhuma empresa ou conta WhatsApp encontrada.",
-                        )
-                else:
-                    # Pega o primeiro Business (Assumimos fluxo simplificado)
-                    target_biz_id = biz_data["data"][0]["id"]
-                    logger.info("Using business ID: %s", target_biz_id)
-
-                    # 2. Buscar WABAs desse Business
+                # 2. Coletar WABAs de TODAS as businesses
+                all_wabas = []
+                for biz in businesses:
+                    biz_id = biz["id"]
+                    biz_name = biz.get("name", "?")
                     waba_resp = await client.get(
-                        f"https://graph.facebook.com/v19.0/{target_biz_id}/owned_whatsapp_business_accounts",
+                        f"https://graph.facebook.com/v19.0/{biz_id}/owned_whatsapp_business_accounts",
                         params={"access_token": final_token},
                     )
                     waba_data = waba_resp.json()
+                    wabas_found = waba_data.get("data", [])
                     logger.info(
-                        "GET /%s/owned_whatsapp_business_accounts response: %s",
-                        target_biz_id,
-                        waba_data,
+                        "Business %s (%s): %d WABA(s)",
+                        biz_name,
+                        biz_id,
+                        len(wabas_found),
                     )
+                    all_wabas.extend(wabas_found)
 
-                if not waba_data.get("data"):
-                    logger.error("Discovery failed: business found but no WABAs")
+                # Fallback: se nenhum business retornou WABAs, tentar endpoint direto
+                if not all_wabas:
+                    logger.info(
+                        "No WABAs from businesses, trying /me/whatsapp_business_accounts fallback"
+                    )
+                    fallback_resp = await client.get(
+                        "https://graph.facebook.com/v19.0/me/whatsapp_business_accounts",
+                        params={"access_token": final_token},
+                    )
+                    fallback_data = fallback_resp.json()
+                    all_wabas = fallback_data.get("data", [])
+                    logger.info("Fallback found %d WABA(s)", len(all_wabas))
+
+                if not all_wabas:
+                    logger.error("Discovery failed: no WABAs found across any business")
                     raise HTTPException(
                         status_code=400,
-                        detail="Empresa encontrada, mas sem conta WhatsApp.",
+                        detail="Nenhuma conta WhatsApp encontrada.",
                     )
 
-                # 3. Buscar Números — iterar TODAS as WABAs (business pode ter múltiplas)
-                logger.info(
-                    "Found %d WABA(s), scanning for phone numbers",
-                    len(waba_data["data"]),
-                )
-                for waba_candidate in waba_data["data"]:
+                # 3. Iterar TODAS as WABAs para achar uma com número
+                logger.info("Scanning %d WABA(s) for phone numbers", len(all_wabas))
+                for waba_candidate in all_wabas:
                     candidate_id = waba_candidate["id"]
                     candidate_name = waba_candidate.get("name", "?")
-                    logger.info(
-                        "Checking WABA %s (%s) for phone numbers",
-                        candidate_name,
-                        candidate_id,
-                    )
                     phones_resp = await client.get(
                         f"https://graph.facebook.com/v19.0/{candidate_id}/phone_numbers",
                         params={"access_token": final_token},
