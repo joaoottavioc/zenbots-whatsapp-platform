@@ -649,26 +649,43 @@ async def update_whatsapp_profile_picture(
     if not bot.whatsapp_token or not bot.phone_number_id:
         raise HTTPException(status_code=400, detail="Bot não conectado ao WhatsApp.")
 
-    # 2. Validate file
-    allowed_types = {"image/jpeg", "image/png"}
-    if file.content_type not in allowed_types:
-        raise HTTPException(status_code=400, detail="Apenas JPG ou PNG são permitidos.")
+    # 2. Read file with chunked size limit (prevents memory bombs)
+    max_size = 5 * 1024 * 1024  # 5 MB
+    chunks = []
+    total_size = 0
+    while True:
+        chunk = await file.read(8192)
+        if not chunk:
+            break
+        total_size += len(chunk)
+        if total_size > max_size:
+            raise HTTPException(
+                status_code=413, detail="Imagem deve ter no máximo 5 MB."
+            )
+        chunks.append(chunk)
+    file_bytes = b"".join(chunks)
 
-    file_bytes = await file.read()
-    if len(file_bytes) > 5 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Imagem deve ter no máximo 5 MB.")
+    # 3. Validate file type via magic bytes (Content-Type header is spoofable)
+    detected_mime = None
+    if file_bytes[:3] == b"\xff\xd8\xff":
+        detected_mime = "image/jpeg"
+    elif file_bytes[:8] == b"\x89PNG\r\n\x1a\n":
+        detected_mime = "image/png"
+
+    if not detected_mime:
+        raise HTTPException(status_code=400, detail="Apenas JPG ou PNG são permitidos.")
 
     token = decrypt_value(bot.whatsapp_token)
     app_id = os.getenv("FB_APP_ID")
 
     async with httpx.AsyncClient(timeout=30.0) as client:
-        # 3. Create upload session
+        # 4. Create upload session
         upload_resp = await client.post(
             f"https://graph.facebook.com/v19.0/{app_id}/uploads",
             params={
                 "access_token": token,
                 "file_length": len(file_bytes),
-                "file_type": file.content_type,
+                "file_type": detected_mime,
             },
         )
         upload_data = upload_resp.json()
@@ -682,13 +699,13 @@ async def update_whatsapp_profile_picture(
 
         upload_session_id = upload_data["id"]
 
-        # 4. Upload the file bytes
+        # 5. Upload the file bytes
         file_resp = await client.post(
             f"https://graph.facebook.com/v19.0/{upload_session_id}",
             headers={
                 "Authorization": f"OAuth {token}",
                 "file_offset": "0",
-                "Content-Type": file.content_type,
+                "Content-Type": detected_mime,
             },
             content=file_bytes,
         )
@@ -703,7 +720,7 @@ async def update_whatsapp_profile_picture(
 
         file_handle = file_data["h"]
 
-        # 5. Update the WhatsApp Business Profile with the handle
+        # 6. Update the WhatsApp Business Profile with the handle
         profile_resp = await client.post(
             f"https://graph.facebook.com/v19.0/{bot.phone_number_id}/whatsapp_business_profile",
             params={"access_token": token},
