@@ -247,6 +247,8 @@ async def stream_events(
         bot_ids = [bot.id for bot in bots]
 
     async def event_generator():
+        import time as _time
+
         # 1. Configuração da Conexão Redis
         local_redis_url = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
 
@@ -267,6 +269,9 @@ async def stream_events(
             logger.info("SSE client connected, bot_ids=%s", bot_ids)
             # Envia o ping inicial já em formato JSON correto
             yield f"data: {json.dumps({'type': 'ping', 'message': 'connected'})}\n\n"
+
+            last_ping = _time.monotonic()
+            _PING_INTERVAL = 15  # seconds between data-level pings
 
             while True:
                 # 2. Verifica desconexão do cliente
@@ -293,9 +298,17 @@ async def stream_events(
 
                     logger.info("Sending SSE event to client")
                     yield f"data: {final_payload}\n\n"
+                    last_ping = _time.monotonic()
                 else:
-                    # 4. Heartbeat (Mantém a conexão viva em Load Balancers/Nginx)
-                    yield ": keep-alive\n\n"
+                    # 4. Heartbeat — send a real data event every _PING_INTERVAL
+                    # so proxies (Caddy, ALB, CloudFront) see activity on the
+                    # connection and don't close it for being "idle".
+                    now = _time.monotonic()
+                    if now - last_ping >= _PING_INTERVAL:
+                        yield f"data: {json.dumps({'type': 'ping'})}\n\n"
+                        last_ping = now
+                    else:
+                        yield ": keep-alive\n\n"
 
         except asyncio.CancelledError:
             logger.info("SSE client disconnected (CancelledError)")

@@ -127,6 +127,19 @@ async def _bot_has_pix(bot: "Bot", session: AsyncSession) -> bool:
     return False
 
 
+async def _load_cart_items_with_products(
+    cart: "ShoppingCart", session: AsyncSession
+) -> None:
+    """Refresh cart items and eagerly load each item's product relationship.
+
+    Must be called before accessing item.product on CartItem objects
+    inside an async session (lazy loading is not supported).
+    """
+    await session.refresh(cart, attribute_names=["items"])
+    for item in cart.items:
+        await session.refresh(item, attribute_names=["product"])
+
+
 def _payment_prompt(has_pix: bool) -> str:
     """Build the payment method prompt based on PIX availability."""
     if has_pix:
@@ -368,6 +381,7 @@ async def _handle_delivery_method(mctx: MessageContext) -> str | None:
     elif "retirada" in user_text or "buscar" in user_text or user_text == "2":
         cart.delivery_method = DeliveryMethod.PICKUP
         await session.refresh(cart, attribute_names=["contact"])
+        await _load_cart_items_with_products(cart, session)
         if cart.contact and cart.contact.name:
             cart.state = CartState.AWAITING_PAYMENT_METHOD
             final_summary = _build_cart_summary_message(cart, bot, "🛍️")
@@ -596,6 +610,7 @@ async def _handle_customer_name(mctx: MessageContext) -> str | None:
     customer_name = mctx.text_body.strip()[:100]
     await crud.save_customer_name_to_contact(session, cart.contact_id, customer_name)
 
+    await _load_cart_items_with_products(cart, session)
     cart.state = CartState.AWAITING_PAYMENT_METHOD
     final_summary = _build_cart_summary_message(cart, bot, "📦")
 
@@ -656,7 +671,8 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
         return response
 
     try:
-        await session.refresh(cart, attribute_names=["items", "contact"])
+        await session.refresh(cart, attribute_names=["contact"])
+        await _load_cart_items_with_products(cart, session)
         if not cart.contact:
             raise Exception(f"Carrinho {cart.id} sem contacto.")
 
@@ -834,10 +850,11 @@ async def _handle_clear_cart(mctx: MessageContext, intent: str | None) -> str | 
     return "Carrinho limpo! 🛒 Quando quiser, é só pedir!"
 
 
-def _handle_show_cart(mctx: MessageContext, intent: str | None) -> str | None:
+async def _handle_show_cart(mctx: MessageContext, intent: str | None) -> str | None:
     """Handles SHOW_CART intent. Returns response string or None."""
     if intent != "SHOW_CART":
         return None
+    await _load_cart_items_with_products(mctx.cart, mctx.session)
     return _build_cart_summary_message(mctx.cart, mctx.bot)
 
 
@@ -850,7 +867,8 @@ async def _handle_finish_order(mctx: MessageContext, intent: str | None) -> str 
     cart, session, bot = mctx.cart, mctx.session, mctx.bot
     contact_number, text_body = mctx.contact_number, mctx.text_body
 
-    await session.refresh(cart, attribute_names=["items", "contact"])
+    await session.refresh(cart, attribute_names=["contact"])
+    await _load_cart_items_with_products(cart, session)
 
     if not cart.items:
         response = "Seu carrinho está vazio. 🛒 Me diga o que quer pedir!"
@@ -947,7 +965,7 @@ async def _handle_shopping_intent(
         session, bot.id, contact_number
     )
     past_messages = [{"role": h.role, "content": h.content} for h in history_records]
-    await session.refresh(cart, attribute_names=["items"])
+    await _load_cart_items_with_products(cart, session)
     cart_items = [
         {
             "product_id": item.product.id,
@@ -1114,7 +1132,7 @@ async def _handle_shopping_intent(
                             bot_id=bot.id,
                             skipped_items=skipped_items,
                         )
-                        await session.refresh(cart, attribute_names=["items"])
+                        await _load_cart_items_with_products(cart, session)
 
                         qty_after = sum(item.quantity for item in cart.items)
 
@@ -1182,7 +1200,7 @@ async def _handle_shopping_intent(
                                 await crud.modify_item_quantity_in_db_cart(
                                     session, cart.id, pid, 0
                                 )
-                            await session.refresh(cart, attribute_names=["items"])
+                            await _load_cart_items_with_products(cart, session)
                             response_to_user = (
                                 _build_cart_summary_message(cart, bot, "❌")
                                 + "\n\nAlgo mais?"
@@ -1198,7 +1216,7 @@ async def _handle_shopping_intent(
                             await crud.modify_item_quantity_in_db_cart(
                                 session, cart.id, pid, newq
                             )
-                            await session.refresh(cart, attribute_names=["items"])
+                            await _load_cart_items_with_products(cart, session)
                             response_to_user = (
                                 _build_cart_summary_message(cart, bot, "✏️")
                                 + "\n\nAlgo mais?"
@@ -1212,7 +1230,7 @@ async def _handle_shopping_intent(
                             await crud.update_item_notes(
                                 session, cart.id, pid, str(notes)[:200]
                             )
-                            await session.refresh(cart, attribute_names=["items"])
+                            await _load_cart_items_with_products(cart, session)
                             response_to_user = (
                                 _build_cart_summary_message(cart, bot, "✏️")
                                 + "\n\nObservação anotada! Mais alguma coisa?"
@@ -1248,7 +1266,7 @@ async def _handle_shopping_intent(
                                     upd["product_id"],
                                     upd["new_quantity"],
                                 )
-                            await session.refresh(cart, attribute_names=["items"])
+                            await _load_cart_items_with_products(cart, session)
                             response_to_user = (
                                 _build_cart_summary_message(cart, bot, "✏️")
                                 + "\n\nAlgo mais?"
@@ -1430,7 +1448,7 @@ async def _process_contact_message_inner(
         intent = None  # Definimos a intenção como None para pular a lógica de reset
     else:
         # Caso contrário, executamos a classificação de intenção normalmente
-        await session.refresh(cart, attribute_names=["items"])
+        await _load_cart_items_with_products(cart, session)
         cart_items_for_intent = [
             {"id": item.product_id, "name": item.product.name} for item in cart.items
         ]
@@ -1500,14 +1518,15 @@ async def _process_contact_message_inner(
     response_to_user = "Não entendi bem. 😅 Pode tentar de outra forma?"
 
     if intent == "BACK_TO_SHOPPING":
+        await _load_cart_items_with_products(cart, session)
         response_to_user = (
             _build_cart_summary_message(cart, bot)
             + "\n\nDe volta ao cardápio! O que mais quer pedir? 😊"
         )
     elif (clear_result := await _handle_clear_cart(mctx, intent)) is not None:
         response_to_user = clear_result
-    elif _handle_show_cart(mctx, intent) is not None:
-        response_to_user = _handle_show_cart(mctx, intent)
+    elif (show_cart_result := await _handle_show_cart(mctx, intent)) is not None:
+        response_to_user = show_cart_result
     elif intent == "FINISH_ORDER":
         finish_result = await _handle_finish_order(mctx, intent)
         if finish_result is not None:
@@ -1869,7 +1888,7 @@ async def _execute_pending_action(
         await crud.add_items_to_db_cart(
             session, cart.id, valid_items, bot_id=bot_id, skipped_items=skipped_items
         )
-        await session.refresh(cart, attribute_names=["items"])
+        await _load_cart_items_with_products(cart, session)
         clear_pending(cart)
         skipped_msg = ""
         if skipped_items:
@@ -1889,7 +1908,7 @@ async def _execute_pending_action(
             return "A proposta para modificar o item estava incompleta. Pode repetir?"
 
         await crud.modify_item_quantity_in_db_cart(session, cart.id, pid, newq)
-        await session.refresh(cart, attribute_names=["items"])
+        await _load_cart_items_with_products(cart, session)
         clear_pending(cart)
         # --- CORREÇÃO APLICADA ---
         return _build_cart_summary_message(cart, bot, "✏️") + "\n\nAlgo mais?"
@@ -1901,7 +1920,7 @@ async def _execute_pending_action(
             if pid is None:
                 continue
             await crud.modify_item_quantity_in_db_cart(session, cart.id, pid, 0)
-        await session.refresh(cart, attribute_names=["items"])
+        await _load_cart_items_with_products(cart, session)
         clear_pending(cart)
         # --- CORREÇÃO APLICADA ---
         return _build_cart_summary_message(cart, bot, "❌") + "\n\nAlgo mais?"
