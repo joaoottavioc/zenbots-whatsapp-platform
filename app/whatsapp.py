@@ -719,6 +719,12 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
         )
         return response
 
+    # Capture scalar values before any session.rollback() can expire them
+    _bot_id = bot.id
+    _bot_restaurant_name = bot.restaurant_name
+    _bot_delivery_fee = bot.delivery_fee
+    _bot_pix_key = bot.pix_key
+
     try:
         await _load_cart_items_with_products(cart, session, load_contact=True)
         if not cart.contact:
@@ -735,8 +741,8 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
         ]
 
         total_amount = sum(item.product.price * item.quantity for item in cart.items)
-        if cart.delivery_method == DeliveryMethod.DELIVERY and bot.delivery_fee > 0:
-            total_amount += bot.delivery_fee
+        if cart.delivery_method == DeliveryMethod.DELIVERY and _bot_delivery_fee > 0:
+            total_amount += _bot_delivery_fee
 
         order = await crud.create_order(
             session,
@@ -765,7 +771,7 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
                 pix_info = await create_pix_payment(
                     order_id=order.id,
                     total_amount=order.total_amount,
-                    bot_name=bot.restaurant_name,
+                    bot_name=_bot_restaurant_name,
                     contact_phone=contact.phone_number,
                     access_token_cliente=client_token,
                     webhook_token=order.webhook_token,
@@ -778,7 +784,7 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
                     response = "Problema ao gerar o PIX. Escolha *Cartão* ou *Dinheiro* para continuar."
                     await session.rollback()
             else:
-                response = f"Pedido confirmado! ✅\n\n💠 *Chave PIX:* {bot.pix_key}\n\nFaça o pagamento e enviaremos a confirmação aqui mesmo!"
+                response = f"Pedido confirmado! ✅\n\n💠 *Chave PIX:* {_bot_pix_key}\n\nFaça o pagamento e enviaremos a confirmação aqui mesmo!"
                 order_created = True
 
         elif detected_method == "card":
@@ -808,7 +814,7 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
                         "items": display_items,
                         "created_at": str(utcnow()),
                     },
-                    bot_id=bot.id,
+                    bot_id=_bot_id,
                 )
             except Exception as e:
                 logger.error("Failed to send broadcast for order: %s", e)
@@ -830,7 +836,7 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
                 mctx.contact_number, response, token=mctx.token, phone_id=mctx.phone_id
             )
             await crud.add_interaction_to_history(
-                session, bot.id, mctx.contact_number, mctx.text_body, response
+                session, _bot_id, mctx.contact_number, mctx.text_body, response
             )
             await session.flush()
             return response
