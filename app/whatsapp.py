@@ -15,6 +15,7 @@ from app.database import async_session
 from app.models import (
     Product,
     PaymentConfig,
+    CartItem,
     ShoppingCart,
     DeliveryMethod,
     Bot,
@@ -146,28 +147,25 @@ async def _bot_has_pix(bot: "Bot", session: AsyncSession) -> bool:
 async def _load_cart_items_with_products(
     cart: "ShoppingCart",
     session: AsyncSession,
-    extra_attrs: list[str] | None = None,
+    load_contact: bool = False,
 ) -> None:
-    """Refresh cart items and eagerly load each item's product relationship.
+    """Load cart items with their products (and optionally the contact).
 
-    Must be called before accessing ``item.product`` on CartItem objects
-    inside an async session (lazy loading is not supported).
-
-    Uses a bulk SELECT to load all products at once and sets them on each
-    item via ``set_committed_value`` — this avoids the ``session.refresh``
-    pitfall where refreshing an item with ``attribute_names=["product"]``
-    expires its column attributes and triggers greenlet errors.
-
-    ``extra_attrs`` — additional cart relationship attributes (e.g.
-    ``["contact"]``) to load in the **same** refresh call.
+    Uses direct queries + ``set_committed_value`` exclusively — **never**
+    ``session.refresh``, which expires every column on the target object
+    and triggers ``greenlet_spawn`` errors whenever an expired column is
+    later accessed in async context.
     """
     from sqlalchemy.orm.attributes import set_committed_value
 
-    attrs = ["items"] + (extra_attrs or [])
-    await session.refresh(cart, attribute_names=attrs)
+    # 1. Load cart items
+    result = await session.execute(select(CartItem).where(CartItem.cart_id == cart.id))
+    items = list(result.scalars().all())
+    set_committed_value(cart, "items", items)
 
-    if cart.items:
-        product_ids = [item.product_id for item in cart.items]
+    # 2. Bulk-load products for all items
+    if items:
+        product_ids = [item.product_id for item in items]
         result = await session.execute(
             select(Product).where(
                 Product.id.in_(product_ids),
@@ -175,8 +173,15 @@ async def _load_cart_items_with_products(
             )
         )
         products_by_id = {p.id: p for p in result.scalars().all()}
-        for item in cart.items:
+        for item in items:
             set_committed_value(item, "product", products_by_id.get(item.product_id))
+
+    # 3. Optionally load contact
+    if load_contact and cart.contact_id:
+        result = await session.execute(
+            select(Contact).where(Contact.id == cart.contact_id)
+        )
+        set_committed_value(cart, "contact", result.scalars().first())
 
 
 def _payment_prompt(has_pix: bool) -> str:
@@ -419,7 +424,7 @@ async def _handle_delivery_method(mctx: MessageContext) -> str | None:
 
     elif "retirada" in user_text or "buscar" in user_text or user_text == "2":
         cart.delivery_method = DeliveryMethod.PICKUP
-        await _load_cart_items_with_products(cart, session, extra_attrs=["contact"])
+        await _load_cart_items_with_products(cart, session, load_contact=True)
         if cart.contact and cart.contact.name:
             cart.state = CartState.AWAITING_PAYMENT_METHOD
             final_summary = _build_cart_summary_message(cart, bot, "🛍️")
@@ -475,7 +480,13 @@ async def _handle_cep(mctx: MessageContext) -> str | None:
         cart.partial_address = None
         cart.pending_address = "Retirada no Balcão"
         cart.pix_only = False
-        await session.refresh(cart, attribute_names=["contact"])
+        from sqlalchemy.orm.attributes import set_committed_value as _scv
+
+        if cart.contact_id:
+            _c = await session.execute(
+                select(Contact).where(Contact.id == cart.contact_id)
+            )
+            _scv(cart, "contact", _c.scalars().first())
         if cart.contact and cart.contact.name:
             cart.state = CartState.AWAITING_PAYMENT_METHOD
             has_pix = await _bot_has_pix(bot, session)
@@ -709,7 +720,7 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
         return response
 
     try:
-        await _load_cart_items_with_products(cart, session, extra_attrs=["contact"])
+        await _load_cart_items_with_products(cart, session, load_contact=True)
         if not cart.contact:
             raise Exception(f"Carrinho {cart.id} sem contacto.")
 
@@ -904,7 +915,7 @@ async def _handle_finish_order(mctx: MessageContext, intent: str | None) -> str 
     cart, session, bot = mctx.cart, mctx.session, mctx.bot
     contact_number, text_body = mctx.contact_number, mctx.text_body
 
-    await _load_cart_items_with_products(cart, session, extra_attrs=["contact"])
+    await _load_cart_items_with_products(cart, session, load_contact=True)
 
     if not cart.items:
         response = "Seu carrinho está vazio. 🛒 Me diga o que quer pedir!"
@@ -1216,7 +1227,14 @@ async def _handle_shopping_intent(
                     "update_item_observation",
                 ):
                     clear_pending(cart)
-                    await session.refresh(cart, attribute_names=["items"])
+                    _items_res = await session.execute(
+                        select(CartItem).where(CartItem.cart_id == cart.id)
+                    )
+                    from sqlalchemy.orm.attributes import (
+                        set_committed_value as _scv2,
+                    )
+
+                    _scv2(cart, "items", list(_items_res.scalars().all()))
                     current_ids = {it.product_id for it in cart.items}
 
                     if tool_name == "remove_items_from_cart":
