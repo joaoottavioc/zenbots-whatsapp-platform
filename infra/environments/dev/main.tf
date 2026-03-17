@@ -184,6 +184,7 @@ module "ecs" {
     { name = "REDIS_HOST", value = module.redis_ecs.redis_host },
     { name = "REDIS_PORT", value = "6379" },
     { name = "REDIS_URL", value = module.redis_ecs.redis_url },
+    { name = "BASE_URL", value = "https://dev-api.zenbotz.com.br" },
     { name = "CORS_ORIGINS", value = "https://dev.zenbotz.com.br" },
     { name = "COOKIE_DOMAIN", value = ".zenbotz.com.br" },
     { name = "FRONTEND_URL", value = "https://dev.zenbotz.com.br" },
@@ -229,6 +230,7 @@ module "ecs" {
     { name = "REDIS_URL", value = module.redis_ecs.redis_url },
     { name = "OMP_NUM_THREADS", value = "1" },
     { name = "AWS_BUCKET_NAME", value = "zenbots-dev-menus" },
+    { name = "BASE_URL", value = "https://dev-api.zenbotz.com.br" },
   ]
 
   worker_secrets = [
