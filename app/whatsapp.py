@@ -836,7 +836,7 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
             return response
 
     except Exception as e:
-        logger.error("Error in AWAITING_PAYMENT handler: %s", e)
+        logger.exception("Error in AWAITING_PAYMENT handler: %s", e)
         await session.rollback()
         response = "Ops, algo deu errado. Tente novamente em instantes."
         await send_whatsapp_message(
