@@ -134,18 +134,33 @@ async def _load_cart_items_with_products(
 ) -> None:
     """Refresh cart items and eagerly load each item's product relationship.
 
-    Must be called before accessing item.product on CartItem objects
+    Must be called before accessing ``item.product`` on CartItem objects
     inside an async session (lazy loading is not supported).
 
-    ``extra_attrs`` — additional cart relationship attributes (e.g. ``["contact"]``)
-    to load in the **same** refresh call.  This is required because
-    ``session.refresh`` expires *all* attributes before re-loading only the
-    ones listed in ``attribute_names``.
+    Uses a bulk SELECT to load all products at once and sets them on each
+    item via ``set_committed_value`` — this avoids the ``session.refresh``
+    pitfall where refreshing an item with ``attribute_names=["product"]``
+    expires its column attributes and triggers greenlet errors.
+
+    ``extra_attrs`` — additional cart relationship attributes (e.g.
+    ``["contact"]``) to load in the **same** refresh call.
     """
+    from sqlalchemy.orm.attributes import set_committed_value
+
     attrs = ["items"] + (extra_attrs or [])
     await session.refresh(cart, attribute_names=attrs)
-    for item in cart.items:
-        await session.refresh(item, attribute_names=["product"])
+
+    if cart.items:
+        product_ids = [item.product_id for item in cart.items]
+        result = await session.execute(
+            select(Product).where(
+                Product.id.in_(product_ids),
+                Product.is_deleted == False,  # noqa: E712
+            )
+        )
+        products_by_id = {p.id: p for p in result.scalars().all()}
+        for item in cart.items:
+            set_committed_value(item, "product", products_by_id.get(item.product_id))
 
 
 def _payment_prompt(has_pix: bool) -> str:

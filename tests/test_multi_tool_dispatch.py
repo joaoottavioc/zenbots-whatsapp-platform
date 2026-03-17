@@ -61,6 +61,8 @@ async def test_cart_tool_followed_by_conversational_tool():
     session.flush = AsyncMock()
     session.add = MagicMock()
 
+    mock_product = MagicMock(id=1, name="Pizza", price=30.0)
+
     # After adding item, cart has items
     async def mock_refresh(obj, attribute_names=None):
         if attribute_names and "items" in attribute_names:
@@ -68,11 +70,18 @@ async def test_cart_tool_followed_by_conversational_tool():
                 MagicMock(
                     product_id=1,
                     quantity=1,
-                    product=MagicMock(name="Pizza", price=30.0),
+                    product=mock_product,
                 )
             ]
 
     session.refresh = mock_refresh
+
+    # Mock session.execute for _load_cart_items_with_products product query
+    mock_scalars = MagicMock()
+    mock_scalars.all.return_value = [mock_product]
+    mock_result = MagicMock()
+    mock_result.scalars.return_value = mock_scalars
+    session.execute = AsyncMock(return_value=mock_result)
 
     mctx = MessageContext(
         session=session,
@@ -153,17 +162,25 @@ async def test_second_cart_tool_is_skipped():
     session.flush = AsyncMock()
     session.add = MagicMock()
 
+    mock_product = MagicMock(id=1, name="Pizza", price=30.0)
+
     async def mock_refresh(obj, attribute_names=None):
         if attribute_names and "items" in attribute_names:
             obj.items = [
                 MagicMock(
                     product_id=1,
                     quantity=1,
-                    product=MagicMock(name="Pizza", price=30.0),
+                    product=mock_product,
                 )
             ]
 
     session.refresh = mock_refresh
+
+    mock_scalars = MagicMock()
+    mock_scalars.all.return_value = [mock_product]
+    mock_result = MagicMock()
+    mock_result.scalars.return_value = mock_scalars
+    session.execute = AsyncMock(return_value=mock_result)
 
     mctx = MessageContext(
         session=session,
