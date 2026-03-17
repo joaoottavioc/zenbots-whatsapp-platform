@@ -128,14 +128,22 @@ async def _bot_has_pix(bot: "Bot", session: AsyncSession) -> bool:
 
 
 async def _load_cart_items_with_products(
-    cart: "ShoppingCart", session: AsyncSession
+    cart: "ShoppingCart",
+    session: AsyncSession,
+    extra_attrs: list[str] | None = None,
 ) -> None:
     """Refresh cart items and eagerly load each item's product relationship.
 
     Must be called before accessing item.product on CartItem objects
     inside an async session (lazy loading is not supported).
+
+    ``extra_attrs`` — additional cart relationship attributes (e.g. ``["contact"]``)
+    to load in the **same** refresh call.  This is required because
+    ``session.refresh`` expires *all* attributes before re-loading only the
+    ones listed in ``attribute_names``.
     """
-    await session.refresh(cart, attribute_names=["items"])
+    attrs = ["items"] + (extra_attrs or [])
+    await session.refresh(cart, attribute_names=attrs)
     for item in cart.items:
         await session.refresh(item, attribute_names=["product"])
 
@@ -380,8 +388,7 @@ async def _handle_delivery_method(mctx: MessageContext) -> str | None:
 
     elif "retirada" in user_text or "buscar" in user_text or user_text == "2":
         cart.delivery_method = DeliveryMethod.PICKUP
-        await session.refresh(cart, attribute_names=["contact"])
-        await _load_cart_items_with_products(cart, session)
+        await _load_cart_items_with_products(cart, session, extra_attrs=["contact"])
         if cart.contact and cart.contact.name:
             cart.state = CartState.AWAITING_PAYMENT_METHOD
             final_summary = _build_cart_summary_message(cart, bot, "🛍️")
@@ -671,8 +678,7 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
         return response
 
     try:
-        await session.refresh(cart, attribute_names=["contact"])
-        await _load_cart_items_with_products(cart, session)
+        await _load_cart_items_with_products(cart, session, extra_attrs=["contact"])
         if not cart.contact:
             raise Exception(f"Carrinho {cart.id} sem contacto.")
 
@@ -867,8 +873,7 @@ async def _handle_finish_order(mctx: MessageContext, intent: str | None) -> str 
     cart, session, bot = mctx.cart, mctx.session, mctx.bot
     contact_number, text_body = mctx.contact_number, mctx.text_body
 
-    await session.refresh(cart, attribute_names=["contact"])
-    await _load_cart_items_with_products(cart, session)
+    await _load_cart_items_with_products(cart, session, extra_attrs=["contact"])
 
     if not cart.items:
         response = "Seu carrinho está vazio. 🛒 Me diga o que quer pedir!"
