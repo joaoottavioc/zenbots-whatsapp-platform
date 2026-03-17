@@ -271,7 +271,7 @@ async def stream_events(
             yield f"data: {json.dumps({'type': 'ping', 'message': 'connected'})}\n\n"
 
             last_ping = _time.monotonic()
-            _PING_INTERVAL = 15  # seconds between data-level pings
+            _PING_INTERVAL = 10  # seconds between data-level pings
 
             while True:
                 # 2. Verifica desconexão do cliente
@@ -307,8 +307,6 @@ async def stream_events(
                     if now - last_ping >= _PING_INTERVAL:
                         yield f"data: {json.dumps({'type': 'ping'})}\n\n"
                         last_ping = now
-                    else:
-                        yield ": keep-alive\n\n"
 
         except asyncio.CancelledError:
             logger.info("SSE client disconnected (CancelledError)")
