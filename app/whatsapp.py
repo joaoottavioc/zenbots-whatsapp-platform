@@ -14,6 +14,7 @@ from app import crud
 from app.database import async_session
 from app.models import (
     Product,
+    PaymentConfig,
     ShoppingCart,
     DeliveryMethod,
     Bot,
@@ -117,9 +118,24 @@ _ITEM_FROM_Q_RE = re.compile(
 )
 
 
+async def _load_bot_payment_config(bot: "Bot", session: AsyncSession) -> None:
+    """Load the bot's payment_config without expiring column attributes.
+
+    Uses a direct query + ``set_committed_value`` instead of
+    ``session.refresh(bot, attribute_names=["payment_config"])`` which would
+    expire every column on the bot object (restaurant_name, delivery_fee, etc.).
+    """
+    from sqlalchemy.orm.attributes import set_committed_value
+
+    result = await session.execute(
+        select(PaymentConfig).where(PaymentConfig.bot_id == bot.id)
+    )
+    set_committed_value(bot, "payment_config", result.scalars().first())
+
+
 async def _bot_has_pix(bot: "Bot", session: AsyncSession) -> bool:
     """Check if the bot can accept PIX payments (MP connected or manual pix_key)."""
-    await session.refresh(bot, attribute_names=["payment_config"])
+    await _load_bot_payment_config(bot, session)
     if bot.payment_config and bot.payment_config.is_active:
         return True
     if bot.pix_key:
@@ -727,7 +743,7 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
             raise Exception("Falha ao criar ordem no banco.")
 
         if detected_method == "pix":
-            await session.refresh(bot, attribute_names=["payment_config"])
+            await _load_bot_payment_config(bot, session)
             client_token = (
                 decrypt_value(bot.payment_config.access_token)
                 if (bot.payment_config and bot.payment_config.is_active)
