@@ -800,15 +800,25 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
 
         if order_created:
             display_items = [f"{i.quantity}x {i.product.name}" for i in cart.items]
-            await crud.clear_db_cart(session, cart.id)
+            # Capture ORM values before commit expires all objects
+            _order_id = order.id
+            _order_total = order.total_amount
+            _customer_name = cart.contact.name if cart.contact else "Cliente"
+            _cart_id = cart.id
+
+            await crud.clear_db_cart(session, _cart_id)
+            # Commit BEFORE broadcast so the order is visible when the
+            # frontend refetches via the SSE-triggered invalidation.
+            await session.commit()
+
             try:
                 await broadcast_order_update(
                     "new_order",
                     {
-                        "order_id": order.id,
-                        "customer_name": cart.contact.name,
+                        "order_id": _order_id,
+                        "customer_name": _customer_name,
                         "customer_phone": mctx.contact_number,
-                        "total": order.total_amount,
+                        "total": _order_total,
                         "status": "pending",
                         "payment_method": detected_method,
                         "items": display_items,
@@ -829,7 +839,6 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
                     token=mctx.token,
                     phone_id=mctx.phone_id,
                 )
-            await session.flush()
             return response
         else:
             await send_whatsapp_message(
