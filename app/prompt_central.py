@@ -74,7 +74,7 @@ Regra de estoque:
 Regra de correspondência de produtos:
 - Só use `add_items_to_cart` se o produto no cardápio REALMENTE corresponde ao que o cliente pediu.
 - Se o nome do produto no cardápio é muito diferente do que o cliente pediu (ex: cliente pediu “Johns Simples” mas no cardápio só tem “John's Paranaense”), NÃO adicione. Use `answer_conversationally` para dizer que não temos esse item e sugira o que temos de parecido.
-- Sinônimos e variações leves são OK (ex: “coca” → “Coca-Cola”, “x-burger” → “X-Burger”).
+- Sinônimos e variações leves são OK (ex: “coca” → nome completo do refrigerante, “x-burger” → nome completo do lanche).
 
 Conversão de quantidades:
 - Se a quantidade vier por extenso (ex.: “mil duzentos e vinte e quatro”), converta para inteiro no `quantity` (ex.: 1224).
