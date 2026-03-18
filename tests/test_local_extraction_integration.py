@@ -101,6 +101,7 @@ class TestLocalExtractionHotPath:
         ):
             crud_mock.get_history_for_contact = AsyncMock(return_value=[])
             crud_mock.find_relevant_products = AsyncMock(return_value=[pizza])
+            crud_mock.find_unavailable_products = AsyncMock(return_value=[])
 
             await _handle_shopping_intent(mctx, "ADD")
 
@@ -129,6 +130,7 @@ class TestLocalExtractionHotPath:
             crud_mock.get_history_for_contact = AsyncMock(return_value=[])
             # First call (local extraction) returns nothing, second call (LLM) returns product
             crud_mock.find_relevant_products = AsyncMock(side_effect=[[], [oeuf]])
+            crud_mock.find_unavailable_products = AsyncMock(return_value=[])
 
             await _handle_shopping_intent(mctx, "ADD")
 
@@ -156,6 +158,7 @@ class TestLocalExtractionHotPath:
         ):
             crud_mock.get_history_for_contact = AsyncMock(return_value=[])
             crud_mock.find_relevant_products = AsyncMock(return_value=products)
+            crud_mock.find_unavailable_products = AsyncMock(return_value=[])
 
             await _handle_shopping_intent(mctx, "ADD")
 

@@ -454,6 +454,60 @@ class TestHandleOrderRepeat:
 
 
 # ────────────────────────────────────────────────────────
+# F-05: Unavailability similarity comparison
+# ────────────────────────────────────────────────────────
+
+
+class TestUnavailabilitySimilarityComparison:
+    """Verifies the SequenceMatcher logic picks the right match."""
+
+    def test_unavailable_closer_than_available(self):
+        """When unavailable product name is closer to query, it should be flagged."""
+        from difflib import SequenceMatcher
+
+        query = "johns alcatra com bacon"
+        unavail_name = "john's alcatra com bacon"
+        avail_name = "john's alcatra com frango"
+
+        unavail_score = SequenceMatcher(None, query, unavail_name.lower()).ratio()
+        avail_score = SequenceMatcher(None, query, avail_name.lower()).ratio()
+
+        assert unavail_score > avail_score, (
+            f"Unavailable ({unavail_score:.3f}) should score higher than "
+            f"available ({avail_score:.3f}) for query '{query}'"
+        )
+
+    def test_available_closer_than_unavailable(self):
+        """When available product is a better match, don't flag unavailable."""
+        from difflib import SequenceMatcher
+
+        query = "coca cola"
+        unavail_name = "x-bacon"  # unrelated unavailable product
+        avail_name = "coca-cola 600ml"
+
+        unavail_score = SequenceMatcher(None, query, unavail_name.lower()).ratio()
+        avail_score = SequenceMatcher(None, query, avail_name.lower()).ratio()
+
+        assert avail_score > unavail_score, (
+            f"Available ({avail_score:.3f}) should score higher than "
+            f"unavailable ({unavail_score:.3f}) for query '{query}'"
+        )
+
+    def test_nearly_identical_names(self):
+        """Products differing by one word should have high similarity."""
+        from difflib import SequenceMatcher
+
+        query = "johns bacon"
+        unavail_name = "john's bacon"
+        avail_name = "john's bacon com frango"
+
+        unavail_score = SequenceMatcher(None, query, unavail_name.lower()).ratio()
+        avail_score = SequenceMatcher(None, query, avail_name.lower()).ratio()
+
+        assert unavail_score > avail_score
+
+
+# ────────────────────────────────────────────────────────
 # CRUD: find_unavailable_products
 # ────────────────────────────────────────────────────────
 

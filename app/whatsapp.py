@@ -1213,12 +1213,38 @@ async def _handle_shopping_intent(
                 found_products = await crud.find_relevant_products(
                     session, bot.id, llm_items
                 )
-            # Check if the customer asked for an unavailable product
+
+        # Always check for unavailable products — even when available ones were found.
+        # This catches the case where "Johns Alcatra com Bacon" (unavailable) gets
+        # silently substituted by "Johns Alcatra com Frango" (available).
+        unavailable_candidates = await crud.find_unavailable_products(
+            session, bot.id, search_terms
+        )
+        if unavailable_candidates:
             if not found_products:
-                all_terms = llm_items if llm_items else search_terms
-                unavailable_matches = await crud.find_unavailable_products(
-                    session, bot.id, all_terms
+                # No available products → customer clearly wanted the unavailable one
+                unavailable_matches = unavailable_candidates
+            else:
+                # Available products found — compare name similarity to decide
+                # if the customer wanted the unavailable product instead
+                from difflib import SequenceMatcher
+
+                query_norm = text_body.lower().strip()
+                best_unavail = max(
+                    unavailable_candidates,
+                    key=lambda p: SequenceMatcher(
+                        None, query_norm, p.name.lower()
+                    ).ratio(),
                 )
+                unavail_score = SequenceMatcher(
+                    None, query_norm, best_unavail.name.lower()
+                ).ratio()
+                best_avail_score = max(
+                    SequenceMatcher(None, query_norm, p.name.lower()).ratio()
+                    for p in found_products
+                )
+                if unavail_score > best_avail_score:
+                    unavailable_matches = [best_unavail]
 
         prompt = create_central_prompt(
             user_query=text_body,
