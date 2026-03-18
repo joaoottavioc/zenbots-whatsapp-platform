@@ -394,35 +394,51 @@ async def find_unavailable_products(
 ) -> List[Product]:
     """
     Check if any of the searched items match products that exist but are unavailable.
-    Only searches by name and keywords (lightweight — no embedding).
+    Searches by name and keywords with apostrophe-normalized ILIKE (lightweight — no embedding).
     """
     if not extracted_items:
         return []
 
+    from sqlalchemy import func
+
     results_map: Dict[int, Product] = {}
 
     for item_name in extracted_items:
-        for query in [
+        # Normalize: strip apostrophes so "johns bacon" matches "John's Bacon"
+        clean_name = item_name.replace("'", "").replace("\u2019", "")
+        escaped = escape_ilike(clean_name)
+
+        # Name search (apostrophe-normalized)
+        name_query = (
             select(Product)
             .where(
                 Product.bot_id == bot_id,
                 Product.is_available == False,
                 Product.is_deleted == False,
-                Product.name.ilike(f"%{escape_ilike(item_name)}%", escape="\\"),
+                func.replace(Product.name, "'", "").ilike(f"%{escaped}%", escape="\\"),
             )
-            .limit(limit),
+            .limit(limit)
+        )
+        for p in (await session.execute(name_query)).scalars().all():
+            if p.id not in results_map:
+                results_map[p.id] = p
+
+        # Keywords search (apostrophe-normalized)
+        kw_query = (
             select(Product)
             .where(
                 Product.bot_id == bot_id,
                 Product.is_available == False,
                 Product.is_deleted == False,
-                Product.keywords.ilike(f"%{escape_ilike(item_name)}%", escape="\\"),
+                func.replace(Product.keywords, "'", "").ilike(
+                    f"%{escaped}%", escape="\\"
+                ),
             )
-            .limit(limit),
-        ]:
-            for p in (await session.execute(query)).scalars().all():
-                if p.id not in results_map:
-                    results_map[p.id] = p
+            .limit(limit)
+        )
+        for p in (await session.execute(kw_query)).scalars().all():
+            if p.id not in results_map:
+                results_map[p.id] = p
 
     return list(results_map.values())
 
