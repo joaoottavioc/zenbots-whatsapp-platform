@@ -123,6 +123,10 @@ class BaseConversationTest:
             return_value=active_subscription
         )
         self.crud_mock.is_plan_active = AsyncMock(return_value=True)
+        self.crud_mock.find_unavailable_products = AsyncMock(return_value=[])
+        self.crud_mock.get_latest_active_order = AsyncMock(return_value=None)
+        self.crud_mock.get_last_completed_order_items = AsyncMock(return_value=None)
+        self.crud_mock.add_items_to_db_cart = AsyncMock()
 
         with (
             patch(PATCH_SEND, self.send_mock),

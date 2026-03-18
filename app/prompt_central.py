@@ -12,6 +12,7 @@ def create_central_prompt(
     cart_items: List[Dict],
     search_results: Optional[List[Product]] = None,
     recent_suggestions: Optional[List[Product]] = None,
+    unavailable_products: Optional[List[Product]] = None,
 ) -> List[Dict]:
     """
     Prompt central multishot para escolha de ferramenta,
@@ -84,12 +85,24 @@ Lembre-se: Você é um assistente de restaurante.
 - Responda apenas perguntas relacionadas ao cardápio, pedidos, funcionamento ou atendimento.  
 - Se o cliente perguntar algo fora desse escopo, informe gentilmente que só pode ajudar com assuntos do restaurante.
 Se a quantidade for escrita por extenso (ex.: trinta e dois, doze, quinze), converta para número inteiro no campo quantity.
-Se um item pedido não existir ou estiver indisponível, use a ferramenta `answer_conversationally` para informar o cliente de forma educada.
-- Exemplo de resposta: “Puxa, [Nome do Item] não faz parte do nosso cardápio no momento. Gostaria de ver nossas opções de sobremesa ou alguma outra sugestão?”
+Se um item pedido não existir no cardápio, use `answer_conversationally` para informar educadamente que não temos esse item.
+Se um item estiver listado em **Produtos indisponíveis no momento**, use `answer_conversationally` para dizer que o item existe mas está em falta, e sugira alternativas do cardápio.
+- Exemplo (não existe): “Puxa, [Item] não faz parte do nosso cardápio. Gostaria de ver nossas opções?”
+- Exemplo (em falta): “[Item] está em falta no momento. Que tal um [alternativa]?”
 - "proposed_action" preenchida com a tool real e argumentos resolvidos (IDs/quantidades).
 Após a confirmação do cliente, NÃO gere outra resposta: o backend executará a ação proposta.
 """,
     }
+
+    # --- CONTEXTO DE PRODUTOS INDISPONÍVEIS ---
+    unavailable_context = ""
+    if unavailable_products:
+        unavailable_names = ", ".join(p.name for p in unavailable_products)
+        unavailable_context = (
+            f"\n**Produtos indisponíveis no momento:**\n"
+            f"{unavailable_names}\n"
+            f"Se o cliente pediu algum desses, informe que está em falta e sugira outras opções do cardápio.\n"
+        )
 
     # --- T1-1: DYNAMIC SYSTEM MESSAGE (per-request context, not cached) ---
     dynamic_system_message = {
@@ -101,8 +114,7 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
 **Carrinho atual:**
 {cart_context}
 
-{suggestion_context}
----
+{suggestion_context}{unavailable_context}---
 """,
     }
 

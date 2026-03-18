@@ -345,7 +345,9 @@ _SESSION_TIMEOUT = timedelta(minutes=10)
 _LONG_TIMEOUT = timedelta(hours=12)
 
 
-async def _send_welcome_with_menu(session, bot, cart, contact_number, text_body):
+async def _send_welcome_with_menu(
+    session, bot, cart, contact_number, text_body, contact=None
+):
     """Sends the welcome greeting with menu image/PDF — reused for first contact and session resets."""
     all_products = await crud.get_products_by_bot_id(session, bot.id)
     sample_products = [p for p in all_products if p.is_available]
@@ -357,8 +359,20 @@ async def _send_welcome_with_menu(session, bot, cart, contact_number, text_body)
     else:
         example_text = '_Ex: "Quero uma pizza de calabresa e uma coca-cola"_'
 
+    # F-01: Personalize greeting for returning customers
+    restaurant = bot.restaurant_name or "nosso restaurante"
+    if contact and contact.name and contact.last_order_date:
+        greeting = f"Olá, {contact.name}! Bem-vindo(a) de volta ao *{restaurant}*! 😊"
+        if contact.default_address_json:
+            addr = contact.default_address_json.get("full_address", "")
+            if addr:
+                greeting += f"\n📍 Endereço salvo: _{addr}_"
+        greeting += '\n\nDiga *"repetir pedido"* ou escolha algo novo no cardápio!'
+    else:
+        greeting = f"Olá! Bem-vindo(a) ao *{restaurant}*! 😊"
+
     response_to_user = (
-        f"Olá! Bem-vindo(a) ao *{bot.restaurant_name or 'nosso restaurante'}*! 😊\n\n"
+        f"{greeting}\n\n"
         "Dá uma olhada no cardápio e me conta o que vai querer — pode digitar ou mandar áudio!\n\n"
         f"{example_text}"
     )
@@ -403,7 +417,9 @@ async def _handle_session_expiry(mctx: MessageContext) -> bool:
         await crud.clear_db_cart(session, cart.id)
         cart.state = CartState.GREETING
         cart.delivery_method = None
-        await _send_welcome_with_menu(session, bot, cart, contact_number, text_body)
+        await _send_welcome_with_menu(
+            session, bot, cart, contact_number, text_body, contact=mctx.contact
+        )
         return True
 
     return False
@@ -419,8 +435,18 @@ async def _handle_delivery_method(mctx: MessageContext) -> str | None:
 
     if "entrega" in user_text or user_text == "1":
         cart.delivery_method = DeliveryMethod.DELIVERY
-        cart.state = CartState.AWAITING_CEP
-        response = "Para a entrega, me informe seu *CEP* 📍"
+        # F-01: Check for saved address
+        await _load_cart_items_with_products(cart, session, load_contact=True)
+        saved_addr = None
+        if cart.contact and cart.contact.default_address_json:
+            saved_addr = cart.contact.default_address_json.get("full_address")
+        if saved_addr:
+            cart.pending_address = saved_addr
+            cart.state = CartState.AWAITING_ADDRESS_CONFIRMATION
+            response = f"Entregar no endereço salvo?\n📍 _{saved_addr}_\n\nResponda *Sim* ou *Não* (para informar outro endereço)."
+        else:
+            cart.state = CartState.AWAITING_CEP
+            response = "Para a entrega, me informe seu *CEP* 📍"
 
     elif "retirada" in user_text or "buscar" in user_text or user_text == "2":
         cart.delivery_method = DeliveryMethod.PICKUP
@@ -799,12 +825,45 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
             response = f"Pedido confirmado! ✅\n\n💵 Total: *R$ {total_amount:.2f}* em dinheiro\nSepare o valor certinho para facilitar na entrega!"
 
         if order_created:
+            # F-07: Append ETA to confirmation message
+            eta_minutes = None
+            if (
+                cart.delivery_method == DeliveryMethod.DELIVERY
+                and bot.default_delivery_time_minutes
+            ):
+                eta_minutes = bot.default_delivery_time_minutes
+            elif (
+                cart.delivery_method == DeliveryMethod.PICKUP
+                and bot.default_pickup_time_minutes
+            ):
+                eta_minutes = bot.default_pickup_time_minutes
+            if eta_minutes:
+                response += f"\n\n⏱️ Previsão: ~{eta_minutes} minutos"
+
             display_items = [f"{i.quantity}x {i.product.name}" for i in cart.items]
             # Capture ORM values before commit expires all objects
             _order_id = order.id
             _order_total = order.total_amount
             _customer_name = cart.contact.name if cart.contact else "Cliente"
             _cart_id = cart.id
+            _owner_phone = bot.owner_notification_phone
+            _delivery_method = cart.delivery_method
+            _customer_address = cart.customer_address
+
+            # F-01: Save address to contact for future sessions
+            if (
+                _delivery_method == DeliveryMethod.DELIVERY
+                and _customer_address
+                and contact
+            ):
+                contact.default_address_json = {
+                    "full_address": _customer_address,
+                }
+                contact.last_order_date = utcnow()
+                session.add(contact)
+            elif contact:
+                contact.last_order_date = utcnow()
+                session.add(contact)
 
             await crud.clear_db_cart(session, _cart_id)
             # Commit BEFORE broadcast so the order is visible when the
@@ -828,6 +887,41 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
                 )
             except Exception as e:
                 logger.error("Failed to send broadcast for order: %s", e)
+
+            # F-09: Send owner notification
+            if _owner_phone:
+                try:
+                    items_str = "\n".join(display_items)
+                    method_label = {
+                        "pix": "PIX",
+                        "card": "Cartão",
+                        "money": "Dinheiro",
+                    }.get(detected_method, detected_method)
+                    owner_msg = (
+                        f"🔔 *Novo pedido #{_order_id}*\n\n"
+                        f"{items_str}\n\n"
+                        f"💰 Total: R$ {_order_total:.2f}\n"
+                        f"👤 {_customer_name}\n"
+                        f"💳 {method_label}"
+                    )
+                    if (
+                        _delivery_method == DeliveryMethod.DELIVERY
+                        and _customer_address
+                    ):
+                        owner_msg += f"\n📍 {_customer_address}"
+                    owner_phone_formatted = (
+                        _owner_phone
+                        if _owner_phone.startswith("55")
+                        else f"55{_owner_phone}"
+                    )
+                    await send_whatsapp_message(
+                        to=owner_phone_formatted,
+                        message=owner_msg,
+                        token=mctx.token,
+                        phone_id=mctx.phone_id,
+                    )
+                except Exception as e:
+                    logger.warning("Failed to send owner notification: %s", e)
 
             await send_whatsapp_message(
                 mctx.contact_number, response, token=mctx.token, phone_id=mctx.phone_id
@@ -1112,11 +1206,18 @@ async def _handle_shopping_intent(
             session, bot.id, search_terms
         )
         # LLM fallback: if local extraction + RAG found nothing, try LLM extraction
+        unavailable_matches: list = []
         if not found_products:
             llm_items = await extract_potential_items(text_body)
             if llm_items:
                 found_products = await crud.find_relevant_products(
                     session, bot.id, llm_items
+                )
+            # Check if the customer asked for an unavailable product
+            if not found_products:
+                all_terms = llm_items if llm_items else search_terms
+                unavailable_matches = await crud.find_unavailable_products(
+                    session, bot.id, all_terms
                 )
 
         prompt = create_central_prompt(
@@ -1126,6 +1227,7 @@ async def _handle_shopping_intent(
             cart_items=cart_items,
             search_results=found_products,
             recent_suggestions=recent_suggestions,
+            unavailable_products=unavailable_matches,
         )
         ai_message = await get_ai_decision(prompt, tools_schema, force_tool=True)
 
@@ -1181,7 +1283,11 @@ async def _handle_shopping_intent(
                             if extracted_items_for_msg
                             else "O item que você pediu"
                         )
-                        response_to_user = f"Não encontrei *{items_str}* no nosso cardápio. 😕 Quer tentar outro item ou ver nossas sugestões?"
+                        if unavailable_matches:
+                            names = ", ".join(p.name for p in unavailable_matches)
+                            response_to_user = f"*{names}* está em falta no momento. 😕 Quer tentar outro item ou ver nossas sugestões?"
+                        else:
+                            response_to_user = f"Não encontrei *{items_str}* no nosso cardápio. 😕 Quer tentar outro item ou ver nossas sugestões?"
                     else:
                         clear_pending(cart)
                         qty_before = sum(item.quantity for item in cart.items)
@@ -1231,7 +1337,11 @@ async def _handle_shopping_intent(
                                 if extracted_items_for_msg
                                 else "O item que você pediu"
                             )
-                            response_to_user = f"Não encontrei *{items_str}* no nosso cardápio. 😕 Quer tentar outro item ou ver nossas sugestões?"
+                            if unavailable_matches:
+                                names = ", ".join(p.name for p in unavailable_matches)
+                                response_to_user = f"*{names}* está em falta no momento. 😕 Quer tentar outro item ou ver nossas sugestões?"
+                            else:
+                                response_to_user = f"Não encontrei *{items_str}* no nosso cardápio. 😕 Quer tentar outro item ou ver nossas sugestões?"
                     cart_tool_processed = True
                     continue
 
@@ -1474,6 +1584,79 @@ async def _process_contact_message(
             await session.commit()
 
 
+async def _handle_order_cancel(mctx: MessageContext) -> str:
+    """F-17: Handle customer-initiated order cancellation via WhatsApp."""
+    session, bot, contact = mctx.session, mctx.bot, mctx.contact
+
+    active_order = await crud.get_latest_active_order(session, contact.id, bot.id)
+    if not active_order:
+        return "Você não tem nenhum pedido em andamento para cancelar. 😊"
+
+    from app.models import OrderStatus
+
+    if active_order.status in (OrderStatus.PREPARING, OrderStatus.READY):
+        return (
+            "Seu pedido já está sendo preparado e não pode ser cancelado pelo chat. "
+            "Entre em contato diretamente com o restaurante. 📞"
+        )
+
+    # Check cancellation window
+    order_age = utcnow() - active_order.created_at.replace(tzinfo=None)
+    window = timedelta(minutes=bot.cancellation_window_minutes)
+    if order_age > window:
+        return (
+            f"O prazo de cancelamento de {bot.cancellation_window_minutes} minutos já passou. "
+            "Entre em contato diretamente com o restaurante. 📞"
+        )
+
+    # Cancel the order
+    active_order.status = OrderStatus.CANCELED
+    session.add(active_order)
+
+    _order_id = active_order.id
+    _bot_id = bot.id
+    await session.flush()
+
+    try:
+        await broadcast_order_update(
+            "order_status_changed",
+            {"order_id": _order_id, "status": "canceled"},
+            bot_id=_bot_id,
+        )
+    except Exception as e:
+        logger.warning("Failed to broadcast cancellation: %s", e)
+
+    return f"Pedido #{_order_id} cancelado com sucesso. ✅"
+
+
+async def _handle_order_repeat(mctx: MessageContext) -> str:
+    """F-01: Handle reorder — add last order's items to cart."""
+    session, bot, contact, cart = mctx.session, mctx.bot, mctx.contact, mctx.cart
+
+    last_items = await crud.get_last_completed_order_items(session, contact.id, bot.id)
+    if not last_items:
+        return "Não encontrei nenhum pedido anterior para repetir. 😕 O que gostaria de pedir?"
+
+    skipped_items: list[str] = []
+    await crud.add_items_to_db_cart(
+        session, cart.id, last_items, bot_id=bot.id, skipped_items=skipped_items
+    )
+    await _load_cart_items_with_products(cart, session)
+
+    if not cart.items:
+        return "Os itens do seu último pedido não estão mais disponíveis. 😕 O que gostaria de pedir?"
+
+    cart.state = CartState.SHOPPING
+    response = (
+        _build_cart_summary_message(cart, bot, "🔄")
+        + "\n\nPedido anterior adicionado! Quer mais alguma coisa? 😊"
+    )
+    if skipped_items:
+        names = ", ".join(skipped_items)
+        response += f"\n\n⚠️ Indisponível no momento: {names}"
+    return response
+
+
 async def _process_contact_message_inner(
     session, bot, contact, contact_number, text_body, current_token, current_phone_id
 ):
@@ -1526,7 +1709,9 @@ async def _process_contact_message_inner(
 
     # INTERCEPTADOR DE BOAS-VINDAS COM IMAGEM
     if intent == "GREETING_OR_QUESTION" and cart.state == CartState.GREETING:
-        await _send_welcome_with_menu(session, bot, cart, contact_number, text_body)
+        await _send_welcome_with_menu(
+            session, bot, cart, contact_number, text_body, contact=contact
+        )
         logger.info("[GREETING] Cart %s state updated to SHOPPING", cart.id)
         return
 
@@ -1582,6 +1767,42 @@ async def _process_contact_message_inner(
     # Intent handlers: confirm/negate, clear, show, finish
     result = await _handle_confirm_negate(mctx, intent)
     if result is not None:
+        return
+
+    # F-17: Order cancellation via WhatsApp
+    if intent == "ORDER_CANCEL":
+        response_to_user = await _handle_order_cancel(mctx)
+        cart.last_activity_at = utcnow()
+        session.add(cart)
+        await session.flush()
+        await send_whatsapp_message(
+            mctx.contact_number,
+            response_to_user,
+            token=mctx.token,
+            phone_id=mctx.phone_id,
+        )
+        await crud.add_interaction_to_history(
+            session, bot.id, mctx.contact_number, text_body, response_to_user
+        )
+        await session.commit()
+        return
+
+    # F-01: Reorder last order
+    if intent == "ORDER_REPEAT":
+        response_to_user = await _handle_order_repeat(mctx)
+        cart.last_activity_at = utcnow()
+        session.add(cart)
+        await session.flush()
+        await send_whatsapp_message(
+            mctx.contact_number,
+            response_to_user,
+            token=mctx.token,
+            phone_id=mctx.phone_id,
+        )
+        await crud.add_interaction_to_history(
+            session, bot.id, mctx.contact_number, text_body, response_to_user
+        )
+        await session.commit()
         return
 
     response_to_user = "Não entendi bem. 😅 Pode tentar de outra forma?"
@@ -1996,23 +2217,25 @@ async def _execute_pending_action(
 
     if tool == "answer_with_found_products":
         names = args.get("product_names", [])
-        text = (
-            "Essas são algumas sugestões para você:\n"
-            + "\n".join(f"{i + 1}. {n}" for i, n in enumerate(names))
-            if names
-            else "Posso sugerir algumas opções, se quiser."
-        )
         if names:
             res = await session.execute(
                 select(Product).where(
                     Product.bot_id == bot_id,
                     Product.name.in_(names),
                     Product.is_deleted == False,
+                    Product.is_available == True,
                 )
             )
             prods = res.scalars().all()
             if prods:
                 cart.last_suggestions = [p.id for p in prods]
+                text = _format_product_suggestions_message(
+                    prods, "Encontrei essas opções para você:"
+                )
+            else:
+                text = "Posso sugerir algumas opções, se quiser."
+        else:
+            text = "Posso sugerir algumas opções, se quiser."
         clear_pending(cart)
         return text
 

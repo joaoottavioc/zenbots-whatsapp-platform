@@ -91,6 +91,16 @@ class Bot(SQLModel, table=True):
     latitude: Optional[float] = None  # Ex: -23.555
     longitude: Optional[float] = None  # Ex: -46.666
 
+    # F-07: ETA
+    default_delivery_time_minutes: Optional[int] = Field(default=None)
+    default_pickup_time_minutes: Optional[int] = Field(default=None)
+
+    # F-09: Owner notifications
+    owner_notification_phone: Optional[str] = Field(default=None, max_length=20)
+
+    # F-17: Cancellation window (minutes after order creation)
+    cancellation_window_minutes: int = Field(default=5)
+
     # MUDANÇA 2: O Bot ganha a Assinatura (1-pra-1 com o Bot)
     subscription: Optional["Subscription"] = Relationship(
         back_populates="bot", sa_relationship_kwargs={"cascade": "all, delete-orphan"}
@@ -118,6 +128,12 @@ class Contact(SQLModel, table=True):
     phone_number: str = Field(index=True)
 
     name: Optional[str] = Field(default=None)
+
+    # F-01: Customer memory
+    default_address_json: Optional[Dict[str, Any]] = Field(
+        default=None, sa_column=Column(SA_JSON)
+    )
+    last_order_date: Optional[datetime] = Field(default=None)
 
     bot_id: int = Field(foreign_key="bot.id")
     bot: "Bot" = Relationship(back_populates="contacts")

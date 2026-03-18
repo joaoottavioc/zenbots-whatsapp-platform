@@ -139,6 +139,24 @@ PROTOS: Dict[str, List[str]] = {
         "não precisa",
         "nao",
     ],
+    "ORDER_CANCEL": [
+        "cancelar meu pedido",
+        "quero cancelar o pedido",
+        "cancela o pedido",
+        "não quero mais o pedido",
+        "desistir do pedido",
+        "cancelar pedido",
+        "quero cancelar minha encomenda",
+    ],
+    "ORDER_REPEAT": [
+        "repetir pedido",
+        "mesmo pedido",
+        "quero o mesmo",
+        "repete o ultimo",
+        "mesmo de sempre",
+        "repetir ultimo pedido",
+        "quero o mesmo pedido",
+    ],
 }
 
 THRESHOLDS = {
@@ -152,6 +170,8 @@ THRESHOLDS = {
     "GREETING_OR_QUESTION": 0.72,
     "CONFIRM": 0.82,
     "NEGATE": 0.82,
+    "ORDER_CANCEL": 0.82,
+    "ORDER_REPEAT": 0.80,
 }
 
 _EMB_CACHE: Dict[str, List[List[float]]] = {}

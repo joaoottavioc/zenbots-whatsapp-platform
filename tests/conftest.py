@@ -50,6 +50,13 @@ def mock_bot():
     bot.longitude = -46.6333
     bot.max_delivery_radius = 10.0
     bot.payment_config = None
+    # F-07: ETA
+    bot.default_delivery_time_minutes = None
+    bot.default_pickup_time_minutes = None
+    # F-09: Owner notifications
+    bot.owner_notification_phone = None
+    # F-17: Cancellation window
+    bot.cancellation_window_minutes = 5
     return bot
 
 
@@ -60,6 +67,9 @@ def mock_contact():
     contact.phone_number = "5511888888888"
     contact.name = "Test User"
     contact.bot_id = 1
+    # F-01: Default to None so tests don't trigger saved address flow
+    contact.default_address_json = None
+    contact.last_order_date = None
     return contact
 
 

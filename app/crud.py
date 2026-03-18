@@ -386,6 +386,47 @@ async def find_relevant_products(
     return list(all_results_map.values())
 
 
+async def find_unavailable_products(
+    session: AsyncSession,
+    bot_id: int,
+    extracted_items: List[str],
+    limit: int = 3,
+) -> List[Product]:
+    """
+    Check if any of the searched items match products that exist but are unavailable.
+    Only searches by name and keywords (lightweight — no embedding).
+    """
+    if not extracted_items:
+        return []
+
+    results_map: Dict[int, Product] = {}
+
+    for item_name in extracted_items:
+        for query in [
+            select(Product)
+            .where(
+                Product.bot_id == bot_id,
+                Product.is_available == False,
+                Product.is_deleted == False,
+                Product.name.ilike(f"%{escape_ilike(item_name)}%", escape="\\"),
+            )
+            .limit(limit),
+            select(Product)
+            .where(
+                Product.bot_id == bot_id,
+                Product.is_available == False,
+                Product.is_deleted == False,
+                Product.keywords.ilike(f"%{escape_ilike(item_name)}%", escape="\\"),
+            )
+            .limit(limit),
+        ]:
+            for p in (await session.execute(query)).scalars().all():
+                if p.id not in results_map:
+                    results_map[p.id] = p
+
+    return list(results_map.values())
+
+
 async def get_user_by_email(session: AsyncSession, email: str) -> Optional[User]:
     result = await session.execute(select(User).where(User.email == email))
     return result.scalars().first()
@@ -950,7 +991,7 @@ async def update_order_status_by_id(
     if isinstance(new_status, str):
         new_status = OrderStatus(new_status.lower())
 
-    if not order:
+    if not order or not order.status:
         logger.warning("Order %s not found for status update", order_id)
         return None
 
@@ -1164,6 +1205,61 @@ async def upsert_subscription(
     # Reload the subscription to return it
     sub = await get_subscription_by_bot(session, bot_id)
     return sub
+
+
+async def get_latest_active_order(
+    session: AsyncSession, contact_id: int, bot_id: int
+) -> Optional[Order]:
+    """Returns the most recent non-terminal order for a contact."""
+    terminal_statuses = [
+        OrderStatus.COMPLETED,
+        OrderStatus.CANCELED,
+        OrderStatus.FAILED,
+        OrderStatus.EXPIRED,
+    ]
+    query = (
+        select(Order)
+        .where(
+            Order.contact_id == contact_id,
+            Order.bot_id == bot_id,
+            Order.status.not_in(terminal_statuses),
+        )
+        .order_by(Order.created_at.desc())
+        .limit(1)
+    )
+    result = await session.execute(query)
+    return result.scalars().first()
+
+
+async def get_last_completed_order_items(
+    session: AsyncSession, contact_id: int, bot_id: int
+) -> Optional[List[Dict[str, Any]]]:
+    """Returns items from the most recent completed order for reorder."""
+    query = (
+        select(Order)
+        .where(
+            Order.contact_id == contact_id,
+            Order.bot_id == bot_id,
+            Order.status.in_([OrderStatus.COMPLETED, OrderStatus.PAID]),
+        )
+        .options(selectinload(Order.items).selectinload(OrderItem.product))
+        .order_by(Order.created_at.desc())
+        .limit(1)
+    )
+    result = await session.execute(query)
+    order = result.scalars().first()
+    if not order or not order.items:
+        return None
+    return [
+        {
+            "product_id": item.product_id,
+            "quantity": item.quantity,
+            "product_name": item.product.name if item.product else "Produto",
+            "notes": item.notes,
+        }
+        for item in order.items
+        if item.product and item.product.is_available and not item.product.is_deleted
+    ]
 
 
 async def cancel_expired_pix_orders(session: AsyncSession):

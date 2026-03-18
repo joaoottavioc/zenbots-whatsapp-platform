@@ -81,6 +81,16 @@ class BotCreate(BaseModel):
     latitude: Optional[float] = None  # Essencial para o cálculo
     longitude: Optional[float] = None  # Essencial para o cálculo
 
+    # F-07: ETA
+    default_delivery_time_minutes: Optional[int] = Field(default=None, ge=1, le=180)
+    default_pickup_time_minutes: Optional[int] = Field(default=None, ge=1, le=180)
+
+    # F-09: Owner notifications
+    owner_notification_phone: Optional[str] = Field(default=None, max_length=20)
+
+    # F-17: Cancellation window
+    cancellation_window_minutes: Optional[int] = Field(default=5, ge=0, le=30)
+
     @validator("timezone")
     def validate_timezone(cls, v):
         if v not in pytz.all_timezones:
@@ -109,6 +119,16 @@ class BotUpdate(BaseModel):
     address: Optional[str] = Field(default=None, max_length=300)
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+
+    # F-07: ETA
+    default_delivery_time_minutes: Optional[int] = Field(default=None, ge=1, le=180)
+    default_pickup_time_minutes: Optional[int] = Field(default=None, ge=1, le=180)
+
+    # F-09: Owner notifications
+    owner_notification_phone: Optional[str] = Field(default=None, max_length=20)
+
+    # F-17: Cancellation window
+    cancellation_window_minutes: Optional[int] = Field(default=None, ge=0, le=30)
 
     @validator("timezone")
     def validate_timezone(cls, v):
@@ -140,6 +160,16 @@ class BotResponse(BaseModel):
     address: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+
+    # F-07: ETA
+    default_delivery_time_minutes: Optional[int] = None
+    default_pickup_time_minutes: Optional[int] = None
+
+    # F-09: Owner notifications
+    owner_notification_phone: Optional[str] = None
+
+    # F-17: Cancellation window
+    cancellation_window_minutes: int = 5
 
     # O bot agora retorna a lista de produtos e de histórico associados a ele
     products: List[ProductResponse] = []

@@ -180,6 +180,7 @@ class TestLocalExtractionHotPath:
         ):
             crud_mock.get_history_for_contact = AsyncMock(return_value=[])
             crud_mock.find_relevant_products = AsyncMock(return_value=[])
+            crud_mock.find_unavailable_products = AsyncMock(return_value=[])
 
             await _handle_shopping_intent(mctx, "ADD")
 
@@ -212,6 +213,7 @@ class TestErrorMessageUsesLocalExtraction:
         ):
             crud_mock.get_history_for_contact = AsyncMock(return_value=[])
             crud_mock.find_relevant_products = AsyncMock(return_value=[])
+            crud_mock.find_unavailable_products = AsyncMock(return_value=[])
 
             result = await _handle_shopping_intent(mctx, "ADD")
 

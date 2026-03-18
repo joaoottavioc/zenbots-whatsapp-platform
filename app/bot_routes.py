@@ -499,7 +499,44 @@ async def update_order_status(
     if not db_bot or db_bot.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Acesso negado.")
 
-    # 2. Atualização do Status do Pedido (Ex: de PAID para COMPLETED)
+    # 2. Validate status transition
+    from app.models import OrderStatus
+
+    VALID_TRANSITIONS = {
+        OrderStatus.PENDING: {OrderStatus.PAID, OrderStatus.CANCELED},
+        OrderStatus.PAID: {OrderStatus.PREPARING, OrderStatus.CANCELED},
+        OrderStatus.PREPARING: {OrderStatus.READY, OrderStatus.CANCELED},
+        OrderStatus.READY: {OrderStatus.COMPLETED, OrderStatus.CANCELED},
+        OrderStatus.COMPLETED: set(),
+        OrderStatus.CANCELED: set(),
+        OrderStatus.FAILED: set(),
+        OrderStatus.EXPIRED: set(),
+    }
+
+    # Look up the order first to validate the transition
+    from sqlalchemy import select
+    from app.models import Order
+
+    result = await session.execute(select(Order).where(Order.id == order_id))
+    existing_order = result.scalars().first()
+    if not existing_order:
+        raise HTTPException(status_code=404, detail="Pedido não encontrado.")
+
+    try:
+        target_status = OrderStatus(status_data.status.lower())
+    except ValueError:
+        raise HTTPException(
+            status_code=400, detail=f"Status inválido: {status_data.status}"
+        )
+
+    allowed = VALID_TRANSITIONS.get(existing_order.status, set())
+    if target_status not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Transição inválida: {existing_order.status.value} → {target_status.value}",
+        )
+
+    # 3. Atualização do Status do Pedido
     updated_order = await crud.update_order_status_by_id(
         session, order_id=order_id, new_status=status_data.status
     )
