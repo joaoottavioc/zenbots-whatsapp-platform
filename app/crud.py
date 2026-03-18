@@ -394,7 +394,7 @@ async def find_unavailable_products(
 ) -> List[Product]:
     """
     Check if any of the searched items match products that exist but are unavailable.
-    Searches by name and keywords with apostrophe-normalized ILIKE (lightweight — no embedding).
+    Searches by name ILIKE (apostrophe-normalized), keywords ILIKE, and embedding similarity.
     """
     if not extracted_items:
         return []
@@ -408,7 +408,7 @@ async def find_unavailable_products(
         clean_name = item_name.replace("'", "").replace("\u2019", "")
         escaped = escape_ilike(clean_name)
 
-        # Name search (apostrophe-normalized)
+        # 1. Name search (apostrophe-normalized)
         name_query = (
             select(Product)
             .where(
@@ -423,7 +423,7 @@ async def find_unavailable_products(
             if p.id not in results_map:
                 results_map[p.id] = p
 
-        # Keywords search (apostrophe-normalized)
+        # 2. Keywords search (apostrophe-normalized)
         kw_query = (
             select(Product)
             .where(
@@ -439,6 +439,27 @@ async def find_unavailable_products(
         for p in (await session.execute(kw_query)).scalars().all():
             if p.id not in results_map:
                 results_map[p.id] = p
+
+        # 3. Embedding search (handles typos like "johs" → "john's")
+        if not results_map:
+            text_to_embed = f"PRODUTO PRINCIPAL: {item_name}"
+            embeddings = await embed_async(
+                [text_to_embed], space="products", normalize=False
+            )
+            query_embedding = embeddings[0]
+            emb_query = (
+                select(Product)
+                .where(
+                    Product.bot_id == bot_id,
+                    Product.is_available == False,
+                    Product.is_deleted == False,
+                )
+                .order_by(Product.embedding.cosine_distance(query_embedding))
+                .limit(limit)
+            )
+            for p in (await session.execute(emb_query)).scalars().all():
+                if p.id not in results_map:
+                    results_map[p.id] = p
 
     return list(results_map.values())
 

@@ -838,7 +838,10 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
             ):
                 eta_minutes = bot.default_pickup_time_minutes
             if eta_minutes:
-                response += f"\n\n⏱️ Previsão: ~{eta_minutes} minutos"
+                if cart.delivery_method == DeliveryMethod.DELIVERY:
+                    response += f"\n\n⏱️ Estimativa de tempo para entrega: ~{eta_minutes} minutos"
+                else:
+                    response += f"\n\n⏱️ Estimativa de tempo para ficar pronto: ~{eta_minutes} minutos"
 
             display_items = [f"{i.quantity}x {i.product.name}" for i in cart.items]
             # Capture ORM values before commit expires all objects
@@ -973,7 +976,25 @@ async def _handle_confirm_negate(
     elif cart.state in [CartState.GREETING, CartState.SHOPPING]:
         if intent == "CONFIRM":
             if getattr(cart, "last_suggestions", None):
-                response = "Qual deles você quer? Responda com o *número*! 😊"
+                # Show alternatives as a numbered list
+                sug_res = await session.execute(
+                    select(Product).where(
+                        Product.id.in_(cart.last_suggestions),
+                        Product.is_deleted == False,
+                        Product.is_available == True,
+                    )
+                )
+                sug_map = {p.id: p for p in sug_res.scalars().all()}
+                sug_prods = [
+                    sug_map[sid] for sid in cart.last_suggestions if sid in sug_map
+                ]
+                if sug_prods:
+                    response = _format_product_suggestions_message(
+                        sug_prods, "Aqui estão as opções disponíveis:"
+                    )
+                else:
+                    cart.last_suggestions = None
+                    response = "Perfeito! Mais alguma coisa? 😊"
             else:
                 response = "Perfeito! Mais alguma coisa? 😊"
         else:
@@ -1196,6 +1217,22 @@ async def _handle_shopping_intent(
                 found_products, title
             )
             cart.last_suggestions = [p.id for p in found_products]
+            # If only 1 suggestion, set pending action so "pode ser" adds it
+            if len(found_products) == 1:
+                save_pending(
+                    cart,
+                    "add_items_to_cart",
+                    {
+                        "items": [
+                            {
+                                "product_id": found_products[0].id,
+                                "quantity": 1,
+                                "product_name": found_products[0].name,
+                            }
+                        ]
+                    },
+                    f"Sugestão: {found_products[0].name}",
+                )
 
     else:
         # ADD / REMOVE / MODIFY
@@ -1226,25 +1263,56 @@ async def _handle_shopping_intent(
                 unavailable_matches = unavailable_candidates
             else:
                 # Available products found — compare name similarity to decide
-                # if the customer wanted the unavailable product instead
+                # if the customer wanted the unavailable product instead.
+                # Use extracted search terms (not full message) for fair comparison,
+                # and strip apostrophes so "johns bacon" vs "john's bacon" scores high.
                 from difflib import SequenceMatcher
 
-                query_norm = text_body.lower().strip()
-                best_unavail = max(
-                    unavailable_candidates,
-                    key=lambda p: SequenceMatcher(
-                        None, query_norm, p.name.lower()
-                    ).ratio(),
-                )
-                unavail_score = SequenceMatcher(
-                    None, query_norm, best_unavail.name.lower()
-                ).ratio()
-                best_avail_score = max(
-                    SequenceMatcher(None, query_norm, p.name.lower()).ratio()
-                    for p in found_products
-                )
-                if unavail_score > best_avail_score:
-                    unavailable_matches = [best_unavail]
+                def _norm(s: str) -> str:
+                    return s.lower().replace("'", "").replace("\u2019", "").strip()
+
+                for term in search_terms:
+                    term_norm = _norm(term)
+                    best_unavail = max(
+                        unavailable_candidates,
+                        key=lambda p: SequenceMatcher(
+                            None, term_norm, _norm(p.name)
+                        ).ratio(),
+                    )
+                    unavail_score = SequenceMatcher(
+                        None, term_norm, _norm(best_unavail.name)
+                    ).ratio()
+                    best_avail_score = max(
+                        SequenceMatcher(None, term_norm, _norm(p.name)).ratio()
+                        for p in found_products
+                    )
+                    if unavail_score > best_avail_score:
+                        unavailable_matches = [best_unavail]
+                        # Fetch alternatives from SAME CATEGORY directly from DB
+                        # (don't rely on search results which may be all addons)
+                        if best_unavail.category:
+                            alt_query = (
+                                select(Product)
+                                .where(
+                                    Product.bot_id == bot.id,
+                                    Product.is_available == True,
+                                    Product.is_deleted == False,
+                                    Product.category == best_unavail.category,
+                                    Product.id != best_unavail.id,
+                                )
+                                .limit(5)
+                            )
+                            alt_res = await session.execute(alt_query)
+                            alternatives = list(alt_res.scalars().all())
+                        else:
+                            alternatives = []
+
+                        if alternatives:
+                            cart.last_suggestions = [p.id for p in alternatives]
+                        # No pending action — "sim" should show alternatives
+                        # as a numbered list, not auto-add
+                        clear_pending(cart)
+                        break
 
         prompt = create_central_prompt(
             user_query=text_body,
@@ -1610,6 +1678,132 @@ async def _process_contact_message(
             await session.commit()
 
 
+async def _handle_suggestion_selection(mctx: MessageContext) -> str | None:
+    """Handle when user selects from last_suggestions (number, name fragment, or confirm).
+    Returns response string if handled, None to fall through to normal flow."""
+    cart, session, bot = mctx.cart, mctx.session, mctx.bot
+    text = mctx.text_body.strip()
+
+    if not cart.last_suggestions:
+        return None
+
+    # Don't intercept NEW product requests — clear stale suggestions instead
+    _ordering_verbs = [
+        "quero",
+        "vou querer",
+        "adiciona",
+        "me ve",
+        "me vê",
+        "bota",
+        "coloca",
+        "manda",
+        "também",
+        "mais um",
+        "mais uma",
+    ]
+    text_lower = text.lower()
+    if any(verb in text_lower for verb in _ordering_verbs):
+        cart.last_suggestions = None
+        clear_pending(cart)
+        return None
+
+    # Only intercept short messages (selections, not full product orders)
+    if len(text) > 60:
+        return None
+
+    # Load suggested products
+    sug_res = await session.execute(
+        select(Product).where(
+            Product.id.in_(cart.last_suggestions),
+            Product.is_deleted == False,
+            Product.is_available == True,
+        )
+    )
+    sug_map = {p.id: p for p in sug_res.scalars().all()}
+    suggestions = [sug_map[sid] for sid in cart.last_suggestions if sid in sug_map]
+
+    if not suggestions:
+        cart.last_suggestions = None
+        return None
+
+    selected = None
+
+    # 1. Check for number or ordinal reference
+    _ORDINALS = {
+        "primeiro": 0,
+        "primeira": 0,
+        "segundo": 1,
+        "segunda": 1,
+        "terceiro": 2,
+        "terceira": 2,
+        "quarto": 3,
+        "quarta": 3,
+        "quinto": 4,
+        "quinta": 4,
+    }
+    text_lower_sel = text.lower()
+    for word, idx in _ORDINALS.items():
+        if word in text_lower_sel and 0 <= idx < len(suggestions):
+            selected = suggestions[idx]
+            break
+
+    if not selected:
+        digit_match = re.search(r"\b(\d{1,2})\b", text)
+        if digit_match:
+            idx = int(digit_match.group(1)) - 1
+            if 0 <= idx < len(suggestions):
+                selected = suggestions[idx]
+
+    # 2. Score each suggestion by word overlap with the message.
+    #    "sim quero um johns frango" shares 2 words with "John's Frango com Calabresa"
+    #    but only 1 word with plain "Frango" → picks the right product.
+    if not selected:
+        text_norm = text.lower().replace("'", "").replace("\u2019", "")
+        msg_words = {w for w in text_norm.split() if len(w) > 3}
+
+        if msg_words:
+            best_match = None
+            best_score = 0
+            for p in suggestions:
+                name_norm = p.name.lower().replace("'", "").replace("\u2019", "")
+                name_words = {w for w in name_norm.split() if len(w) > 3}
+                score = len(msg_words & name_words)
+                if score > best_score:
+                    best_score = score
+                    best_match = p
+            if best_score >= 1 and best_match:
+                selected = best_match
+
+    if not selected:
+        return None
+
+    # Add the selected product to cart
+    skipped: list[str] = []
+    await crud.add_items_to_db_cart(
+        session,
+        cart.id,
+        [{"product_id": selected.id, "quantity": 1, "product_name": selected.name}],
+        bot_id=bot.id,
+        skipped_items=skipped,
+    )
+    await _load_cart_items_with_products(cart, session)
+    cart.last_suggestions = None
+    clear_pending(cart)
+
+    if not cart.items:
+        return f"*{selected.name}* não está disponível no momento. 😕 O que mais posso ajudar?"
+
+    cart.state = CartState.SHOPPING
+    response = (
+        _build_cart_summary_message(cart, bot, "✅")
+        + "\n\nAdicionado! Mais alguma coisa? 😊"
+    )
+    if skipped:
+        names = ", ".join(skipped)
+        response += f"\n\n⚠️ Indisponível no momento: {names}"
+    return response
+
+
 async def _handle_order_cancel(mctx: MessageContext) -> str:
     """F-17: Handle customer-initiated order cancellation via WhatsApp."""
     session, bot, contact = mctx.session, mctx.bot, mctx.contact
@@ -1740,6 +1934,25 @@ async def _process_contact_message_inner(
         )
         logger.info("[GREETING] Cart %s state updated to SHOPPING", cart.id)
         return
+
+    # Handle suggestion selection (number, name, or confirm) BEFORE checkout FSM
+    if cart.state in [CartState.GREETING, CartState.SHOPPING] and cart.last_suggestions:
+        sug_result = await _handle_suggestion_selection(mctx)
+        if sug_result is not None:
+            cart.last_activity_at = utcnow()
+            session.add(cart)
+            await session.flush()
+            await send_whatsapp_message(
+                contact_number,
+                sug_result,
+                token=current_token,
+                phone_id=current_phone_id,
+            )
+            await crud.add_interaction_to_history(
+                session, bot.id, contact_number, text_body, sug_result
+            )
+            await session.commit()
+            return
 
     # A lógica de reset de estado continua a mesma, mas agora só será
     # acionada por intenções de compra genuínas.
@@ -2258,11 +2471,28 @@ async def _execute_pending_action(
                 text = _format_product_suggestions_message(
                     prods, "Encontrei essas opções para você:"
                 )
+                # If only 1 suggestion, set pending action so "pode ser" adds it
+                if len(prods) == 1:
+                    save_pending(
+                        cart,
+                        "add_items_to_cart",
+                        {
+                            "items": [
+                                {
+                                    "product_id": prods[0].id,
+                                    "quantity": 1,
+                                    "product_name": prods[0].name,
+                                }
+                            ]
+                        },
+                        f"Sugestão: {prods[0].name}",
+                    )
             else:
+                clear_pending(cart)
                 text = "Posso sugerir algumas opções, se quiser."
         else:
+            clear_pending(cart)
             text = "Posso sugerir algumas opções, se quiser."
-        clear_pending(cart)
         return text
 
     clear_pending(cart)

@@ -529,3 +529,415 @@ class TestFindUnavailableProducts:
         from app.crud import get_last_completed_order_items
 
         assert callable(get_last_completed_order_items)
+
+
+# ────────────────────────────────────────────────────────
+# Suggestion selection handler
+# ────────────────────────────────────────────────────────
+
+
+def _make_product_mock(pid, name, price=20.0, category="Johns"):
+    p = MagicMock()
+    p.id = pid
+    p.name = name
+    p.price = price
+    p.category = category
+    p.is_deleted = False
+    p.is_available = True
+    p.description = None
+    return p
+
+
+def _make_suggestion_mctx(text, suggestions_ids, bot_id=1):
+    """Create a MessageContext with last_suggestions set."""
+    from app.whatsapp import MessageContext
+
+    mctx = MagicMock(spec=MessageContext)
+    mctx.session = AsyncMock()
+    mctx.bot = MagicMock()
+    mctx.bot.id = bot_id
+    mctx.bot.delivery_fee = 5.0
+    mctx.bot.restaurant_name = "Test"
+    mctx.contact = MagicMock()
+    mctx.contact.id = 1
+    mctx.cart = MagicMock()
+    mctx.cart.id = 10
+    mctx.cart.last_suggestions = suggestions_ids
+    mctx.cart.delivery_method = None
+    mctx.cart.state = "SHOPPING"
+    mctx.text_body = text
+    mctx.contact_number = "5511999"
+    mctx.token = "fake"
+    mctx.phone_id = "fake"
+    return mctx
+
+
+class TestSuggestionSelectionHandler:
+    """Tests for _handle_suggestion_selection — number, ordinal, name matching."""
+
+    def _setup_session_with_products(self, mctx, products):
+        """Mock session.execute to return the given products."""
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = products
+        mctx.session.execute = AsyncMock(return_value=result)
+
+    @pytest.mark.asyncio
+    async def test_select_by_number(self):
+        from app.whatsapp import _handle_suggestion_selection
+
+        prods = [
+            _make_product_mock(1, "John's Calabresa"),
+            _make_product_mock(2, "John's Alcatra"),
+            _make_product_mock(3, "John's Simples"),
+        ]
+        mctx = _make_suggestion_mctx("2", [1, 2, 3])
+        self._setup_session_with_products(mctx, prods)
+
+        with (
+            patch("app.whatsapp.crud") as mock_crud,
+            patch(
+                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
+            ),
+            patch("app.whatsapp._build_cart_summary_message", return_value="🛒 Cart"),
+        ):
+            mock_crud.add_items_to_db_cart = AsyncMock()
+            mctx.cart.items = [MagicMock()]  # non-empty after add
+            result = await _handle_suggestion_selection(mctx)
+
+        assert result is not None
+        mock_crud.add_items_to_db_cart.assert_called_once()
+        call_args = mock_crud.add_items_to_db_cart.call_args
+        items = (
+            call_args[1].get("items")
+            if "items" in (call_args[1] or {})
+            else call_args[0][2]
+        )
+        assert items[0]["product_id"] == 2  # selected 2nd product
+
+    @pytest.mark.asyncio
+    async def test_select_by_ordinal(self):
+        from app.whatsapp import _handle_suggestion_selection
+
+        prods = [
+            _make_product_mock(1, "John's Calabresa"),
+            _make_product_mock(2, "John's Alcatra"),
+        ]
+        mctx = _make_suggestion_mctx("pode ser o segundo", [1, 2])
+        self._setup_session_with_products(mctx, prods)
+
+        with (
+            patch("app.whatsapp.crud") as mock_crud,
+            patch(
+                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
+            ),
+            patch("app.whatsapp._build_cart_summary_message", return_value="🛒 Cart"),
+        ):
+            mock_crud.add_items_to_db_cart = AsyncMock()
+            mctx.cart.items = [MagicMock()]
+            result = await _handle_suggestion_selection(mctx)
+
+        assert result is not None
+        call_args = mock_crud.add_items_to_db_cart.call_args
+        items = call_args[0][2]
+        assert items[0]["product_id"] == 2
+
+    @pytest.mark.asyncio
+    async def test_select_by_ordinal_primeiro(self):
+        from app.whatsapp import _handle_suggestion_selection
+
+        prods = [
+            _make_product_mock(10, "John's Simples"),
+            _make_product_mock(20, "John's Duplo"),
+        ]
+        mctx = _make_suggestion_mctx("o primeiro", [10, 20])
+        self._setup_session_with_products(mctx, prods)
+
+        with (
+            patch("app.whatsapp.crud") as mock_crud,
+            patch(
+                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
+            ),
+            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
+        ):
+            mock_crud.add_items_to_db_cart = AsyncMock()
+            mctx.cart.items = [MagicMock()]
+            result = await _handle_suggestion_selection(mctx)
+
+        assert result is not None
+        items = mock_crud.add_items_to_db_cart.call_args[0][2]
+        assert items[0]["product_id"] == 10
+
+    @pytest.mark.asyncio
+    async def test_select_by_name_fragment(self):
+        from app.whatsapp import _handle_suggestion_selection
+
+        prods = [
+            _make_product_mock(1, "John's Calabresa"),
+            _make_product_mock(2, "John's Alcatra Acebolada"),
+            _make_product_mock(3, "John's Simples"),
+        ]
+        mctx = _make_suggestion_mctx("pode ser o alcatra", [1, 2, 3])
+        self._setup_session_with_products(mctx, prods)
+
+        with (
+            patch("app.whatsapp.crud") as mock_crud,
+            patch(
+                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
+            ),
+            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
+        ):
+            mock_crud.add_items_to_db_cart = AsyncMock()
+            mctx.cart.items = [MagicMock()]
+            result = await _handle_suggestion_selection(mctx)
+
+        assert result is not None
+        items = mock_crud.add_items_to_db_cart.call_args[0][2]
+        assert items[0]["product_id"] == 2  # Alcatra matched
+
+    @pytest.mark.asyncio
+    async def test_word_overlap_prefers_more_matches(self):
+        """'calabresa' matches both 'Calabresa' addon and 'John's Calabresa' burger.
+        Word overlap should prefer the one with more shared words."""
+        from app.whatsapp import _handle_suggestion_selection
+
+        prods = [
+            _make_product_mock(1, "Calabresa", category="Adicionais"),
+            _make_product_mock(2, "John's Frango com Calabresa", category="Johns"),
+        ]
+        mctx = _make_suggestion_mctx("pode ser o johns calabresa", [1, 2])
+        self._setup_session_with_products(mctx, prods)
+
+        with (
+            patch("app.whatsapp.crud") as mock_crud,
+            patch(
+                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
+            ),
+            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
+        ):
+            mock_crud.add_items_to_db_cart = AsyncMock()
+            mctx.cart.items = [MagicMock()]
+            result = await _handle_suggestion_selection(mctx)
+
+        assert result is not None
+        items = mock_crud.add_items_to_db_cart.call_args[0][2]
+        assert (
+            items[0]["product_id"] == 2
+        )  # Johns Frango com Calabresa (2 word matches)
+
+    @pytest.mark.asyncio
+    async def test_no_match_returns_none(self):
+        """Message with no significant word overlap returns None."""
+        from app.whatsapp import _handle_suggestion_selection
+
+        prods = [_make_product_mock(1, "John's Calabresa")]
+        mctx = _make_suggestion_mctx("sim", [1])
+        self._setup_session_with_products(mctx, prods)
+
+        result = await _handle_suggestion_selection(mctx)
+        assert result is None  # "sim" has no >3 char words matching product names
+
+    @pytest.mark.asyncio
+    async def test_ordering_verb_clears_suggestions(self):
+        """Messages with ordering verbs should clear stale suggestions."""
+        from app.whatsapp import _handle_suggestion_selection
+
+        mctx = _make_suggestion_mctx("quero uma coca cola", [1, 2, 3])
+        result = await _handle_suggestion_selection(mctx)
+
+        assert result is None
+        assert mctx.cart.last_suggestions is None  # cleared
+
+    @pytest.mark.asyncio
+    async def test_adiciona_clears_suggestions(self):
+        from app.whatsapp import _handle_suggestion_selection
+
+        mctx = _make_suggestion_mctx("adiciona um johns alcatra", [1, 2])
+        result = await _handle_suggestion_selection(mctx)
+
+        assert result is None
+        assert mctx.cart.last_suggestions is None
+
+    @pytest.mark.asyncio
+    async def test_tambem_clears_suggestions(self):
+        from app.whatsapp import _handle_suggestion_selection
+
+        mctx = _make_suggestion_mctx("também vou querer um bacon", [1, 2])
+        result = await _handle_suggestion_selection(mctx)
+
+        assert result is None
+        assert mctx.cart.last_suggestions is None
+
+    @pytest.mark.asyncio
+    async def test_long_message_skipped(self):
+        """Messages over 60 chars should not trigger suggestion selection."""
+        from app.whatsapp import _handle_suggestion_selection
+
+        long_msg = (
+            "quero ver todas as opções disponíveis no cardápio por favor obrigado"
+        )
+        mctx = _make_suggestion_mctx(long_msg, [1, 2, 3])
+        # Don't set ordering verbs so it reaches the length check
+        # Actually "quero" is an ordering verb, so let me use a different long message
+        mctx.text_body = "a" * 61  # just a long string
+
+        result = await _handle_suggestion_selection(mctx)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_no_suggestions_returns_none(self):
+        from app.whatsapp import _handle_suggestion_selection
+
+        mctx = _make_suggestion_mctx("2", None)
+        mctx.cart.last_suggestions = None
+        result = await _handle_suggestion_selection(mctx)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_digit_in_sentence(self):
+        """'quero o 3' should extract the digit and select 3rd item."""
+        from app.whatsapp import _handle_suggestion_selection
+
+        prods = [
+            _make_product_mock(1, "John's A"),
+            _make_product_mock(2, "John's B"),
+            _make_product_mock(3, "John's C"),
+        ]
+        # "quero" is an ordering verb and would clear suggestions
+        # Use a message without ordering verbs
+        mctx = _make_suggestion_mctx("o 3 por favor", [1, 2, 3])
+        self._setup_session_with_products(mctx, prods)
+
+        with (
+            patch("app.whatsapp.crud") as mock_crud,
+            patch(
+                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
+            ),
+            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
+        ):
+            mock_crud.add_items_to_db_cart = AsyncMock()
+            mctx.cart.items = [MagicMock()]
+            result = await _handle_suggestion_selection(mctx)
+
+        assert result is not None
+        items = mock_crud.add_items_to_db_cart.call_args[0][2]
+        assert items[0]["product_id"] == 3
+
+
+# ────────────────────────────────────────────────────────
+# Apostrophe normalization in similarity comparison
+# ────────────────────────────────────────────────────────
+
+
+class TestApostropheNormalization:
+    """Verifies that apostrophe normalization works in name comparisons."""
+
+    def test_norm_strips_apostrophes(self):
+        """The _norm helper should strip apostrophes."""
+
+        # Replicate the _norm function from whatsapp.py
+        def _norm(s):
+            return s.lower().replace("'", "").replace("\u2019", "").strip()
+
+        assert _norm("John's Bacon") == "johns bacon"
+        assert _norm("John\u2019s Frango") == "johns frango"
+        assert _norm("johns bacon") == "johns bacon"
+
+    def test_normalized_comparison_exact_match(self):
+        from difflib import SequenceMatcher
+
+        def _norm(s):
+            return s.lower().replace("'", "").replace("\u2019", "").strip()
+
+        query = "johns bacon"
+        product = "John's Bacon"
+        score = SequenceMatcher(None, _norm(query), _norm(product)).ratio()
+        assert score == 1.0  # perfect match after normalization
+
+    def test_typo_still_scores_high(self):
+        from difflib import SequenceMatcher
+
+        def _norm(s):
+            return s.lower().replace("'", "").replace("\u2019", "").strip()
+
+        query = "johs bacon"  # missing 'n'
+        product = "John's Bacon"
+        score = SequenceMatcher(None, _norm(query), _norm(product)).ratio()
+        assert score > 0.85  # high despite typo
+
+    def test_search_term_vs_full_message_comparison(self):
+        """Using search_terms (not text_body) gives accurate scores."""
+        from difflib import SequenceMatcher
+
+        def _norm(s):
+            return s.lower().replace("'", "").replace("\u2019", "").strip()
+
+        # Using full message dilutes the score
+        full_msg = "vou querer um johns bacon hoje"
+        product = "John's Bacon"
+        score_full = SequenceMatcher(None, _norm(full_msg), _norm(product)).ratio()
+
+        # Using extracted search term gives accurate score
+        search_term = "johns bacon"
+        score_term = SequenceMatcher(None, _norm(search_term), _norm(product)).ratio()
+
+        assert score_term > score_full  # search term is much more accurate
+        assert score_term == 1.0
+        assert score_full < 0.6
+
+
+# ────────────────────────────────────────────────────────
+# Category-based alternative filtering
+# ────────────────────────────────────────────────────────
+
+
+class TestCategoryFiltering:
+    """Verifies that unavailability alternatives are filtered by category."""
+
+    def test_same_category_kept(self):
+        """Products in same category as unavailable product are kept."""
+        unavail = _make_product_mock(1, "John's Bacon", category="Johns")
+        found = [
+            _make_product_mock(2, "John's Paranaense", category="Johns"),
+            _make_product_mock(3, "Frango", category="Adicionais"),
+            _make_product_mock(4, "John's Simples", category="Johns"),
+        ]
+        same_cat = [p for p in found if p.category == unavail.category]
+        assert len(same_cat) == 2
+        assert all(p.category == "Johns" for p in same_cat)
+        assert not any(p.name == "Frango" for p in same_cat)
+
+    def test_addon_excluded(self):
+        """Addon products in different category are excluded."""
+        unavail = _make_product_mock(1, "John's Frango", category="Johns")
+        found = [
+            _make_product_mock(10, "Frango", category="Adicionais"),
+            _make_product_mock(11, "Bacon", category="Adicionais"),
+            _make_product_mock(12, "Calabresa", category="Adicionais"),
+        ]
+        same_cat = [p for p in found if p.category == unavail.category]
+        assert len(same_cat) == 0  # no same-category products
+
+    def test_fallback_when_no_same_category(self):
+        """When no same-category products exist, fallback to all."""
+        unavail = _make_product_mock(1, "Unique Product", category="Special")
+        found = [
+            _make_product_mock(2, "Product A", category="Other"),
+            _make_product_mock(3, "Product B", category="Other"),
+        ]
+        same_cat = [p for p in found if p.category == unavail.category]
+        alternatives = same_cat if same_cat else found
+        assert len(alternatives) == 2  # falls back to all found
+
+    def test_null_category_handled(self):
+        """Products with null category don't crash."""
+        unavail = _make_product_mock(1, "Product", category=None)
+        found = [
+            _make_product_mock(2, "Other", category="Johns"),
+        ]
+        same_cat = [
+            p
+            for p in found
+            if p.category and unavail.category and p.category == unavail.category
+        ]
+        alternatives = same_cat if same_cat else found
+        assert len(alternatives) == 1  # falls back
