@@ -111,8 +111,16 @@ class TestOrderStatusTransitionGuards:
         base = {
             OrderStatus.PENDING: {OrderStatus.PAID, OrderStatus.CANCELED},
             OrderStatus.PAID: {OrderStatus.PREPARING, OrderStatus.CANCELED},
-            OrderStatus.PREPARING: {OrderStatus.READY, OrderStatus.CANCELED, OrderStatus.PAID},
-            OrderStatus.READY: {OrderStatus.COMPLETED, OrderStatus.CANCELED, OrderStatus.PREPARING},
+            OrderStatus.PREPARING: {
+                OrderStatus.READY,
+                OrderStatus.CANCELED,
+                OrderStatus.PAID,
+            },
+            OrderStatus.READY: {
+                OrderStatus.COMPLETED,
+                OrderStatus.CANCELED,
+                OrderStatus.PREPARING,
+            },
             OrderStatus.COMPLETED: set(),
             OrderStatus.CANCELED: set(),
             OrderStatus.FAILED: set(),
@@ -129,10 +137,14 @@ class TestOrderStatusTransitionGuards:
         # Apply non-PIX overrides (same as backend)
         non_pix = dict(base)
         non_pix[OrderStatus.PENDING] = {
-            OrderStatus.PAID, OrderStatus.PREPARING, OrderStatus.CANCELED
+            OrderStatus.PAID,
+            OrderStatus.PREPARING,
+            OrderStatus.CANCELED,
         }
         non_pix[OrderStatus.PREPARING] = {
-            OrderStatus.PENDING, OrderStatus.READY, OrderStatus.CANCELED
+            OrderStatus.PENDING,
+            OrderStatus.READY,
+            OrderStatus.CANCELED,
         }
 
         for status, allowed in non_pix.items():
@@ -174,9 +186,7 @@ class TestAntiHallucinationGuardrail:
             cart_items=[],
             search_results=[],
         )
-        all_text = " ".join(
-            msg.get("content", "") or "" for msg in prompt
-        ).lower()
+        all_text = " ".join(msg.get("content", "") or "" for msg in prompt).lower()
         assert "hot dog mexicano" not in all_text
 
     def test_prompt_example_uses_x_tudo(self):
@@ -258,7 +268,12 @@ class TestAntiHallucinationGuardrail:
         unavailable_matches = []
         cart_tool_processed = False
 
-        for intent in ("GREETING_OR_QUESTION", "SHOW_CART", "REQUEST_SUGGESTION", "CONFIRM"):
+        for intent in (
+            "GREETING_OR_QUESTION",
+            "SHOW_CART",
+            "REQUEST_SUGGESTION",
+            "CONFIRM",
+        ):
             should_override = (
                 not cart_tool_processed
                 and not found_products
@@ -989,7 +1004,10 @@ class TestSuggestionSelectionHandler:
         """'pode ser' should not clear suggestions — CONFIRM handler needs them."""
         from app.whatsapp import _handle_suggestion_selection
 
-        prods = [_make_product_mock(1, "John's Calabresa"), _make_product_mock(2, "John's Simples")]
+        prods = [
+            _make_product_mock(1, "John's Calabresa"),
+            _make_product_mock(2, "John's Simples"),
+        ]
         mctx = _make_suggestion_mctx("pode ser", [1, 2])
         self._setup_session_with_products(mctx, prods)
         result = await _handle_suggestion_selection(mctx)
@@ -1201,7 +1219,9 @@ class TestMultiSelection:
 
         with (
             patch("app.whatsapp.crud") as mock_crud,
-            patch("app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock),
+            patch(
+                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
+            ),
             patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
         ):
             mock_crud.add_items_to_db_cart = AsyncMock()
@@ -1230,7 +1250,9 @@ class TestMultiSelection:
 
         with (
             patch("app.whatsapp.crud") as mock_crud,
-            patch("app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock),
+            patch(
+                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
+            ),
             patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
         ):
             mock_crud.add_items_to_db_cart = AsyncMock()
@@ -1259,7 +1281,9 @@ class TestMultiSelection:
 
         with (
             patch("app.whatsapp.crud") as mock_crud,
-            patch("app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock),
+            patch(
+                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
+            ),
             patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
         ):
             mock_crud.add_items_to_db_cart = AsyncMock()
@@ -1285,7 +1309,9 @@ class TestMultiSelection:
 
         with (
             patch("app.whatsapp.crud") as mock_crud,
-            patch("app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock),
+            patch(
+                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
+            ),
             patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
         ):
             mock_crud.add_items_to_db_cart = AsyncMock()
@@ -1304,6 +1330,7 @@ class TestPluralStemming:
 
     def test_stem_simple_plural(self):
         """'paranaenses' → 'paranaense'."""
+
         # The stem logic strips trailing 's' for words > 4 chars
         def _stem(w):
             if len(w) > 4 and w.endswith("s"):
@@ -1316,6 +1343,7 @@ class TestPluralStemming:
 
     def test_stem_preserves_short_words(self):
         """Short words are not stemmed."""
+
         def _stem(w):
             if len(w) > 4 and w.endswith("s"):
                 return w[:-1]
@@ -1326,6 +1354,7 @@ class TestPluralStemming:
 
     def test_stem_preserves_non_s_endings(self):
         """Words not ending in 's' are unchanged."""
+
         def _stem(w):
             if len(w) > 4 and w.endswith("s"):
                 return w[:-1]
@@ -1343,7 +1372,9 @@ class TestMealSuggestionFilter:
         from app.whatsapp import _filter_meal_suggestions
 
         products = [
-            _make_product_mock(1, "John's Simples", price=16.0, category="John's Tradicionais"),
+            _make_product_mock(
+                1, "John's Simples", price=16.0, category="John's Tradicionais"
+            ),
             _make_product_mock(2, "Bacon", price=10.0, category="Adicionais"),
             _make_product_mock(3, "Coca-Cola", price=8.0, category="Bebidas"),
         ]
@@ -1357,7 +1388,9 @@ class TestMealSuggestionFilter:
         products = [
             _make_product_mock(1, "Heineken", price=10.0, category="Cervejas"),
             _make_product_mock(2, "Fanta", price=7.0, category="Bebidas"),
-            _make_product_mock(3, "John's Paranaense", price=45.0, category="John's Especiais"),
+            _make_product_mock(
+                3, "John's Paranaense", price=45.0, category="John's Especiais"
+            ),
         ]
         filtered = _filter_meal_suggestions(products)
         assert len(filtered) == 1
@@ -1409,7 +1442,9 @@ class TestResolveIntentFixes:
         cart.state = CartState.SHOPPING
         cart.items = []
 
-        with patch("app.whatsapp.semantic_intent", new_callable=AsyncMock) as mock_router:
+        with patch(
+            "app.whatsapp.semantic_intent", new_callable=AsyncMock
+        ) as mock_router:
             mock_router.return_value = ("FINISH_ORDER", 0.40, "matched")
             intent = await resolve_intent("to com fome demais", cart, [])
 
@@ -1425,7 +1460,9 @@ class TestResolveIntentFixes:
         cart.state = CartState.SHOPPING
         cart.items = []
 
-        with patch("app.whatsapp.semantic_intent", new_callable=AsyncMock) as mock_router:
+        with patch(
+            "app.whatsapp.semantic_intent", new_callable=AsyncMock
+        ) as mock_router:
             # 0.65 is above 0.78 * 0.75 = 0.585 (moderate) but below 0.78 (confident)
             mock_router.return_value = ("FINISH_ORDER", 0.65, "matched")
             intent = await resolve_intent("o que tem de bom hoje", cart, [])
@@ -1442,7 +1479,9 @@ class TestResolveIntentFixes:
         cart.state = CartState.SHOPPING
         cart.items = []
 
-        with patch("app.whatsapp.semantic_intent", new_callable=AsyncMock) as mock_router:
+        with patch(
+            "app.whatsapp.semantic_intent", new_callable=AsyncMock
+        ) as mock_router:
             mock_router.return_value = ("FINISH_ORDER", 0.85, "matched")
             intent = await resolve_intent("só isso mesmo", cart, [])
 
@@ -1458,7 +1497,9 @@ class TestResolveIntentFixes:
         cart.state = CartState.SHOPPING
         cart.items = []
 
-        with patch("app.whatsapp.semantic_intent", new_callable=AsyncMock) as mock_router:
+        with patch(
+            "app.whatsapp.semantic_intent", new_callable=AsyncMock
+        ) as mock_router:
             mock_router.return_value = ("CONFIRM", 0.70, "matched")
             intent = await resolve_intent("sim", cart, [])
 
@@ -1541,7 +1582,9 @@ class TestHandleFinishOrderNoDoubleMessage:
         mctx.token = "fake"
         mctx.phone_id = "fake"
 
-        with patch("app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock):
+        with patch(
+            "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
+        ):
             result = await _handle_finish_order(mctx, "FINISH_ORDER")
 
         assert result == "Seu carrinho está vazio. 🛒 Me diga o que quer pedir!"
@@ -1603,11 +1646,23 @@ class TestOptionCIntentGuard:
 
     _SHOPPING_INTENTS = {"ADD", "ADD_ITEMS", "MODIFY", "REMOVE", "REQUEST_SUGGESTION"}
 
-    @pytest.mark.parametrize("intent", ["ADD", "ADD_ITEMS", "MODIFY", "REMOVE", "REQUEST_SUGGESTION"])
+    @pytest.mark.parametrize(
+        "intent", ["ADD", "ADD_ITEMS", "MODIFY", "REMOVE", "REQUEST_SUGGESTION"]
+    )
     def test_shopping_intents_trigger_override(self, intent):
         assert intent in self._SHOPPING_INTENTS
 
-    @pytest.mark.parametrize("intent", ["GREETING_OR_QUESTION", "CONFIRM", "NEGATE", "FINISH_ORDER", "CLEAR_CART", "SHOW_CART"])
+    @pytest.mark.parametrize(
+        "intent",
+        [
+            "GREETING_OR_QUESTION",
+            "CONFIRM",
+            "NEGATE",
+            "FINISH_ORDER",
+            "CLEAR_CART",
+            "SHOW_CART",
+        ],
+    )
     def test_non_shopping_intents_do_not_trigger(self, intent):
         assert intent not in self._SHOPPING_INTENTS
 
@@ -1693,9 +1748,12 @@ class TestCosineThreshold:
         with open("app/crud.py", encoding="utf-8") as f:
             source = f.read()
         # Find the find_unavailable_products function
-        unavail_section = source[source.index("def find_unavailable_products"):]
+        unavail_section = source[source.index("def find_unavailable_products") :]
         # It should NOT contain _EMBEDDING_MAX_DISTANCE in a WHERE clause
-        assert "cosine_distance(query_embedding) < _EMBEDDING_MAX_DISTANCE" not in unavail_section
+        assert (
+            "cosine_distance(query_embedding) < _EMBEDDING_MAX_DISTANCE"
+            not in unavail_section
+        )
 
 
 # ────────────────────────────────────────────────────────
@@ -1712,9 +1770,10 @@ class TestSuggestionsAlwaysFilterAvailable:
             source = f.read()
 
         suggestion_sets = [
-            i for i, line in enumerate(source.split("\n"))
+            i
+            for i, line in enumerate(source.split("\n"))
             if "last_suggestions = [p.id for p in" in line
-                or "last_suggestions = [p.id" in line
+            or "last_suggestions = [p.id" in line
         ]
         assert len(suggestion_sets) >= 8, (
             f"Expected at least 8 suggestion-setting points, found {len(suggestion_sets)}"
@@ -1725,5 +1784,5 @@ class TestSuggestionsAlwaysFilterAvailable:
         with open("app/whatsapp.py", encoding="utf-8") as f:
             source = f.read()
         fn_start = source.index("async def _get_meal_suggestions")
-        fn_section = source[fn_start:fn_start + 800]
+        fn_section = source[fn_start : fn_start + 800]
         assert "Product.is_available == True" in fn_section

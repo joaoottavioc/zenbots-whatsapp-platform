@@ -523,8 +523,16 @@ async def update_order_status(
     VALID_TRANSITIONS = {
         OrderStatus.PENDING: {OrderStatus.PAID, OrderStatus.CANCELED},
         OrderStatus.PAID: {OrderStatus.PREPARING, OrderStatus.CANCELED},
-        OrderStatus.PREPARING: {OrderStatus.READY, OrderStatus.CANCELED, OrderStatus.PAID},
-        OrderStatus.READY: {OrderStatus.COMPLETED, OrderStatus.CANCELED, OrderStatus.PREPARING},
+        OrderStatus.PREPARING: {
+            OrderStatus.READY,
+            OrderStatus.CANCELED,
+            OrderStatus.PAID,
+        },
+        OrderStatus.READY: {
+            OrderStatus.COMPLETED,
+            OrderStatus.CANCELED,
+            OrderStatus.PREPARING,
+        },
         OrderStatus.COMPLETED: set(),
         OrderStatus.CANCELED: set(),
         OrderStatus.FAILED: set(),
@@ -533,10 +541,14 @@ async def update_order_status(
 
     if existing_order.payment_method in NON_PIX_METHODS:
         VALID_TRANSITIONS[OrderStatus.PENDING] = {
-            OrderStatus.PAID, OrderStatus.PREPARING, OrderStatus.CANCELED
+            OrderStatus.PAID,
+            OrderStatus.PREPARING,
+            OrderStatus.CANCELED,
         }
         VALID_TRANSITIONS[OrderStatus.PREPARING] = {
-            OrderStatus.PENDING, OrderStatus.READY, OrderStatus.CANCELED
+            OrderStatus.PENDING,
+            OrderStatus.READY,
+            OrderStatus.CANCELED,
         }
 
     allowed = VALID_TRANSITIONS.get(existing_order.status, set())

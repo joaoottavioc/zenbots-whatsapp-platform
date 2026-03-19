@@ -375,11 +375,10 @@ async def find_relevant_products(
                 Product.bot_id == bot_id,
                 Product.is_available == True,
                 Product.is_deleted == False,
-                Product.embedding.cosine_distance(query_embedding) < _EMBEDDING_MAX_DISTANCE,
-            )
-            .order_by(
                 Product.embedding.cosine_distance(query_embedding)
+                < _EMBEDDING_MAX_DISTANCE,
             )
+            .order_by(Product.embedding.cosine_distance(query_embedding))
             .limit(limit_per_item)
         )
         for p in (await session.execute(embedding_query)).scalars().all():

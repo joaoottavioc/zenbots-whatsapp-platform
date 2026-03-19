@@ -1197,7 +1197,9 @@ async def _handle_shopping_intent(
         if not found_products:
             response_to_user = "Puxa, não encontrei nenhuma sugestão no momento. Mas nosso cardápio está cheio de delícias! O que você gostaria?"
         else:
-            found_products = await _get_meal_suggestions(session, bot.id, found_products)
+            found_products = await _get_meal_suggestions(
+                session, bot.id, found_products
+            )
             response_to_user = _format_product_suggestions_message(
                 found_products, title
             )
@@ -1304,15 +1306,15 @@ async def _handle_shopping_intent(
         _em_falta_msg = ""
         if unavailable_matches:
             _unavail_names = ", ".join(f"*{p.name}*" for p in unavailable_matches)
-            _em_falta_msg = (
-                f"\n\nPuxa, {_unavail_names} está em falta no momento. 😕"
-            )
+            _em_falta_msg = f"\n\nPuxa, {_unavail_names} está em falta no momento. 😕"
             if cart.last_suggestions:
                 _em_falta_msg += " Diga *'sim'* para ver alternativas!"
 
         # Fetch distinct categories for the bot's menu
         _cat_result = await session.execute(
-            select(Product.category).distinct().where(
+            select(Product.category)
+            .distinct()
+            .where(
                 Product.bot_id == bot.id,
                 Product.is_available == True,
                 Product.is_deleted == False,
@@ -1632,14 +1634,22 @@ async def _handle_shopping_intent(
                         # product list directly instead of the LLM's text.
                         # This eliminates hallucinated categories and reduces
                         # friction by one turn (no need for "sim" follow-up).
-                        _SHOPPING_INTENTS = {"ADD", "ADD_ITEMS", "MODIFY", "REMOVE", "REQUEST_SUGGESTION"}
+                        _SHOPPING_INTENTS = {
+                            "ADD",
+                            "ADD_ITEMS",
+                            "MODIFY",
+                            "REMOVE",
+                            "REQUEST_SUGGESTION",
+                        }
                         if (
                             not cart_tool_processed
                             and intent in _SHOPPING_INTENTS
                             and not unavailable_matches
                         ):
                             _src = found_products or []
-                            _filtered = await _get_meal_suggestions(session, bot.id, _src)
+                            _filtered = await _get_meal_suggestions(
+                                session, bot.id, _src
+                            )
                             if _filtered:
                                 cart.last_suggestions = [p.id for p in _filtered]
                                 conv_text = _format_product_suggestions_message(
@@ -1655,11 +1665,14 @@ async def _handle_shopping_intent(
                         # LLM correctly identified a vague/suggestion request
                         # but we're in the ADD path — execute the search here.
                         try:
-                            sug_concept = tool_args.get("search_concept", "prato principal")
+                            sug_concept = tool_args.get(
+                                "search_concept", "prato principal"
+                            )
                             sug_concept = str(sug_concept)[:100]
                             sug_concept = re.sub(
                                 r"[^\w\s\-áàâãéèêíìîóòôõúùûçÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ]",
-                                "", sug_concept
+                                "",
+                                sug_concept,
                             ).strip()
                             if not sug_concept:
                                 sug_concept = "prato principal"
@@ -1670,7 +1683,9 @@ async def _handle_shopping_intent(
                             session, bot.id, [sug_concept]
                         )
                         if sug_products:
-                            sug_products = await _get_meal_suggestions(session, bot.id, sug_products)
+                            sug_products = await _get_meal_suggestions(
+                                session, bot.id, sug_products
+                            )
                             cart.last_suggestions = [p.id for p in sug_products]
                             response_to_user = _format_product_suggestions_message(
                                 sug_products,
@@ -1689,15 +1704,23 @@ async def _handle_shopping_intent(
                     # Unknown tool — show suggestions instead of "Não entendi"
                     if intent in ("ADD", "ADD_ITEMS"):
                         _search = search_terms if search_terms else ["prato principal"]
-                        _alt = await crud.find_relevant_products(session, bot.id, _search)
-                        _alt = await _get_meal_suggestions(session, bot.id, _alt) if _alt else []
+                        _alt = await crud.find_relevant_products(
+                            session, bot.id, _search
+                        )
+                        _alt = (
+                            await _get_meal_suggestions(session, bot.id, _alt)
+                            if _alt
+                            else []
+                        )
                         if _alt:
                             cart.last_suggestions = [p.id for p in _alt]
                             response_to_user = _format_product_suggestions_message(
                                 _alt, "Posso te ajudar! Veja nossas opções:"
                             )
                         else:
-                            response_to_user = "Me diga o que gostaria de pedir e posso ajudar! 😊"
+                            response_to_user = (
+                                "Me diga o que gostaria de pedir e posso ajudar! 😊"
+                            )
                     else:
                         response_to_user = "Não consegui entender sua solicitação. 😅 Pode reformular de outra forma?"
                     break
@@ -1707,14 +1730,18 @@ async def _handle_shopping_intent(
             if intent in ("ADD", "ADD_ITEMS"):
                 _search = search_terms if search_terms else ["prato principal"]
                 _alt = await crud.find_relevant_products(session, bot.id, _search)
-                _alt = await _get_meal_suggestions(session, bot.id, _alt) if _alt else []
+                _alt = (
+                    await _get_meal_suggestions(session, bot.id, _alt) if _alt else []
+                )
                 if _alt:
                     cart.last_suggestions = [p.id for p in _alt]
                     response_to_user = _format_product_suggestions_message(
                         _alt, "Posso te ajudar! Veja nossas opções:"
                     )
                 else:
-                    response_to_user = "Me diga o que gostaria de pedir e posso ajudar! 😊"
+                    response_to_user = (
+                        "Me diga o que gostaria de pedir e posso ajudar! 😊"
+                    )
             else:
                 response_to_user = (
                     "Desculpe, não consegui processar. 😅 Pode tentar de outra forma?"
@@ -1809,16 +1836,31 @@ async def _handle_suggestion_selection(mctx: MessageContext) -> str | None:
     # Parse the message into parts (split on "e", ",", ";") and try to match
     # each part against suggestions via ordinals, digits, or name overlap.
     _ORDINALS = {
-        "primeiro": 0, "primeira": 0,
-        "segundo": 1, "segunda": 1,
-        "terceiro": 2, "terceira": 2,
-        "quarto": 3, "quarta": 3,
-        "quinto": 4, "quinta": 4,
+        "primeiro": 0,
+        "primeira": 0,
+        "segundo": 1,
+        "segunda": 1,
+        "terceiro": 2,
+        "terceira": 2,
+        "quarto": 3,
+        "quarta": 3,
+        "quinto": 4,
+        "quinta": 4,
     }
     _WRITTEN_QTY = {
-        "um": 1, "uma": 1, "dois": 2, "duas": 2, "três": 3, "tres": 3,
-        "quatro": 4, "cinco": 5, "seis": 6, "sete": 7, "oito": 8,
-        "nove": 9, "dez": 10,
+        "um": 1,
+        "uma": 1,
+        "dois": 2,
+        "duas": 2,
+        "três": 3,
+        "tres": 3,
+        "quatro": 4,
+        "cinco": 5,
+        "seis": 6,
+        "sete": 7,
+        "oito": 8,
+        "nove": 9,
+        "dez": 10,
     }
 
     def _parse_qty_from_text(part_text: str) -> int:
@@ -2816,16 +2858,19 @@ def _filter_meal_suggestions(products: List[Product]) -> List[Product]:
     sort by price descending (surfaces main dishes). Returns empty list if
     nothing passes — caller should use _fetch_meal_products as fallback."""
     filtered = [
-        p for p in products
-        if not p.category
-        or not _SUGGESTION_EXCLUDED_CATEGORIES.match(p.category)
+        p
+        for p in products
+        if not p.category or not _SUGGESTION_EXCLUDED_CATEGORIES.match(p.category)
     ]
     return sorted(filtered, key=lambda p: p.price, reverse=True)
 
 
 async def _get_meal_suggestions(
-    session, bot_id: int, products: List[Product],
-    min_results: int = 3, max_results: int = 4,
+    session,
+    bot_id: int,
+    products: List[Product],
+    min_results: int = 3,
+    max_results: int = 4,
 ) -> List[Product]:
     """Filter products for meal suggestions. If filtering gives fewer than
     min_results, tops up from a direct DB query for non-excluded products."""
@@ -2834,6 +2879,7 @@ async def _get_meal_suggestions(
         return filtered[:max_results]
     # Top up: query DB directly for meal products we don't already have
     from sqlalchemy import select as sa_select
+
     existing_ids = {p.id for p in filtered}
     query = (
         sa_select(Product)
