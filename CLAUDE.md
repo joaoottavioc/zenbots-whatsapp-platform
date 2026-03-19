@@ -135,24 +135,27 @@ app/
 ```
 
 ```
-infra/                           # Terraform IaC (52 .tf files)
+infra/                           # Terraform IaC (63 .tf files)
 ├── global/                      # ECR repo + Route 53 zone
 ├── environments/
 │   ├── dev/                     # Dev environment wiring (LIVE)
 │   └── prod/                    # Prod environment wiring (not yet provisioned)
-└── modules/                     # 14 reusable modules
+└── modules/                     # 17 reusable modules
     ├── vpc/                     # VPC, subnets (public/private/isolated), security groups
-    ├── nat/                     # Dev: fck-nat t4g.nano; Prod: managed NAT Gateway
+    ├── nat/                     # Dev: fck-nat t4g.nano + Caddy reverse proxy; Prod: managed NAT Gateway
     ├── rds/                     # PostgreSQL 14 + pgvector
-    ├── elasticache/             # Redis 7.0
-    ├── alb/                     # ALB + HTTPS + ACM cert
+    ├── elasticache/             # Redis 7.0 (prod only)
+    ├── redis-ecs/               # Redis 7 on ECS Fargate (dev only, replaces ElastiCache)
+    ├── alb/                     # ALB + HTTPS + ACM cert (prod only; dev uses Caddy on NAT)
     ├── ecs/                     # Fargate cluster, services, task definitions
     ├── ecr/                     # Container registry
     ├── s3/                      # Menu storage bucket
     ├── secrets/                 # AWS Secrets Manager
     ├── monitoring/              # CloudWatch alarms + SNS
     ├── dashboard/               # CloudWatch dashboards
-    ├── scheduling/              # Off-hours ECS scaling (dev only)
+    ├── ssm-parameters/          # SSM Parameter Store (replaces Secrets Manager for dev)
+    ├── scheduling/              # Off-hours ECS + Redis scaling (dev only)
+    ├── rds-scheduling/          # RDS stop/start via Lambda + EventBridge (dev only)
     ├── waf/                     # AWS WAF rate limiting (prod)
     └── maintenance-page/        # S3 static failover page
 ```
@@ -200,13 +203,13 @@ tech_debt/                       # Tracked backlogs (10 files)
 ### AI / LLM System
 
 - **OpenAI client**: `openai_client.py` is the centralized wrapper for all OpenAI calls. Every call records token counts, cost, and latency to the monitoring system.
-- **Intent classification**: Two-tier system. `semantic_router.py` (paraphrase-multilingual-MiniLM-L12-v2, 384-dim) runs first and handles ~60-70% of messages. LLM fallback (`classify_user_intent`) only fires when router confidence is below a dynamic threshold.
-- **Tool calling**: `prompt_central.py` sends multi-shot prompts (13 examples) to gpt-4o-mini via OpenAI-compatible API. Prompt order: system rules → few-shot examples → conversation history → user query. Tool arguments are validated against Pydantic schemas in `tool_arg_schemas.py`.
-- **Product search**: Semantic search via pgvector cosine similarity on product embeddings. ILIKE patterns are escaped to prevent wildcard injection.
+- **Intent classification**: Three-tier system. `semantic_router.py` (paraphrase-multilingual-MiniLM-L12-v2, 384-dim) runs first with ~85-90% coverage. No LLM fallback — `classify_user_intent()` eliminated (T2-3). Tiers: confident (≥ threshold) → use router intent; moderate (≥ 75% of threshold) → use router intent (except FINISH_ORDER, demoted to ADD); low (< 75%) → default to ADD. The tool-calling prompt implicitly classifies via tool selection.
+- **Tool calling**: `prompt_central.py` sends multi-shot prompts (11 examples) to gpt-4o-mini via OpenAI-compatible API. Prompt order: system rules → few-shot examples → dynamic system (menu + cart + categories) → conversation history → user query. Tool arguments are validated against Pydantic schemas in `tool_arg_schemas.py`. Dynamic system message includes bot's real product categories to prevent hallucination.
+- **Product search**: 4-layer search in `crud.find_relevant_products`: 1. Name ILIKE → 2. Keywords ILIKE → 3. Description ILIKE → 4. Embedding (cosine similarity with 0.7 threshold — distance < 0.3). The threshold prevents weak matches (e.g., "cachorro quente" → "Bacon"). ILIKE patterns are escaped to prevent wildcard injection.
 - **LLM output sanitization**: All LLM-generated text passes through `sanitize.py` (strips URLs, emails, phone numbers, enforces length limits) before being sent to customers via WhatsApp.
 - **Embedding model**: Lazy-loaded singleton in `embedding_service.py`; pre-warmed during Docker build (~400MB cached layer).
-- **Cost profile**: ~6,500 input + ~150 output tokens per message across up to 3 gpt-4o-mini calls. Projected ~$9,600/month at 1,000 restaurants. Token reduction plan in `tech_debt/backlog_token_reduction.md` targets 60-85% reduction via prompt caching, example reduction, semantic router expansion, and fine-tuning.
-- **OpenAI operations tracked**: `get_ai_decision`, `extract_potential_items`, `classify_user_intent`, `get_chat_response_gpt` (gpt-4o-mini); `get_extraction_response`, `extract_products_from_image` (gpt-4o).
+- **Cost profile**: ~3,000-4,000 input + ~150 output tokens per message (1 gpt-4o-mini call, down from 3 after Phase 1+2 optimizations). Projected ~$2,800/month at 1,000 restaurants. Token reduction plan in `tech_debt/backlog_token_reduction.md` targets further 30-50% via fine-tuning and model alternatives.
+- **OpenAI operations tracked**: `get_ai_decision`, `extract_potential_items`, `get_chat_response_gpt` (gpt-4o-mini); `get_extraction_response`, `extract_products_from_image` (gpt-4o). Note: `classify_user_intent` eliminated in T2-3.
 
 ### Data Models
 
@@ -268,7 +271,14 @@ The observability stack is implemented in Phases 0-3 (Phases 4-5 partially done)
 
 ### Real-Time Dashboard (SSE)
 
-`GET /stream` is a Server-Sent Events endpoint. The worker publishes events via `broadcast.py` → Redis PubSub channel `dashboard_events`. The frontend polls this endpoint for live order/payment updates. SSE responses include `X-Accel-Buffering: no` for Nginx compatibility.
+`GET /stream` is a Server-Sent Events endpoint. The worker publishes events via `broadcast.py` → Redis PubSub channel `dashboard_events:{bot_id}`. The frontend consumes events via the native `EventSource` API (`withCredentials: true` for cookie auth). SSE responses include `X-Accel-Buffering: no` for Nginx compatibility.
+
+**Key implementation details:**
+- Backend sends data-level pings every 10s (`data: {"type":"ping"}`) to keep connections alive through proxies. SSE comments (`: keep-alive`) are not used — proxies may not recognize them as activity.
+- Caddy reverse proxy (dev) requires `flush_interval -1` and `transport http { read_timeout 0; write_timeout 0 }` for SSE streaming.
+- **Critical**: The DB transaction must be committed BEFORE broadcasting via Redis PubSub. Otherwise the frontend refetches orders before the new order is visible to other DB sessions (race condition). ORM scalar values must be captured into local variables before commit (which expires all objects).
+- Frontend uses `EventSource` (not `fetch` + `ReadableStream`) — the latter fails silently through HTTP/2 due to frame-level buffering.
+- Frontend has a 5s polling fallback (`refetchInterval`) when SSE is disconnected.
 
 ### Payment Flow
 
@@ -300,19 +310,19 @@ Restaurant owners connect their WhatsApp Business number through Facebook's Embe
 
 | Component | Dev | Prod (planned) |
 |---|---|---|
-| **ECS Fargate** | FARGATE_SPOT, 0.25 vCPU / 512 MB, 1 task each | FARGATE, 0.5 vCPU / 1 GB, backend 2-4 (auto-scale), worker 1-2 |
-| **RDS PostgreSQL 14** | db.t4g.micro, single-AZ, 20 GB, 7-day backups | db.t4g.small, Multi-AZ, 20 GB→100 GB, 14-day backups, deletion protection |
-| **ElastiCache Redis 7** | cache.t4g.micro, 1 node | cache.t4g.small, 2 nodes Multi-AZ |
-| **NAT** | fck-nat t4g.nano (~$3/mo) | Managed NAT Gateway (~$32/mo) |
-| **ALB** | HTTPS (TLS 1.3), ACM wildcard cert | Same + WAF (2,000 req/5min) |
-| **Scheduling** | 7 PM-9 AM BRT off + weekends off (~50 hrs/wk) | Always on |
-| **Est. cost** | ~$57/month | ~$223/month |
+| **ECS Fargate** | FARGATE_SPOT ARM64, backend 1 vCPU / 2 GB (1 task), worker 0.25 vCPU / 512 MB (1 task) | FARGATE ARM64, backend 1 vCPU / 2 GB 2-4 tasks (auto-scale), worker 0.25 vCPU / 512 MB 1-2 tasks |
+| **RDS PostgreSQL 14** | db.t4g.micro, single-AZ, 20 GB, 7-day backups, scheduled ~50 hrs/wk | db.t4g.small, Multi-AZ, 20 GB→100 GB, 14-day backups, deletion protection |
+| **Redis** | Redis 7 on ECS Fargate SPOT (0.25 vCPU / 512 MB), Cloud Map DNS | ElastiCache cache.t4g.small, 2 nodes Multi-AZ |
+| **NAT** | fck-nat t4g.nano + Caddy reverse proxy (~$3/mo) | Managed NAT Gateway (~$32/mo) |
+| **HTTPS** | Caddy on NAT instance (Let's Encrypt TLS, Cloud Map → ECS) | ALB + ACM wildcard cert + WAF (2,000 req/5min) |
+| **Scheduling** | 9 AM-7 PM BRT weekdays only (~50 hrs/wk). ECS + RDS + Redis all scheduled. | Always on |
+| **Est. cost** | ~$20/month (cost floor) | ~$108/month (launch), ~$200/month (scaled) |
 
-**VPC**: `10.0.0.0/16` with 3 tiers across 2 AZs: public (ALB), private (ECS), isolated (RDS/Redis). S3 Gateway Endpoint (free, S3 traffic bypasses NAT).
+**VPC**: `10.0.0.0/16` with 3 tiers across 2 AZs: public (NAT/ALB), private (ECS), isolated (RDS/Redis). S3 Gateway Endpoint (free, S3 traffic bypasses NAT).
 
 **ECR**: Single repo `zenbots/app` at `578761488332.dkr.ecr.us-east-1.amazonaws.com/zenbots/app`. Tags: `dev-{SHA8}`, `prod-{SHA8}`, `latest-dev`. Lifecycle: untagged deleted after 7 days, keep last 10 tagged.
 
-**Secrets Manager**: 8 secret paths per environment under `zenbots/{env}/` (database, redis, auth, openai, whatsapp, mercadopago, google, email). Injected into ECS tasks at launch.
+**Secrets**: Dev uses SSM Parameter Store (free tier, 19 params). Old Secrets Manager entries (8 secrets) still exist pending cleanup. Prod will also use SSM. Injected into ECS tasks at launch.
 
 **Terraform state**: S3 bucket `zenbots-terraform-state` + DynamoDB lock table `zenbots-terraform-locks`.
 
@@ -373,4 +383,16 @@ Loaded from `.env` locally, from AWS Secrets Manager in AWS. Key variables:
 
 8. **ARM64 Graviton**: Docker images are built for `linux/arm64` to run on Fargate Graviton (20% cheaper than x86). Cross-compiled via `docker/setup-qemu-action` in CI.
 
-9. **Dev cost optimization**: ECS services scale to 0 between 7 PM-9 AM BRT on weekdays and all weekend (~50 hrs/week running), reducing dev cost from ~$100 to ~$57/month.
+9. **Dev cost optimization**: ECS services (backend, worker, Redis) scale to 0 between 7 PM-9 AM BRT on weekdays and all weekend (~50 hrs/week running). RDS stops/starts on the same schedule. ElastiCache replaced by Redis on ECS. ALB replaced by Caddy on fck-nat instance. Secrets Manager deleted (using SSM). Total dev cost: ~$20/month (cost floor for current architecture).
+
+10. **Async SQLAlchemy relationship loading**: Never use `session.refresh(obj, attribute_names=["relationship"])` in async context — it expires ALL attributes on the object, causing `greenlet_spawn` errors on subsequent access. Instead, use direct `SELECT` queries + `set_committed_value` from `sqlalchemy.orm.attributes` (see `_load_cart_items_with_products()` and `_load_bot_payment_config()` in `whatsapp.py`). Similarly, `session.commit()` and `session.rollback()` expire all objects — capture scalar values into local variables before any code path that might commit/rollback.
+
+11. **Broadcast after commit**: SSE broadcasts (`broadcast_order_update`) must happen AFTER `session.commit()`, not before. The frontend refetches data immediately upon receiving the SSE event — if the transaction isn't committed yet, the refetch returns stale data (order not visible to other DB sessions).
+
+12. **Suggestion selection handler**: `_handle_suggestion_selection` in `whatsapp.py` runs before intent classification for messages with active `last_suggestions`. Supports multi-selection ("dois do primeiro e tres do segundo"), ordinal/digit/name-based matching, quantity parsing (written + digit), Portuguese plural stemming ("paranaenses" → "paranaense"), and deduplication. Splits on "e", ",", ";" and processes each part independently. Falls through to normal flow on no match (suggestions preserved for CONFIRM handler).
+
+13. **Programmatic em falta**: Unavailable product messages are built programmatically (not by the LLM). `unavailable_products=[]` is passed to the LLM prompt so it focuses on adding valid items. The em falta text is appended to `response_to_user` after the dispatch loop. This prevents the LLM from fixating on unavailability and ignoring valid items in multi-item orders.
+
+14. **Option C (conversational override)**: When the LLM uses `answer_conversationally` for a shopping intent (ADD, MODIFY, REMOVE, REQUEST_SUGGESTION) without adding anything to the cart, the response is replaced with a numbered product list from `_get_meal_suggestions`. This eliminates hallucinated menu categories and reduces conversation turns. Guarded by `not unavailable_matches` to preserve the em falta flow.
+
+15. **Meal suggestion filtering**: `_filter_meal_suggestions` excludes addon/drink categories (Adicionais, Bebidas, Cervejas, Extras, Complementos, Acompanhamentos) and sorts by price descending. `_get_meal_suggestions` enforces min 3 / max 4 results with a DB fallback query when filtering removes all products.
