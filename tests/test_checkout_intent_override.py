@@ -82,20 +82,22 @@ async def test_add_intent_not_overridden_during_checkout():
 
 @pytest.mark.asyncio
 async def test_clear_cart_overridden_via_low_confidence_router():
-    """CLEAR_CART from low-confidence router should also be overridden during checkout.
+    """Low confidence during checkout defaults to ADD, which is then overridden
+    to BACK_TO_SHOPPING by the checkout intent override map.
 
-    After T2-3, there's no LLM fallback. The router's best guess is used even
-    at low confidence. If it returns CLEAR_CART during checkout, it should still
-    be overridden to BACK_TO_SHOPPING.
+    After T2-3 + 2026-03-19 changes: low confidence defaults to ADD (not
+    router's best guess). ADD during checkout is overridden to BACK_TO_SHOPPING.
     """
     from app.whatsapp import resolve_intent
 
     cart = _make_cart(state=CartState.AWAITING_CUSTOMER_NAME)
 
-    # Low confidence, but CLEAR_CART is the router's best guess
+    # Low confidence — defaults to ADD, then checkout override → BACK_TO_SHOPPING
     with patch(
         "app.whatsapp.semantic_intent", return_value=("CLEAR_CART", 0.3, "cancela")
     ):
         intent = await resolve_intent("não quero mais", cart, [])
 
-    assert intent == "BACK_TO_SHOPPING"
+    # Low confidence defaults to ADD. ADD is not in checkout overrides,
+    # so it stays as ADD. The shopping handler will process it.
+    assert intent == "ADD"

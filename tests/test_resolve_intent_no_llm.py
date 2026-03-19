@@ -48,10 +48,13 @@ class TestNoLLMFallback:
         assert result == "ADD"
 
     @pytest.mark.asyncio
-    async def test_low_confidence_still_uses_router(self):
-        """When router score is very low, still use router's best guess."""
+    async def test_low_confidence_defaults_to_add(self):
+        """When router score is very low, default to ADD (not router's guess)."""
         # ADD threshold is 0.78, 75% = 0.585, score 0.40 is below
-        with patch(PATCH_SEMANTIC, AsyncMock(return_value=("ADD", 0.40, "algo"))):
+        with patch(
+            PATCH_SEMANTIC,
+            AsyncMock(return_value=("GREETING_OR_QUESTION", 0.40, "algo")),
+        ):
             result = await resolve_intent("algo", _make_cart(), [])
         assert result == "ADD"
 
@@ -74,8 +77,8 @@ class TestNoLLMFallback:
             PATCH_SEMANTIC, AsyncMock(return_value=("GREETING_OR_QUESTION", 0.30, "oi"))
         ):
             result = await resolve_intent("xyzzy nonsense", _make_cart(), [])
-        # Should still return something without calling LLM
-        assert result == "GREETING_OR_QUESTION"
+        # Low confidence defaults to ADD (tool-calling prompt classifies implicitly)
+        assert result == "ADD"
 
 
 class TestAllIntentsWork:
@@ -121,12 +124,16 @@ class TestAllIntentsWork:
         ],
     )
     async def test_moderate_confidence_intent_returned(self, intent):
-        """Moderate confidence (between 75% and 100% of threshold) still returns intent."""
+        """Moderate confidence (between 75% and 100% of threshold) still returns intent.
+        Exception: FINISH_ORDER is demoted to ADD at moderate confidence."""
         with patch(
             PATCH_SEMANTIC, AsyncMock(return_value=(intent, 0.65, "test phrase"))
         ):
             result = await resolve_intent("test", _make_cart(), [])
-        assert result == intent
+        if intent == "FINISH_ORDER":
+            assert result == "ADD"  # demoted at moderate confidence
+        else:
+            assert result == intent
 
 
 class TestCheckoutOverrides:
