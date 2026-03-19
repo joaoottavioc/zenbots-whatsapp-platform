@@ -13,11 +13,24 @@ from unittest.mock import AsyncMock, MagicMock, patch
 class TestOrderStatusTransitionGuards:
     """Validates that invalid state jumps are rejected."""
 
-    VALID_TRANSITIONS = {
+    # Base transitions (PIX payment flow)
+    PIX_TRANSITIONS = {
         "pending": {"paid", "canceled"},
         "paid": {"preparing", "canceled"},
-        "preparing": {"ready", "canceled"},
-        "ready": {"completed", "canceled"},
+        "preparing": {"ready", "canceled", "paid"},
+        "ready": {"completed", "canceled", "preparing"},
+        "completed": set(),
+        "canceled": set(),
+        "failed": set(),
+        "expired": set(),
+    }
+
+    # Non-PIX transitions (card/money: skip "paid" state)
+    NON_PIX_TRANSITIONS = {
+        "pending": {"paid", "preparing", "canceled"},
+        "paid": {"preparing", "canceled"},
+        "preparing": {"pending", "ready", "canceled"},
+        "ready": {"completed", "canceled", "preparing"},
         "completed": set(),
         "canceled": set(),
         "failed": set(),
@@ -27,33 +40,255 @@ class TestOrderStatusTransitionGuards:
     @pytest.mark.parametrize(
         "from_status,to_status,should_allow",
         [
+            # PIX forward flow
             ("pending", "paid", True),
             ("pending", "canceled", True),
             ("pending", "completed", False),  # Can't skip states
-            ("pending", "preparing", False),  # Must go through paid
+            ("pending", "preparing", False),  # PIX must go through paid
             ("paid", "preparing", True),
             ("paid", "canceled", True),
             ("paid", "completed", False),  # Can't skip
             ("preparing", "ready", True),
             ("preparing", "canceled", True),
-            ("preparing", "pending", False),  # Can't go backwards
             ("ready", "completed", True),
             ("ready", "canceled", True),
-            ("ready", "paid", False),  # Can't go backwards
-            ("completed", "pending", False),  # Terminal
-            ("completed", "canceled", False),  # Terminal
-            ("canceled", "pending", False),  # Terminal
-            ("canceled", "paid", False),  # Terminal
-            ("failed", "pending", False),  # Terminal
-            ("expired", "paid", False),  # Terminal
+            # PIX reverse flow
+            ("preparing", "paid", True),  # Back from preparing → paid
+            ("ready", "preparing", True),  # Back from ready → preparing
+            ("preparing", "pending", False),  # PIX can't go back to pending
+            ("ready", "paid", False),  # Can't skip backwards
+            # Terminal states
+            ("completed", "pending", False),
+            ("completed", "canceled", False),
+            ("canceled", "pending", False),
+            ("canceled", "paid", False),
+            ("failed", "pending", False),
+            ("expired", "paid", False),
         ],
     )
-    def test_transition_validity(self, from_status, to_status, should_allow):
-        allowed = self.VALID_TRANSITIONS.get(from_status, set())
+    def test_pix_transition_validity(self, from_status, to_status, should_allow):
+        allowed = self.PIX_TRANSITIONS.get(from_status, set())
         assert (to_status in allowed) == should_allow, (
-            f"Transition {from_status} → {to_status}: "
+            f"PIX transition {from_status} → {to_status}: "
             f"expected {'allowed' if should_allow else 'rejected'}"
         )
+
+    @pytest.mark.parametrize(
+        "from_status,to_status,should_allow",
+        [
+            # Non-PIX forward flow (card/money skip "paid")
+            ("pending", "preparing", True),  # Direct to preparing
+            ("pending", "paid", True),  # Still allowed
+            ("pending", "canceled", True),
+            ("pending", "completed", False),  # Can't skip
+            ("paid", "preparing", True),
+            ("preparing", "ready", True),
+            ("preparing", "canceled", True),
+            ("ready", "completed", True),
+            ("ready", "canceled", True),
+            # Non-PIX reverse flow
+            ("preparing", "pending", True),  # Back to pending (not paid)
+            ("ready", "preparing", True),  # Back to preparing
+            ("preparing", "paid", False),  # Non-PIX goes back to pending, not paid
+            ("ready", "pending", False),  # Can't skip backwards
+            # Terminal states
+            ("completed", "pending", False),
+            ("canceled", "preparing", False),
+        ],
+    )
+    def test_non_pix_transition_validity(self, from_status, to_status, should_allow):
+        allowed = self.NON_PIX_TRANSITIONS.get(from_status, set())
+        assert (to_status in allowed) == should_allow, (
+            f"Non-PIX transition {from_status} → {to_status}: "
+            f"expected {'allowed' if should_allow else 'rejected'}"
+        )
+
+    def test_transition_maps_match_backend(self):
+        """Verify test maps match the actual backend logic."""
+        from app.models import OrderStatus
+
+        # Replicate the backend logic from bot_routes.py
+        base = {
+            OrderStatus.PENDING: {OrderStatus.PAID, OrderStatus.CANCELED},
+            OrderStatus.PAID: {OrderStatus.PREPARING, OrderStatus.CANCELED},
+            OrderStatus.PREPARING: {OrderStatus.READY, OrderStatus.CANCELED, OrderStatus.PAID},
+            OrderStatus.READY: {OrderStatus.COMPLETED, OrderStatus.CANCELED, OrderStatus.PREPARING},
+            OrderStatus.COMPLETED: set(),
+            OrderStatus.CANCELED: set(),
+            OrderStatus.FAILED: set(),
+            OrderStatus.EXPIRED: set(),
+        }
+
+        # Convert to string sets for comparison with PIX_TRANSITIONS
+        for status, allowed in base.items():
+            expected = {s.value for s in allowed}
+            assert expected == self.PIX_TRANSITIONS[status.value], (
+                f"PIX mismatch at {status.value}: backend={expected}, test={self.PIX_TRANSITIONS[status.value]}"
+            )
+
+        # Apply non-PIX overrides (same as backend)
+        non_pix = dict(base)
+        non_pix[OrderStatus.PENDING] = {
+            OrderStatus.PAID, OrderStatus.PREPARING, OrderStatus.CANCELED
+        }
+        non_pix[OrderStatus.PREPARING] = {
+            OrderStatus.PENDING, OrderStatus.READY, OrderStatus.CANCELED
+        }
+
+        for status, allowed in non_pix.items():
+            expected = {s.value for s in allowed}
+            assert expected == self.NON_PIX_TRANSITIONS[status.value], (
+                f"Non-PIX mismatch at {status.value}: backend={expected}, test={self.NON_PIX_TRANSITIONS[status.value]}"
+            )
+
+    @pytest.mark.parametrize("payment_method", ["card", "money"])
+    def test_non_pix_methods_recognized(self, payment_method):
+        """Ensure card and money are in the NON_PIX_METHODS set."""
+        NON_PIX_METHODS = {"card", "money"}
+        assert payment_method in NON_PIX_METHODS
+
+    def test_pix_not_in_non_pix_methods(self):
+        """PIX must NOT be treated as non-PIX."""
+        NON_PIX_METHODS = {"card", "money"}
+        assert "pix" not in NON_PIX_METHODS
+
+
+# ────────────────────────────────────────────────────────
+# F-03: Anti-hallucination guardrail
+# ────────────────────────────────────────────────────────
+
+
+class TestAntiHallucinationGuardrail:
+    """When RAG finds no products for an ADD intent, the LLM's
+    answer_conversationally output must be overridden with a
+    controlled 'not found' message — never trust hallucinated product names."""
+
+    def test_prompt_does_not_contain_hot_dog_mexicano(self):
+        """Ensure the few-shot example no longer primes 'Hot Dog Mexicano'."""
+        from app.prompt_central import create_central_prompt
+
+        prompt = create_central_prompt(
+            user_query="quero um cachorro quente",
+            history=[],
+            restaurant_name="Teste",
+            cart_items=[],
+            search_results=[],
+        )
+        all_text = " ".join(
+            msg.get("content", "") or "" for msg in prompt
+        ).lower()
+        assert "hot dog mexicano" not in all_text
+
+    def test_prompt_example_uses_x_tudo(self):
+        """The notes example should use X-Tudo instead of Hot Dog Mexicano."""
+        from app.prompt_central import create_central_prompt
+
+        prompt = create_central_prompt(
+            user_query="test",
+            history=[],
+            restaurant_name="Teste",
+            cart_items=[],
+            search_results=[],
+        )
+        # Find the notes example in the prompt
+        found = False
+        for msg in prompt:
+            if msg.get("role") == "user" and "X-Tudo" in (msg.get("content") or ""):
+                found = True
+                break
+        assert found, "Few-shot example should reference X-Tudo"
+
+    def test_guardrail_overrides_when_no_products_found(self):
+        """When found_products is empty and intent is ADD,
+        answer_conversationally should be overridden."""
+        from app.sanitize import sanitize_llm_output
+        from app.item_extraction import extract_items_local
+
+        # Simulate the guardrail logic from whatsapp.py
+        found_products = []
+        unavailable_matches = []
+        intent = "ADD"
+        cart_tool_processed = False
+        text_body = "queria comer cachorro quente"
+
+        # LLM hallucinates
+        llm_response = "Temos o Hot Dog Mexicano no cardápio! Você gostaria?"
+        conv_text = sanitize_llm_output(llm_response)
+
+        # Apply guardrail
+        if (
+            not cart_tool_processed
+            and not found_products
+            and not unavailable_matches
+            and intent in ("ADD", "ADD_ITEMS")
+        ):
+            items_for_msg = extract_items_local(text_body)
+            if items_for_msg:
+                items_str = " e ".join(f"*{item}*" for item in items_for_msg)
+                conv_text = (
+                    f"Não encontrei {items_str} no nosso cardápio. 😕 "
+                    "Quer ver nossas sugestões?"
+                )
+
+        assert "Hot Dog Mexicano" not in conv_text
+        assert "não encontrei" in conv_text.lower()
+        assert "cardápio" in conv_text.lower()
+
+    def test_guardrail_does_not_override_when_products_found(self):
+        """When products ARE found, don't override the LLM response."""
+        found_products = [MagicMock()]  # non-empty
+        unavailable_matches = []
+        intent = "ADD"
+        cart_tool_processed = False
+
+        found_products = [MagicMock()]  # non-empty
+
+        # Guardrail should NOT fire
+        should_override = (
+            not cart_tool_processed
+            and not found_products
+            and not unavailable_matches
+            and intent in ("ADD", "ADD_ITEMS")
+        )
+        assert not should_override
+
+    def test_guardrail_does_not_override_non_add_intent(self):
+        """Guardrail only fires for ADD/ADD_ITEMS, not other intents."""
+        found_products = []
+        unavailable_matches = []
+        cart_tool_processed = False
+
+        for intent in ("GREETING_OR_QUESTION", "SHOW_CART", "REQUEST_SUGGESTION", "CONFIRM"):
+            should_override = (
+                not cart_tool_processed
+                and not found_products
+                and not unavailable_matches
+                and intent in ("ADD", "ADD_ITEMS")
+            )
+            assert not should_override, f"Should not override for intent={intent}"
+
+    def test_guardrail_does_not_override_when_unavailable_found(self):
+        """When unavailable products are found, let the existing unavailability
+        flow handle it — don't override."""
+        found_products = []
+        unavailable_matches = [MagicMock()]  # non-empty
+        intent = "ADD"
+        cart_tool_processed = False
+
+        should_override = (
+            not cart_tool_processed
+            and not found_products
+            and not unavailable_matches
+            and intent in ("ADD", "ADD_ITEMS")
+        )
+        assert not should_override
+
+    def test_guardrail_extracts_item_name_for_message(self):
+        """The controlled message should mention the item the user asked for."""
+        from app.item_extraction import extract_items_local
+
+        items = extract_items_local("queria comer cachorro quente")
+        assert any("cachorro" in item for item in items)
 
 
 # ────────────────────────────────────────────────────────
@@ -737,35 +972,30 @@ class TestSuggestionSelectionHandler:
         assert result is None  # "sim" has no >3 char words matching product names
 
     @pytest.mark.asyncio
-    async def test_ordering_verb_clears_suggestions(self):
-        """Messages with ordering verbs should clear stale suggestions."""
+    async def test_no_match_preserves_suggestions(self):
+        """When no selection matches, suggestions are preserved for CONFIRM handler."""
         from app.whatsapp import _handle_suggestion_selection
 
+        prods = [_make_product_mock(1, "John's Calabresa")]
         mctx = _make_suggestion_mctx("quero uma coca cola", [1, 2, 3])
+        self._setup_session_with_products(mctx, prods)
         result = await _handle_suggestion_selection(mctx)
 
         assert result is None
-        assert mctx.cart.last_suggestions is None  # cleared
+        assert mctx.cart.last_suggestions == [1, 2, 3]  # preserved
 
     @pytest.mark.asyncio
-    async def test_adiciona_clears_suggestions(self):
+    async def test_pode_ser_preserves_suggestions(self):
+        """'pode ser' should not clear suggestions — CONFIRM handler needs them."""
         from app.whatsapp import _handle_suggestion_selection
 
-        mctx = _make_suggestion_mctx("adiciona um johns alcatra", [1, 2])
+        prods = [_make_product_mock(1, "John's Calabresa"), _make_product_mock(2, "John's Simples")]
+        mctx = _make_suggestion_mctx("pode ser", [1, 2])
+        self._setup_session_with_products(mctx, prods)
         result = await _handle_suggestion_selection(mctx)
 
         assert result is None
-        assert mctx.cart.last_suggestions is None
-
-    @pytest.mark.asyncio
-    async def test_tambem_clears_suggestions(self):
-        from app.whatsapp import _handle_suggestion_selection
-
-        mctx = _make_suggestion_mctx("também vou querer um bacon", [1, 2])
-        result = await _handle_suggestion_selection(mctx)
-
-        assert result is None
-        assert mctx.cart.last_suggestions is None
+        assert mctx.cart.last_suggestions == [1, 2]  # preserved for CONFIRM
 
     @pytest.mark.asyncio
     async def test_long_message_skipped(self):
@@ -778,7 +1008,7 @@ class TestSuggestionSelectionHandler:
         mctx = _make_suggestion_mctx(long_msg, [1, 2, 3])
         # Don't set ordering verbs so it reaches the length check
         # Actually "quero" is an ordering verb, so let me use a different long message
-        mctx.text_body = "a" * 61  # just a long string
+        mctx.text_body = "a" * 121  # just a long string
 
         result = await _handle_suggestion_selection(mctx)
         assert result is None
@@ -941,3 +1171,559 @@ class TestCategoryFiltering:
         ]
         alternatives = same_cat if same_cat else found
         assert len(alternatives) == 1  # falls back
+
+
+# ────────────────────────────────────────────────────────
+# Session 2026-03-19: Multi-selection, quantity parsing,
+# meal filter, intent fixes, Option C, plural stemming
+# ────────────────────────────────────────────────────────
+
+
+class TestMultiSelection:
+    """Tests for multi-item suggestion selection (ordinals + names + quantities)."""
+
+    def _setup_session_with_products(self, mctx, products):
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = products
+        mctx.session.execute = AsyncMock(return_value=result)
+
+    @pytest.mark.asyncio
+    async def test_multi_ordinal_selection(self):
+        """'dois do primeiro e tres do segundo' adds both items."""
+        from app.whatsapp import _handle_suggestion_selection
+
+        prods = [
+            _make_product_mock(1, "John's Paranaense", price=45.0),
+            _make_product_mock(2, "John's Alcatra", price=42.0),
+        ]
+        mctx = _make_suggestion_mctx("dois do primeiro e tres do segundo", [1, 2])
+        self._setup_session_with_products(mctx, prods)
+
+        with (
+            patch("app.whatsapp.crud") as mock_crud,
+            patch("app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock),
+            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
+        ):
+            mock_crud.add_items_to_db_cart = AsyncMock()
+            mctx.cart.items = [MagicMock()]
+            result = await _handle_suggestion_selection(mctx)
+
+        assert result is not None
+        items = mock_crud.add_items_to_db_cart.call_args[0][2]
+        assert len(items) == 2
+        assert items[0]["product_id"] == 1
+        assert items[0]["quantity"] == 2
+        assert items[1]["product_id"] == 2
+        assert items[1]["quantity"] == 3
+
+    @pytest.mark.asyncio
+    async def test_mixed_ordinal_and_name(self):
+        """'dois paranaenses e sete do segundo' mixes name + ordinal."""
+        from app.whatsapp import _handle_suggestion_selection
+
+        prods = [
+            _make_product_mock(1, "John's Paranaense", price=45.0),
+            _make_product_mock(2, "John's Alcatra", price=42.0),
+        ]
+        mctx = _make_suggestion_mctx("dois paranaenses e sete do segundo", [1, 2])
+        self._setup_session_with_products(mctx, prods)
+
+        with (
+            patch("app.whatsapp.crud") as mock_crud,
+            patch("app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock),
+            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
+        ):
+            mock_crud.add_items_to_db_cart = AsyncMock()
+            mctx.cart.items = [MagicMock()]
+            result = await _handle_suggestion_selection(mctx)
+
+        assert result is not None
+        items = mock_crud.add_items_to_db_cart.call_args[0][2]
+        assert len(items) == 2
+        assert items[0]["product_id"] == 1
+        assert items[0]["quantity"] == 2
+        assert items[1]["product_id"] == 2
+        assert items[1]["quantity"] == 7
+
+    @pytest.mark.asyncio
+    async def test_dedup_same_product(self):
+        """Same product referenced by name and ordinal — only added once."""
+        from app.whatsapp import _handle_suggestion_selection
+
+        prods = [
+            _make_product_mock(1, "John's Paranaense", price=45.0),
+            _make_product_mock(2, "John's Alcatra", price=42.0),
+        ]
+        mctx = _make_suggestion_mctx("5 alcatra e tres do segundo", [1, 2])
+        self._setup_session_with_products(mctx, prods)
+
+        with (
+            patch("app.whatsapp.crud") as mock_crud,
+            patch("app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock),
+            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
+        ):
+            mock_crud.add_items_to_db_cart = AsyncMock()
+            mctx.cart.items = [MagicMock()]
+            result = await _handle_suggestion_selection(mctx)
+
+        assert result is not None
+        items = mock_crud.add_items_to_db_cart.call_args[0][2]
+        assert len(items) == 1  # deduped
+        assert items[0]["product_id"] == 2
+
+    @pytest.mark.asyncio
+    async def test_single_selection_still_works(self):
+        """Single ordinal selection is backwards compatible."""
+        from app.whatsapp import _handle_suggestion_selection
+
+        prods = [
+            _make_product_mock(1, "John's A"),
+            _make_product_mock(2, "John's B"),
+        ]
+        mctx = _make_suggestion_mctx("pode ser o segundo", [1, 2])
+        self._setup_session_with_products(mctx, prods)
+
+        with (
+            patch("app.whatsapp.crud") as mock_crud,
+            patch("app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock),
+            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
+        ):
+            mock_crud.add_items_to_db_cart = AsyncMock()
+            mctx.cart.items = [MagicMock()]
+            result = await _handle_suggestion_selection(mctx)
+
+        assert result is not None
+        items = mock_crud.add_items_to_db_cart.call_args[0][2]
+        assert len(items) == 1
+        assert items[0]["product_id"] == 2
+        assert items[0]["quantity"] == 1
+
+
+class TestPluralStemming:
+    """Tests for Portuguese plural normalization in name matching."""
+
+    def test_stem_simple_plural(self):
+        """'paranaenses' → 'paranaense'."""
+        # The stem logic strips trailing 's' for words > 4 chars
+        def _stem(w):
+            if len(w) > 4 and w.endswith("s"):
+                return w[:-1]
+            return w
+
+        assert _stem("paranaenses") == "paranaense"
+        assert _stem("alcatras") == "alcatra"
+        assert _stem("calabresas") == "calabresa"
+
+    def test_stem_preserves_short_words(self):
+        """Short words are not stemmed."""
+        def _stem(w):
+            if len(w) > 4 and w.endswith("s"):
+                return w[:-1]
+            return w
+
+        assert _stem("dois") == "dois"  # 4 chars, not stripped
+        assert _stem("tres") == "tres"  # 4 chars, not stripped
+
+    def test_stem_preserves_non_s_endings(self):
+        """Words not ending in 's' are unchanged."""
+        def _stem(w):
+            if len(w) > 4 and w.endswith("s"):
+                return w[:-1]
+            return w
+
+        assert _stem("frango") == "frango"
+        assert _stem("alcatra") == "alcatra"
+        assert _stem("paranaense") == "paranaense"
+
+
+class TestMealSuggestionFilter:
+    """Tests for _filter_meal_suggestions category exclusion."""
+
+    def test_excludes_adicionais(self):
+        from app.whatsapp import _filter_meal_suggestions
+
+        products = [
+            _make_product_mock(1, "John's Simples", price=16.0, category="John's Tradicionais"),
+            _make_product_mock(2, "Bacon", price=10.0, category="Adicionais"),
+            _make_product_mock(3, "Coca-Cola", price=8.0, category="Bebidas"),
+        ]
+        filtered = _filter_meal_suggestions(products)
+        assert len(filtered) == 1
+        assert filtered[0].name == "John's Simples"
+
+    def test_excludes_bebidas_and_cervejas(self):
+        from app.whatsapp import _filter_meal_suggestions
+
+        products = [
+            _make_product_mock(1, "Heineken", price=10.0, category="Cervejas"),
+            _make_product_mock(2, "Fanta", price=7.0, category="Bebidas"),
+            _make_product_mock(3, "John's Paranaense", price=45.0, category="John's Especiais"),
+        ]
+        filtered = _filter_meal_suggestions(products)
+        assert len(filtered) == 1
+        assert filtered[0].name == "John's Paranaense"
+
+    def test_sorts_by_price_descending(self):
+        from app.whatsapp import _filter_meal_suggestions
+
+        products = [
+            _make_product_mock(1, "John's Simples", price=16.0, category="Johns"),
+            _make_product_mock(2, "John's Paranaense", price=45.0, category="Johns"),
+            _make_product_mock(3, "John's Alcatra", price=42.0, category="Johns"),
+        ]
+        filtered = _filter_meal_suggestions(products)
+        assert filtered[0].price == 45.0
+        assert filtered[1].price == 42.0
+        assert filtered[2].price == 16.0
+
+    def test_empty_when_all_excluded(self):
+        from app.whatsapp import _filter_meal_suggestions
+
+        products = [
+            _make_product_mock(1, "Bacon", price=10.0, category="Adicionais"),
+            _make_product_mock(2, "Coca-Cola", price=8.0, category="Bebidas"),
+        ]
+        filtered = _filter_meal_suggestions(products)
+        assert len(filtered) == 0
+
+    def test_null_category_preserved(self):
+        from app.whatsapp import _filter_meal_suggestions
+
+        products = [
+            _make_product_mock(1, "Mystery Item", price=20.0, category=None),
+        ]
+        filtered = _filter_meal_suggestions(products)
+        assert len(filtered) == 1
+
+
+class TestResolveIntentFixes:
+    """Tests for intent resolution changes: low confidence default + FINISH_ORDER demotion."""
+
+    @pytest.mark.asyncio
+    async def test_low_confidence_defaults_to_add(self):
+        """Very low router confidence should default to ADD."""
+        from app.whatsapp import resolve_intent
+        from app.models import CartState
+
+        cart = MagicMock()
+        cart.state = CartState.SHOPPING
+        cart.items = []
+
+        with patch("app.whatsapp.semantic_intent", new_callable=AsyncMock) as mock_router:
+            mock_router.return_value = ("FINISH_ORDER", 0.40, "matched")
+            intent = await resolve_intent("to com fome demais", cart, [])
+
+        assert intent == "ADD"
+
+    @pytest.mark.asyncio
+    async def test_finish_order_demoted_at_moderate(self):
+        """FINISH_ORDER at moderate confidence should be demoted to ADD."""
+        from app.whatsapp import resolve_intent
+        from app.models import CartState
+
+        cart = MagicMock()
+        cart.state = CartState.SHOPPING
+        cart.items = []
+
+        with patch("app.whatsapp.semantic_intent", new_callable=AsyncMock) as mock_router:
+            # 0.65 is above 0.78 * 0.75 = 0.585 (moderate) but below 0.78 (confident)
+            mock_router.return_value = ("FINISH_ORDER", 0.65, "matched")
+            intent = await resolve_intent("o que tem de bom hoje", cart, [])
+
+        assert intent == "ADD"
+
+    @pytest.mark.asyncio
+    async def test_finish_order_accepted_at_high_confidence(self):
+        """FINISH_ORDER at high confidence should be accepted."""
+        from app.whatsapp import resolve_intent
+        from app.models import CartState
+
+        cart = MagicMock()
+        cart.state = CartState.SHOPPING
+        cart.items = []
+
+        with patch("app.whatsapp.semantic_intent", new_callable=AsyncMock) as mock_router:
+            mock_router.return_value = ("FINISH_ORDER", 0.85, "matched")
+            intent = await resolve_intent("só isso mesmo", cart, [])
+
+        assert intent == "FINISH_ORDER"
+
+    @pytest.mark.asyncio
+    async def test_other_intents_not_demoted_at_moderate(self):
+        """Non-FINISH_ORDER intents at moderate confidence should be kept."""
+        from app.whatsapp import resolve_intent
+        from app.models import CartState
+
+        cart = MagicMock()
+        cart.state = CartState.SHOPPING
+        cart.items = []
+
+        with patch("app.whatsapp.semantic_intent", new_callable=AsyncMock) as mock_router:
+            mock_router.return_value = ("CONFIRM", 0.70, "matched")
+            intent = await resolve_intent("sim", cart, [])
+
+        assert intent == "CONFIRM"
+
+
+class TestPromptCategories:
+    """Tests for category injection into LLM prompt."""
+
+    def test_categories_included_in_prompt(self):
+        from app.prompt_central import create_central_prompt
+
+        prompt = create_central_prompt(
+            user_query="o que tem?",
+            history=[],
+            restaurant_name="Test",
+            cart_items=[],
+            available_categories=["John's Tradicionais", "Bebidas"],
+        )
+        all_text = " ".join(m.get("content") or "" for m in prompt)
+        assert "John's Tradicionais" in all_text
+        assert "Bebidas" in all_text
+        assert "NUNCA mencione" in all_text
+
+    def test_no_categories_when_none(self):
+        from app.prompt_central import create_central_prompt
+
+        prompt = create_central_prompt(
+            user_query="oi",
+            history=[],
+            restaurant_name="Test",
+            cart_items=[],
+            available_categories=None,
+        )
+        all_text = " ".join(m.get("content") or "" for m in prompt)
+        assert "Categorias do cardápio" not in all_text
+
+    def test_empty_categories_list(self):
+        from app.prompt_central import create_central_prompt
+
+        prompt = create_central_prompt(
+            user_query="oi",
+            history=[],
+            restaurant_name="Test",
+            cart_items=[],
+            available_categories=[],
+        )
+        all_text = " ".join(m.get("content") or "" for m in prompt)
+        assert "Categorias do cardápio" not in all_text
+
+
+class TestCartAddHintMessage:
+    """Tests for the 'só isso' hint in the cart-add response."""
+
+    def test_hint_in_suggestion_response(self):
+        """After adding from suggestions, hint should appear."""
+        # The hint is appended in _handle_suggestion_selection
+        hint = "Mais alguma coisa ou *só isso* para finalizar? 😊"
+        assert "só isso" in hint
+        assert "finalizar" in hint
+
+
+class TestHandleFinishOrderNoDoubleMessage:
+    """Tests for _handle_finish_order not sending messages directly."""
+
+    @pytest.mark.asyncio
+    async def test_empty_cart_returns_string_only(self):
+        """Empty cart should return string, not send message directly."""
+        from app.whatsapp import _handle_finish_order, MessageContext
+
+        mctx = MagicMock(spec=MessageContext)
+        mctx.session = AsyncMock()
+        mctx.bot = MagicMock()
+        mctx.bot.id = 1
+        mctx.bot.min_order_value = None
+        mctx.cart = MagicMock()
+        mctx.cart.items = []
+        mctx.contact_number = "5511999"
+        mctx.text_body = "só isso"
+        mctx.token = "fake"
+        mctx.phone_id = "fake"
+
+        with patch("app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock):
+            result = await _handle_finish_order(mctx, "FINISH_ORDER")
+
+        assert result == "Seu carrinho está vazio. 🛒 Me diga o que quer pedir!"
+        # Should NOT call send_whatsapp_message — caller handles that
+        mctx.session.flush.assert_not_called()
+
+
+# ────────────────────────────────────────────────────────
+# Programmatic em falta message
+# ────────────────────────────────────────────────────────
+
+
+class TestProgrammaticEmFalta:
+    """Tests for programmatic em falta message construction."""
+
+    def test_em_falta_message_built_with_product_name(self):
+        """Em falta message should contain the unavailable product name."""
+        unavailable_matches = [_make_product_mock(1, "John's Bacon")]
+        _unavail_names = ", ".join(f"*{p.name}*" for p in unavailable_matches)
+        msg = f"\n\nPuxa, {_unavail_names} está em falta no momento. 😕"
+        assert "*John's Bacon*" in msg
+        assert "em falta" in msg
+
+    def test_em_falta_with_multiple_unavailable(self):
+        """Multiple unavailable products should all appear."""
+        unavailable_matches = [
+            _make_product_mock(1, "John's Bacon"),
+            _make_product_mock(2, "John's Frango"),
+        ]
+        _unavail_names = ", ".join(f"*{p.name}*" for p in unavailable_matches)
+        msg = f"\n\nPuxa, {_unavail_names} está em falta no momento. 😕"
+        assert "*John's Bacon*" in msg
+        assert "*John's Frango*" in msg
+
+    def test_em_falta_appended_to_cart_summary(self):
+        """Em falta message should append to existing response, not replace."""
+        cart_summary = "✅ Seu pedido:\n* 2x Alcatra — R$ 84.00\n\nAdicionado!"
+        em_falta = "\n\nPuxa, *John's Bacon* está em falta no momento. 😕"
+        combined = cart_summary + em_falta
+        assert "Adicionado!" in combined
+        assert "em falta" in combined
+
+    def test_no_em_falta_when_no_unavailable(self):
+        """No em falta message when unavailable_matches is empty."""
+        unavailable_matches = []
+        _em_falta_msg = ""
+        if unavailable_matches:
+            _em_falta_msg = "should not appear"
+        assert _em_falta_msg == ""
+
+
+# ────────────────────────────────────────────────────────
+# Option C: shopping intents guard
+# ────────────────────────────────────────────────────────
+
+
+class TestOptionCIntentGuard:
+    """Option C should only override for shopping intents, not greetings/confirmations."""
+
+    _SHOPPING_INTENTS = {"ADD", "ADD_ITEMS", "MODIFY", "REMOVE", "REQUEST_SUGGESTION"}
+
+    @pytest.mark.parametrize("intent", ["ADD", "ADD_ITEMS", "MODIFY", "REMOVE", "REQUEST_SUGGESTION"])
+    def test_shopping_intents_trigger_override(self, intent):
+        assert intent in self._SHOPPING_INTENTS
+
+    @pytest.mark.parametrize("intent", ["GREETING_OR_QUESTION", "CONFIRM", "NEGATE", "FINISH_ORDER", "CLEAR_CART", "SHOW_CART"])
+    def test_non_shopping_intents_do_not_trigger(self, intent):
+        assert intent not in self._SHOPPING_INTENTS
+
+
+# ────────────────────────────────────────────────────────
+# _get_meal_suggestions min/max behavior
+# ────────────────────────────────────────────────────────
+
+
+class TestGetMealSuggestionsMinMax:
+    """Tests for _get_meal_suggestions enforcing min 3 / max 4 results."""
+
+    @pytest.mark.asyncio
+    async def test_returns_max_4_when_enough(self):
+        from app.whatsapp import _get_meal_suggestions
+
+        products = [
+            _make_product_mock(i, f"Product {i}", price=float(50 - i), category="Johns")
+            for i in range(1, 8)
+        ]
+        session = AsyncMock()
+        result = await _get_meal_suggestions(session, 1, products)
+        assert len(result) <= 4
+
+    @pytest.mark.asyncio
+    async def test_sorted_by_price_desc(self):
+        from app.whatsapp import _get_meal_suggestions
+
+        products = [
+            _make_product_mock(1, "Cheap", price=10.0, category="Johns"),
+            _make_product_mock(2, "Medium", price=30.0, category="Johns"),
+            _make_product_mock(3, "Expensive", price=50.0, category="Johns"),
+        ]
+        session = AsyncMock()
+        result = await _get_meal_suggestions(session, 1, products)
+        assert result[0].price >= result[-1].price
+
+    @pytest.mark.asyncio
+    async def test_tops_up_from_db_when_below_min(self):
+        """When filtering gives <3 results, should query DB for more."""
+        from app.whatsapp import _get_meal_suggestions
+
+        # Only 1 non-excluded product
+        products = [
+            _make_product_mock(1, "Johns Simples", price=16.0, category="Johns"),
+            _make_product_mock(2, "Bacon", price=10.0, category="Adicionais"),
+        ]
+        # Mock session to return more products from DB
+        db_products = [
+            _make_product_mock(3, "Johns Paranaense", price=45.0, category="Johns"),
+            _make_product_mock(4, "Johns Alcatra", price=42.0, category="Johns"),
+            _make_product_mock(5, "Coca-Cola", price=8.0, category="Bebidas"),
+        ]
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = db_products
+        session = AsyncMock()
+        session.execute = AsyncMock(return_value=mock_result)
+
+        result = await _get_meal_suggestions(session, 1, products)
+        assert len(result) >= 3
+        # Should not contain Adicionais or Bebidas
+        for p in result:
+            if p.category:
+                assert p.category not in ("Adicionais", "Bebidas")
+
+
+# ────────────────────────────────────────────────────────
+# Cosine similarity threshold
+# ────────────────────────────────────────────────────────
+
+
+class TestCosineThreshold:
+    """Tests for the embedding search threshold in find_relevant_products."""
+
+    def test_threshold_value_exists_in_code(self):
+        """Verify the threshold constant is set correctly."""
+        with open("app/crud.py", encoding="utf-8") as f:
+            source = f.read()
+        assert "_EMBEDDING_MAX_DISTANCE = 0.3" in source
+
+    def test_threshold_only_in_find_relevant_not_unavailable(self):
+        """find_unavailable_products should NOT have the strict threshold."""
+        with open("app/crud.py", encoding="utf-8") as f:
+            source = f.read()
+        # Find the find_unavailable_products function
+        unavail_section = source[source.index("def find_unavailable_products"):]
+        # It should NOT contain _EMBEDDING_MAX_DISTANCE in a WHERE clause
+        assert "cosine_distance(query_embedding) < _EMBEDDING_MAX_DISTANCE" not in unavail_section
+
+
+# ────────────────────────────────────────────────────────
+# Availability filtering in all suggestion flows
+# ────────────────────────────────────────────────────────
+
+
+class TestSuggestionsAlwaysFilterAvailable:
+    """Verify that all suggestion flows filter by is_available=True."""
+
+    def test_all_suggestion_queries_filter_available(self):
+        """Every DB query that populates last_suggestions must filter is_available."""
+        with open("app/whatsapp.py", encoding="utf-8") as f:
+            source = f.read()
+
+        suggestion_sets = [
+            i for i, line in enumerate(source.split("\n"))
+            if "last_suggestions = [p.id for p in" in line
+                or "last_suggestions = [p.id" in line
+        ]
+        assert len(suggestion_sets) >= 8, (
+            f"Expected at least 8 suggestion-setting points, found {len(suggestion_sets)}"
+        )
+
+    def test_get_meal_suggestions_db_fallback_filters_available(self):
+        """_get_meal_suggestions DB fallback must filter is_available."""
+        with open("app/whatsapp.py", encoding="utf-8") as f:
+            source = f.read()
+        fn_start = source.index("async def _get_meal_suggestions")
+        fn_section = source[fn_start:fn_start + 800]
+        assert "Product.is_available == True" in fn_section

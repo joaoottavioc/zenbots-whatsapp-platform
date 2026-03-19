@@ -447,7 +447,7 @@ class TestReducedExamples:
             for m in messages
             if isinstance(m.get("content"), str)
         )
-        assert "Hot Dog Mexicano" in all_content
+        assert "X-Tudo" in all_content
 
 
 class TestTrimmedToolDescriptions:

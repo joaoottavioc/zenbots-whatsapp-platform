@@ -1043,20 +1043,11 @@ async def _handle_finish_order(mctx: MessageContext, intent: str | None) -> str 
         return None
 
     cart, session, bot = mctx.cart, mctx.session, mctx.bot
-    contact_number, text_body = mctx.contact_number, mctx.text_body
 
     await _load_cart_items_with_products(cart, session, load_contact=True)
 
     if not cart.items:
-        response = "Seu carrinho está vazio. 🛒 Me diga o que quer pedir!"
-        await send_whatsapp_message(
-            contact_number, response, token=mctx.token, phone_id=mctx.phone_id
-        )
-        await crud.add_interaction_to_history(
-            session, bot.id, contact_number, text_body, response
-        )
-        await session.flush()
-        return response
+        return "Seu carrinho está vazio. 🛒 Me diga o que quer pedir!"
 
     current_total = sum(item.product.price * item.quantity for item in cart.items)
 
@@ -1066,18 +1057,10 @@ async def _handle_finish_order(mctx: MessageContext, intent: str | None) -> str 
         and current_total < bot.min_order_value
     ):
         missing = bot.min_order_value - current_total
-        response = (
+        return (
             f"O pedido mínimo é *R$ {bot.min_order_value:.2f}* e você está em *R$ {current_total:.2f}*.\n\n"
             f"Faltam só *R$ {missing:.2f}* — que tal uma bebida ou sobremesa? 🥤"
         )
-        await send_whatsapp_message(
-            contact_number, response, token=mctx.token, phone_id=mctx.phone_id
-        )
-        await crud.add_interaction_to_history(
-            session, bot.id, contact_number, text_body, response
-        )
-        await session.flush()
-        return response
 
     elif cart.delivery_method is None:
         cart.state = CartState.AWAITING_DELIVERY_METHOD
@@ -1164,6 +1147,7 @@ async def _handle_shopping_intent(
         ]
 
     response_to_user = "Não entendi bem. 😅 Pode tentar de outra forma?"
+    _em_falta_msg = ""
 
     if intent == "REQUEST_SUGGESTION":
         concept = None
@@ -1203,16 +1187,17 @@ async def _handle_shopping_intent(
         if not concept:
             concept = "prato principal"
             logger.info("Using default suggestion theme: %s", concept)
-            title = "Claro! Aqui estão algumas das nossas sugestões da casa:"
+            title = "Aqui estão algumas das nossas sugestões:"
         else:
             logger.info("Using AI-extracted suggestion concept: %s", concept)
-            title = f"Claro! Encontrei estas opções relacionadas a '{concept}':"
+            title = f"Encontrei estas opções relacionadas a '{concept}':"
 
         found_products = await crud.find_relevant_products(session, bot.id, [concept])
 
         if not found_products:
             response_to_user = "Puxa, não encontrei nenhuma sugestão no momento. Mas nosso cardápio está cheio de delícias! O que você gostaria?"
         else:
+            found_products = await _get_meal_suggestions(session, bot.id, found_products)
             response_to_user = _format_product_suggestions_message(
                 found_products, title
             )
@@ -1314,6 +1299,30 @@ async def _handle_shopping_intent(
                         clear_pending(cart)
                         break
 
+        # Build em falta message programmatically (don't rely on LLM).
+        # The LLM will focus on adding valid items; we append this after.
+        _em_falta_msg = ""
+        if unavailable_matches:
+            _unavail_names = ", ".join(f"*{p.name}*" for p in unavailable_matches)
+            _em_falta_msg = (
+                f"\n\nPuxa, {_unavail_names} está em falta no momento. 😕"
+            )
+            if cart.last_suggestions:
+                _em_falta_msg += " Diga *'sim'* para ver alternativas!"
+
+        # Fetch distinct categories for the bot's menu
+        _cat_result = await session.execute(
+            select(Product.category).distinct().where(
+                Product.bot_id == bot.id,
+                Product.is_available == True,
+                Product.is_deleted == False,
+                Product.category.isnot(None),
+            )
+        )
+        _available_categories = [r[0] for r in _cat_result]
+
+        # Don't pass unavailable_products to the LLM — we handle em falta
+        # programmatically. This lets the LLM focus on adding valid items.
         prompt = create_central_prompt(
             user_query=text_body,
             history=past_messages,
@@ -1321,7 +1330,8 @@ async def _handle_shopping_intent(
             cart_items=cart_items,
             search_results=found_products,
             recent_suggestions=recent_suggestions,
-            unavailable_products=unavailable_matches,
+            unavailable_products=[],
+            available_categories=_available_categories,
         )
         ai_message = await get_ai_decision(prompt, tools_schema, force_tool=True)
 
@@ -1418,7 +1428,7 @@ async def _handle_shopping_intent(
 
                             response_to_user = (
                                 _build_cart_summary_message(cart, bot, "✅")
-                                + "\n\nAdicionado! Mais alguma coisa? 😊"
+                                + "\n\nAdicionado! Mais alguma coisa ou *só isso* para finalizar? 😊"
                                 + skipped_msg
                             )
                         else:
@@ -1617,32 +1627,118 @@ async def _handle_shopping_intent(
                                 "Não entendi o que você quis dizer. Pode tentar de outra forma?",
                             )
                         )
+                        # Option C: When the LLM responds conversationally
+                        # without adding anything to the cart, show the numbered
+                        # product list directly instead of the LLM's text.
+                        # This eliminates hallucinated categories and reduces
+                        # friction by one turn (no need for "sim" follow-up).
+                        _SHOPPING_INTENTS = {"ADD", "ADD_ITEMS", "MODIFY", "REMOVE", "REQUEST_SUGGESTION"}
+                        if (
+                            not cart_tool_processed
+                            and intent in _SHOPPING_INTENTS
+                            and not unavailable_matches
+                        ):
+                            _src = found_products or []
+                            _filtered = await _get_meal_suggestions(session, bot.id, _src)
+                            if _filtered:
+                                cart.last_suggestions = [p.id for p in _filtered]
+                                conv_text = _format_product_suggestions_message(
+                                    _filtered, "Posso te ajudar! Veja nossas opções:"
+                                )
+
                         if cart_tool_processed:
-                            # Append conversational response after cart action
                             response_to_user = response_to_user + "\n\n" + conv_text
                         else:
                             response_to_user = conv_text
+
+                    elif tool_name == "search_catalog_for_suggestions":
+                        # LLM correctly identified a vague/suggestion request
+                        # but we're in the ADD path — execute the search here.
+                        try:
+                            sug_concept = tool_args.get("search_concept", "prato principal")
+                            sug_concept = str(sug_concept)[:100]
+                            sug_concept = re.sub(
+                                r"[^\w\s\-áàâãéèêíìîóòôõúùûçÁÀÂÃÉÈÊÍÌÎÓÒÔÕÚÙÛÇ]",
+                                "", sug_concept
+                            ).strip()
+                            if not sug_concept:
+                                sug_concept = "prato principal"
+                        except (TypeError, AttributeError):
+                            sug_concept = "prato principal"
+
+                        sug_products = await crud.find_relevant_products(
+                            session, bot.id, [sug_concept]
+                        )
+                        if sug_products:
+                            sug_products = await _get_meal_suggestions(session, bot.id, sug_products)
+                            cart.last_suggestions = [p.id for p in sug_products]
+                            response_to_user = _format_product_suggestions_message(
+                                sug_products,
+                                f"Encontrei estas opções relacionadas a '{sug_concept}':",
+                            )
+                        else:
+                            response_to_user = (
+                                "Puxa, não encontrei nenhuma sugestão no momento. "
+                                "Mas nosso cardápio está cheio de delícias! O que você gostaria?"
+                            )
+                        break
+
                     continue
 
                 else:
-                    final_intent = intent
-                    if final_intent in ("ADD", "ADD_ITEMS") and extracted_items:
-                        items_str = " e ".join(f"'{item}'" for item in extracted_items)
-                        response_to_user = f"Não encontrei *{items_str}* no nosso cardápio. 😕 Quer tentar outro item ou ver nossas sugestões?"
+                    # Unknown tool — show suggestions instead of "Não entendi"
+                    if intent in ("ADD", "ADD_ITEMS"):
+                        _search = search_terms if search_terms else ["prato principal"]
+                        _alt = await crud.find_relevant_products(session, bot.id, _search)
+                        _alt = await _get_meal_suggestions(session, bot.id, _alt) if _alt else []
+                        if _alt:
+                            cart.last_suggestions = [p.id for p in _alt]
+                            response_to_user = _format_product_suggestions_message(
+                                _alt, "Posso te ajudar! Veja nossas opções:"
+                            )
+                        else:
+                            response_to_user = "Me diga o que gostaria de pedir e posso ajudar! 😊"
                     else:
                         response_to_user = "Não consegui entender sua solicitação. 😅 Pode reformular de outra forma?"
                     break
 
         else:
-            # AI returned no tool calls
-            final_intent = intent
-            if final_intent in ("ADD", "ADD_ITEMS") and extracted_items:
-                items_str = " e ".join(f"'{item}'" for item in extracted_items)
-                response_to_user = f"Não localizei {items_str} no cardápio. 😔 Temos muitas outras opções — quer ver algumas sugestões?"
+            # AI returned no tool calls — show suggestions instead of "Não entendi"
+            if intent in ("ADD", "ADD_ITEMS"):
+                _search = search_terms if search_terms else ["prato principal"]
+                _alt = await crud.find_relevant_products(session, bot.id, _search)
+                _alt = await _get_meal_suggestions(session, bot.id, _alt) if _alt else []
+                if _alt:
+                    cart.last_suggestions = [p.id for p in _alt]
+                    response_to_user = _format_product_suggestions_message(
+                        _alt, "Posso te ajudar! Veja nossas opções:"
+                    )
+                else:
+                    response_to_user = "Me diga o que gostaria de pedir e posso ajudar! 😊"
             else:
                 response_to_user = (
                     "Desculpe, não consegui processar. 😅 Pode tentar de outra forma?"
                 )
+
+    # Final safety net: if the default "Não entendi" survived all handlers
+    # (e.g. answer_with_found_products has no dispatch handler), show
+    # menu suggestions instead for ADD intent.
+    _DEFAULT_FALLBACK = "Não entendi bem. 😅 Pode tentar de outra forma?"
+    if response_to_user == _DEFAULT_FALLBACK and intent in ("ADD", "ADD_ITEMS"):
+        _alt = await _get_meal_suggestions(
+            session, bot.id, found_products if found_products else []
+        )
+        if _alt:
+            cart.last_suggestions = [p.id for p in _alt]
+            response_to_user = _format_product_suggestions_message(
+                _alt, "Posso te ajudar! Veja nossas opções:"
+            )
+        else:
+            response_to_user = "Me diga o que gostaria de pedir e posso ajudar! 😊"
+
+    # Append programmatic em falta message if unavailable products were detected
+    if _em_falta_msg:
+        response_to_user += _em_falta_msg
 
     return response_to_user
 
@@ -1687,28 +1783,11 @@ async def _handle_suggestion_selection(mctx: MessageContext) -> str | None:
     if not cart.last_suggestions:
         return None
 
-    # Don't intercept NEW product requests — clear stale suggestions instead
-    _ordering_verbs = [
-        "quero",
-        "vou querer",
-        "adiciona",
-        "me ve",
-        "me vê",
-        "bota",
-        "coloca",
-        "manda",
-        "também",
-        "mais um",
-        "mais uma",
-    ]
-    text_lower = text.lower()
-    if any(verb in text_lower for verb in _ordering_verbs):
-        cart.last_suggestions = None
-        clear_pending(cart)
-        return None
+    # Let the matching logic below (ordinals, digits, name fragments) try first.
+    # If nothing matches, we clear stale suggestions at the end before returning.
 
-    # Only intercept short messages (selections, not full product orders)
-    if len(text) > 60:
+    # Only intercept reasonably short messages (not full paragraphs)
+    if len(text) > 120:
         return None
 
     # Load suggested products
@@ -1726,63 +1805,106 @@ async def _handle_suggestion_selection(mctx: MessageContext) -> str | None:
         cart.last_suggestions = None
         return None
 
-    selected = None
-
-    # 1. Check for number or ordinal reference
+    # --- Multi-selection support ---
+    # Parse the message into parts (split on "e", ",", ";") and try to match
+    # each part against suggestions via ordinals, digits, or name overlap.
     _ORDINALS = {
-        "primeiro": 0,
-        "primeira": 0,
-        "segundo": 1,
-        "segunda": 1,
-        "terceiro": 2,
-        "terceira": 2,
-        "quarto": 3,
-        "quarta": 3,
-        "quinto": 4,
-        "quinta": 4,
+        "primeiro": 0, "primeira": 0,
+        "segundo": 1, "segunda": 1,
+        "terceiro": 2, "terceira": 2,
+        "quarto": 3, "quarta": 3,
+        "quinto": 4, "quinta": 4,
     }
-    text_lower_sel = text.lower()
-    for word, idx in _ORDINALS.items():
-        if word in text_lower_sel and 0 <= idx < len(suggestions):
-            selected = suggestions[idx]
-            break
+    _WRITTEN_QTY = {
+        "um": 1, "uma": 1, "dois": 2, "duas": 2, "três": 3, "tres": 3,
+        "quatro": 4, "cinco": 5, "seis": 6, "sete": 7, "oito": 8,
+        "nove": 9, "dez": 10,
+    }
 
-    if not selected:
-        digit_match = re.search(r"\b(\d{1,2})\b", text)
+    def _parse_qty_from_text(part_text: str) -> int:
+        """Extract quantity from a text fragment."""
+        qty = 1
+        for qty_word, qty_val in _WRITTEN_QTY.items():
+            if qty_word in part_text.split():
+                qty = qty_val
+                break
+        qty_digit = re.search(r"\b(\d{1,2})\b", part_text)
+        if qty_digit:
+            qty = int(qty_digit.group(1))
+        return qty
+
+    def _match_part(part: str) -> tuple | None:
+        """Try to match a message part to a suggestion. Returns (product, qty) or None."""
+        part_lower = part.lower().strip()
+        if not part_lower:
+            return None
+
+        # Try ordinal match
+        for word, idx in _ORDINALS.items():
+            if word in part_lower and 0 <= idx < len(suggestions):
+                before = part_lower.split(word)[0]
+                return (suggestions[idx], _parse_qty_from_text(before))
+
+        # Try digit-as-index match
+        digit_match = re.search(r"\b(\d{1,2})\b", part_lower)
         if digit_match:
             idx = int(digit_match.group(1)) - 1
             if 0 <= idx < len(suggestions):
-                selected = suggestions[idx]
+                return (suggestions[idx], 1)
 
-    # 2. Score each suggestion by word overlap with the message.
-    #    "sim quero um johns frango" shares 2 words with "John's Frango com Calabresa"
-    #    but only 1 word with plain "Frango" → picks the right product.
-    if not selected:
-        text_norm = text.lower().replace("'", "").replace("\u2019", "")
-        msg_words = {w for w in text_norm.split() if len(w) > 3}
+        # Try name overlap match (with basic plural normalization)
+        def _stem(w: str) -> str:
+            """Simple Portuguese plural normalization — strip trailing 's'."""
+            if len(w) > 4 and w.endswith("s"):
+                return w[:-1]
+            return w
 
-        if msg_words:
-            best_match = None
-            best_score = 0
+        part_norm = part_lower.replace("'", "").replace("\u2019", "")
+        part_words = {_stem(w) for w in part_norm.split() if len(w) > 3}
+        if part_words:
+            best_match, best_score = None, 0
             for p in suggestions:
                 name_norm = p.name.lower().replace("'", "").replace("\u2019", "")
-                name_words = {w for w in name_norm.split() if len(w) > 3}
-                score = len(msg_words & name_words)
+                name_words = {_stem(w) for w in name_norm.split() if len(w) > 3}
+                score = len(part_words & name_words)
                 if score > best_score:
                     best_score = score
                     best_match = p
             if best_score >= 1 and best_match:
-                selected = best_match
+                return (best_match, _parse_qty_from_text(part_lower))
 
-    if not selected:
         return None
 
-    # Add the selected product to cart
+    # Split message into parts and match each
+    parts = re.split(r"\s*(?:\be\b|,|;)\s*", text, flags=re.IGNORECASE)
+    selections: list[tuple] = []  # [(product, quantity), ...]
+    seen_ids: set[int] = set()
+
+    for part in parts:
+        match = _match_part(part)
+        if match and match[0].id not in seen_ids:
+            selections.append(match)
+            seen_ids.add(match[0].id)
+
+    # Fallback: if no parts matched but the whole message matches, use it
+    if not selections:
+        whole_match = _match_part(text)
+        if whole_match:
+            selections.append(whole_match)
+
+    if not selections:
+        return None
+
+    # Add all selected products to cart
+    items_to_add = [
+        {"product_id": p.id, "quantity": qty, "product_name": p.name}
+        for p, qty in selections
+    ]
     skipped: list[str] = []
     await crud.add_items_to_db_cart(
         session,
         cart.id,
-        [{"product_id": selected.id, "quantity": 1, "product_name": selected.name}],
+        items_to_add,
         bot_id=bot.id,
         skipped_items=skipped,
     )
@@ -1791,12 +1913,13 @@ async def _handle_suggestion_selection(mctx: MessageContext) -> str | None:
     clear_pending(cart)
 
     if not cart.items:
-        return f"*{selected.name}* não está disponível no momento. 😕 O que mais posso ajudar?"
+        names = ", ".join(f"*{p.name}*" for p, _ in selections)
+        return f"{names} não está disponível no momento. 😕 O que mais posso ajudar?"
 
     cart.state = CartState.SHOPPING
     response = (
         _build_cart_summary_message(cart, bot, "✅")
-        + "\n\nAdicionado! Mais alguma coisa? 😊"
+        + "\n\nAdicionado! Mais alguma coisa ou *só isso* para finalizar? 😊"
     )
     if skipped:
         names = ", ".join(skipped)
@@ -2639,14 +2762,24 @@ async def resolve_intent(text_body, cart, cart_items_for_intent, found_products=
         )
         final_intent = router_intent
     elif router_intent and router_score >= thresh * 0.75:
-        # 4. Moderate confidence — trust router's best guess without LLM
-        logger.info(
-            "[INTENT] router moderate: %s score=%.2f threshold=%.2f (no LLM fallback)",
-            router_intent,
-            router_score,
-            thresh,
-        )
-        final_intent = router_intent
+        # 4. Moderate confidence — trust router's best guess without LLM.
+        # Exception: FINISH_ORDER requires high confidence to avoid
+        # misclassifying vague messages as "finalize order".
+        if router_intent == "FINISH_ORDER":
+            logger.info(
+                "[INTENT] FINISH_ORDER demoted at moderate confidence: score=%.2f threshold=%.2f → default ADD",
+                router_score,
+                thresh,
+            )
+            final_intent = "ADD"
+        else:
+            logger.info(
+                "[INTENT] router moderate: %s score=%.2f threshold=%.2f (no LLM fallback)",
+                router_intent,
+                router_score,
+                thresh,
+            )
+            final_intent = router_intent
     else:
         # 5. Very low confidence or router failed — default to ADD
         # The tool-calling prompt will implicitly classify via tool selection
@@ -2656,7 +2789,7 @@ async def resolve_intent(text_body, cart, cart_items_for_intent, found_products=
             router_score,
             thresh,
         )
-        final_intent = router_intent if router_intent else "ADD"
+        final_intent = "ADD"
 
     # 6. Cart-state-aware override: reinterpret intents during checkout
     if in_checkout and final_intent in _CHECKOUT_INTENT_OVERRIDES:
@@ -2670,6 +2803,55 @@ async def resolve_intent(text_body, cart, cart_items_for_intent, found_products=
         )
 
     return final_intent
+
+
+# Categories excluded from meal suggestions (addons, drinks, etc.)
+_SUGGESTION_EXCLUDED_CATEGORIES = re.compile(
+    r"(?i)^(adicionais|bebidas|cervejas|extras|complementos|acompanhamentos)$"
+)
+
+
+def _filter_meal_suggestions(products: List[Product]) -> List[Product]:
+    """Filter products for meal suggestions: exclude addon/drink categories,
+    sort by price descending (surfaces main dishes). Returns empty list if
+    nothing passes — caller should use _fetch_meal_products as fallback."""
+    filtered = [
+        p for p in products
+        if not p.category
+        or not _SUGGESTION_EXCLUDED_CATEGORIES.match(p.category)
+    ]
+    return sorted(filtered, key=lambda p: p.price, reverse=True)
+
+
+async def _get_meal_suggestions(
+    session, bot_id: int, products: List[Product],
+    min_results: int = 3, max_results: int = 4,
+) -> List[Product]:
+    """Filter products for meal suggestions. If filtering gives fewer than
+    min_results, tops up from a direct DB query for non-excluded products."""
+    filtered = _filter_meal_suggestions(products)
+    if len(filtered) >= min_results:
+        return filtered[:max_results]
+    # Top up: query DB directly for meal products we don't already have
+    from sqlalchemy import select as sa_select
+    existing_ids = {p.id for p in filtered}
+    query = (
+        sa_select(Product)
+        .where(
+            Product.bot_id == bot_id,
+            Product.is_available == True,
+            Product.is_deleted == False,
+        )
+        .order_by(Product.price.desc())
+        .limit(max_results * 3)
+    )
+    result = await session.execute(query)
+    all_products = list(result.scalars().all())
+    extras = _filter_meal_suggestions(
+        [p for p in all_products if p.id not in existing_ids]
+    )
+    combined = sorted(filtered + extras, key=lambda p: p.price, reverse=True)
+    return combined[:max_results] if combined else all_products[:max_results]
 
 
 def _format_product_suggestions_message(products: List[Product], title: str) -> str:

@@ -360,7 +360,10 @@ async def find_relevant_products(
             if p.id not in all_results_map:
                 all_results_map[p.id] = p
 
-        # 🔹 4. Fallback: busca semântica (RAG)
+        # 🔹 4. Fallback: busca semântica (RAG) — with similarity threshold
+        # cosine_distance < 0.3 means cosine_similarity > 0.7
+        # Prevents weak matches like "cachorro quente" → "Bacon"
+        _EMBEDDING_MAX_DISTANCE = 0.3
         text_to_embed = f"PRODUTO PRINCIPAL: {item_name}"
         embeddings = await embed_async(
             [text_to_embed], space="products", normalize=False
@@ -372,12 +375,13 @@ async def find_relevant_products(
                 Product.bot_id == bot_id,
                 Product.is_available == True,
                 Product.is_deleted == False,
+                Product.embedding.cosine_distance(query_embedding) < _EMBEDDING_MAX_DISTANCE,
             )
             .order_by(
-                Product.embedding.cosine_distance(query_embedding)  #
+                Product.embedding.cosine_distance(query_embedding)
             )
             .limit(limit_per_item)
-        )  #
+        )
         for p in (await session.execute(embedding_query)).scalars().all():
             if p.id not in all_results_map:
                 all_results_map[p.id] = p
@@ -441,6 +445,8 @@ async def find_unavailable_products(
                 results_map[p.id] = p
 
         # 3. Embedding search (handles typos like "johs" → "john's")
+        # No strict threshold here — this is a last resort for typos.
+        # The downstream SequenceMatcher comparison in whatsapp.py validates matches.
         if not results_map:
             text_to_embed = f"PRODUTO PRINCIPAL: {item_name}"
             embeddings = await embed_async(

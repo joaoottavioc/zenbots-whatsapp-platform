@@ -13,6 +13,7 @@ def create_central_prompt(
     search_results: Optional[List[Product]] = None,
     recent_suggestions: Optional[List[Product]] = None,
     unavailable_products: Optional[List[Product]] = None,
+    available_categories: Optional[List[str]] = None,
 ) -> List[Dict]:
     """
     Prompt central multishot para escolha de ferramenta,
@@ -109,6 +110,16 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
             f"Se o cliente pediu algum desses, informe que está em falta e sugira outras opções do cardápio.\n"
         )
 
+    # --- CONTEXTO DE CATEGORIAS DO CARDÁPIO ---
+    categories_context = ""
+    if available_categories:
+        cats = ", ".join(available_categories)
+        categories_context = (
+            f"\n**Categorias do cardápio:**\n{cats}\n"
+            "NUNCA mencione tipos de comida, categorias ou produtos que não estejam listados acima. "
+            "Se o cliente pedir algo genérico, sugira as categorias reais do cardápio.\n"
+        )
+
     # --- T1-1: DYNAMIC SYSTEM MESSAGE (per-request context, not cached) ---
     dynamic_system_message = {
         "role": "system",
@@ -119,7 +130,7 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
 **Carrinho atual:**
 {cart_context}
 
-{suggestion_context}{unavailable_context}---
+{suggestion_context}{unavailable_context}{categories_context}---
 """,
     }
 
@@ -385,7 +396,7 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
     # Exemplo: Adicionar com observação complexa
     ex_notes_complex_user = {
         "role": "user",
-        "content": "Me vê um Hot Dog Mexicano mas tira a salsicha e coloca purê extra",
+        "content": "Me vê um X-Tudo mas tira a cebola e coloca queijo extra",
     }
     ex_notes_complex_assistant = {
         "role": "assistant",
@@ -399,11 +410,11 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
                     "arguments": json.dumps(
                         {
                             "items": [
-                                # Assumindo ID 55 para Hot Dog Mexicano
+                                # Assumindo ID 55 para X-Tudo
                                 {
                                     "product_id": 55,
                                     "quantity": 1,
-                                    "notes": "sem salsicha, com purê extra",
+                                    "notes": "sem cebola, com queijo extra",
                                 }
                             ]
                         }

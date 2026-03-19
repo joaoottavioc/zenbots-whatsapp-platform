@@ -499,21 +499,8 @@ async def update_order_status(
     if not db_bot or db_bot.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Acesso negado.")
 
-    # 2. Validate status transition
+    # 2. Look up the order first to validate the transition
     from app.models import OrderStatus
-
-    VALID_TRANSITIONS = {
-        OrderStatus.PENDING: {OrderStatus.PAID, OrderStatus.CANCELED},
-        OrderStatus.PAID: {OrderStatus.PREPARING, OrderStatus.CANCELED},
-        OrderStatus.PREPARING: {OrderStatus.READY, OrderStatus.CANCELED},
-        OrderStatus.READY: {OrderStatus.COMPLETED, OrderStatus.CANCELED},
-        OrderStatus.COMPLETED: set(),
-        OrderStatus.CANCELED: set(),
-        OrderStatus.FAILED: set(),
-        OrderStatus.EXPIRED: set(),
-    }
-
-    # Look up the order first to validate the transition
     from sqlalchemy import select
     from app.models import Order
 
@@ -528,6 +515,29 @@ async def update_order_status(
         raise HTTPException(
             status_code=400, detail=f"Status inválido: {status_data.status}"
         )
+
+    # For non-PIX payments (dinheiro, cartao), allow pending → preparing directly
+    # since there's no webhook to move through "paid" automatically
+    NON_PIX_METHODS = {"card", "money"}
+
+    VALID_TRANSITIONS = {
+        OrderStatus.PENDING: {OrderStatus.PAID, OrderStatus.CANCELED},
+        OrderStatus.PAID: {OrderStatus.PREPARING, OrderStatus.CANCELED},
+        OrderStatus.PREPARING: {OrderStatus.READY, OrderStatus.CANCELED, OrderStatus.PAID},
+        OrderStatus.READY: {OrderStatus.COMPLETED, OrderStatus.CANCELED, OrderStatus.PREPARING},
+        OrderStatus.COMPLETED: set(),
+        OrderStatus.CANCELED: set(),
+        OrderStatus.FAILED: set(),
+        OrderStatus.EXPIRED: set(),
+    }
+
+    if existing_order.payment_method in NON_PIX_METHODS:
+        VALID_TRANSITIONS[OrderStatus.PENDING] = {
+            OrderStatus.PAID, OrderStatus.PREPARING, OrderStatus.CANCELED
+        }
+        VALID_TRANSITIONS[OrderStatus.PREPARING] = {
+            OrderStatus.PENDING, OrderStatus.READY, OrderStatus.CANCELED
+        }
 
     allowed = VALID_TRANSITIONS.get(existing_order.status, set())
     if target_status not in allowed:
