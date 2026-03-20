@@ -479,9 +479,10 @@ class TestFindRelevantProducts:
         with patch("app.crud.embed_async", new=AsyncMock(return_value=[[0.0] * 384])):
             await find_relevant_products(session, bot_id=1, extracted_items=["pizza"])
 
-        # All 4 queries must contain is_available filter
-        assert len(captured_stmts) == 4, (
-            f"Expected 4 queries, got {len(captured_stmts)}"
+        # All queries must contain is_available filter
+        # (count varies: name, split-word, keywords, desc, pg_trgm, embedding)
+        assert len(captured_stmts) >= 4, (
+            f"Expected at least 4 queries, got {len(captured_stmts)}"
         )
         for i, stmt_str in enumerate(captured_stmts):
             assert "is_available" in stmt_str, (
@@ -489,7 +490,7 @@ class TestFindRelevantProducts:
             )
 
     async def test_find_relevant_products_excludes_soft_deleted(self):
-        """Verify that all 4 queries include is_deleted filtering by inspecting compiled SQL."""
+        """Verify that all queries include is_deleted filtering by inspecting compiled SQL."""
         session = _make_session()
 
         captured_stmts = []
@@ -507,8 +508,8 @@ class TestFindRelevantProducts:
         with patch("app.crud.embed_async", new=AsyncMock(return_value=[[0.0] * 384])):
             await find_relevant_products(session, bot_id=1, extracted_items=["pizza"])
 
-        assert len(captured_stmts) == 4, (
-            f"Expected 4 queries, got {len(captured_stmts)}"
+        assert len(captured_stmts) >= 4, (
+            f"Expected at least 4 queries, got {len(captured_stmts)}"
         )
         for i, stmt_str in enumerate(captured_stmts):
             assert "is_deleted" in stmt_str, (
@@ -530,12 +531,17 @@ class TestFindRelevantProducts:
 
 class TestAddItemsBotIdValidation:
     def _make_product(
-        self, product_id: int, bot_id: int = 1, is_available: bool = True
+        self,
+        product_id: int,
+        bot_id: int = 1,
+        is_available: bool = True,
+        is_deleted: bool = False,
     ):
         p = MagicMock()
         p.id = product_id
         p.bot_id = bot_id
         p.is_available = is_available
+        p.is_deleted = is_deleted
         return p
 
     def _make_cart_for_add(self, cart_id: int = 100):

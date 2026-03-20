@@ -34,8 +34,8 @@ class TestFindRelevantProductsExcludesSoftDeleted:
         with patch("app.crud.embed_async", new=AsyncMock(return_value=[[0.0] * 384])):
             await find_relevant_products(session, bot_id=1, extracted_items=["pizza"])
 
-        assert len(captured_stmts) == 4, (
-            f"Expected 4 queries, got {len(captured_stmts)}"
+        assert len(captured_stmts) >= 4, (
+            f"Expected at least 4 queries, got {len(captured_stmts)}"
         )
         for i, stmt_str in enumerate(captured_stmts):
             assert "is_deleted" in stmt_str, (
