@@ -24,7 +24,8 @@ def create_central_prompt(
     if search_results:
         capped = search_results[:15]
         menu_context = "\n".join(
-            f"- {p.name} (ID: {p.id}) – {(p.description or '')[:80]}" for p in capped
+            f"- [{p.category or 'Geral'}] {p.name} (ID: {p.id}) – {(p.description or '')[:80]}"
+            for p in capped
         )
 
     # --- CONTEXTO DO CARRINHO ---
@@ -76,6 +77,10 @@ Regra de correspondência de produtos:
 - Só use `add_items_to_cart` se o produto no cardápio REALMENTE corresponde ao que o cliente pediu.
 - Se o nome do produto no cardápio é muito diferente do que o cliente pediu (ex: cliente pediu “Johns Simples” mas no cardápio só tem “John's Paranaense”), NÃO adicione. Use `answer_conversationally` para dizer que não temos esse item e sugira o que temos de parecido.
 - Sinônimos e variações leves são OK (ex: “coca” → nome completo do refrigerante, “x-burger” → nome completo do lanche).
+
+Regra de adicionais vs pratos principais:
+- Se houver ambiguidade entre um prato principal e um adicional/complemento (ex: “brownie” como sobremesa vs “Adicional de Brownie”), prefira o prato principal.
+- Só adicione itens da categoria Adicionais/Extras/Complementos quando o cliente pedir EXPLICITAMENTE (ex: “quero um adicional de brownie”, “com extra de queijo”).
 
 Conversão de quantidades:
 - Se a quantidade vier por extenso (ex.: “mil duzentos e vinte e quatro”), converta para inteiro no `quantity` (ex.: 1224).

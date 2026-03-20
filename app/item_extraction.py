@@ -129,10 +129,14 @@ def extract_items_local(text: str) -> List[str]:
     cleaned = _NUM_RE.sub("", text.lower())
 
     # 2. Remove common written-out quantities (Portuguese)
+    # Also treat quantity words as item separators by replacing with comma
+    # so "truffle burguer tres pcq" becomes "truffle burguer , pcq"
     cleaned = re.sub(
         r"\b(duas?|três|tres|quatro|cinco|seis|sete|oito|nove|dez|"
+        r"onze|doze|treze|quatorze|catorze|quinze|dezesseis|dezessete|"
+        r"dezoito|dezenove|vinte|trinta|quarenta|cinquenta|cem|"
         r"uma?|primeiro|segunda?|terceir[ao]|porções?|porção|unidades?)\b",
-        "",
+        ",",
         cleaned,
     )
 

@@ -145,16 +145,18 @@ async def add_items_to_db_cart(
         # 1. Carrega o produto para verificar disponibilidade
         product = await session.get(Product, product_id)
 
-        # 2. SE O PRODUTO NÃO EXISTIR OU ESTIVER INDISPONÍVEL, REPORTA
-        if not product or not product.is_available:
+        # 2. SE O PRODUTO NÃO EXISTIR, ESTIVER DELETADO OU INDISPONÍVEL, PULA
+        if not product or product.is_deleted:
+            # Deleted or non-existent products are silently skipped — no user-facing message.
+            # These are LLM hallucinations, not genuine unavailability.
+            logger.warning(
+                "Attempt to add non-existent/deleted product: %s", product_id
+            )
+            continue
+        if not product.is_available:
             logger.warning("Attempt to add unavailable product: %s", product_id)
             if skipped_items is not None:
-                name = (
-                    product.name
-                    if product
-                    else (item_data.get("product_name") or f"produto #{product_id}")
-                )
-                skipped_items.append(name)
+                skipped_items.append(product.name)
             continue
 
         # 3. SE bot_id FORNECIDO, VERIFICA SE O PRODUTO PERTENCE AO BOT CORRETO
@@ -261,9 +263,14 @@ async def get_history_for_contact(
     contact = result.scalar_one_or_none()
     if not contact:
         return []
+    # Session TTL: only include messages from the last 30 minutes
+    session_cutoff = utcnow() - timedelta(minutes=30)
     query = (
         select(ConversationHistory)
-        .where(ConversationHistory.contact_id == contact.id)
+        .where(
+            ConversationHistory.contact_id == contact.id,
+            ConversationHistory.created_at >= session_cutoff,
+        )
         .order_by(ConversationHistory.created_at.desc())
         .limit(limit)
     )
@@ -314,6 +321,9 @@ async def find_relevant_products(
         if len(all_results_map) >= limit_per_item * len(extracted_items):
             break
 
+        # Track whether ILIKE layers found anything for this item
+        _ilike_found_for_item = False
+
         # 🔹 1. Busca por nome (correspondência exata/parcial forte)
         name_query = (
             select(Product)
@@ -328,6 +338,27 @@ async def find_relevant_products(
         for p in (await session.execute(name_query)).scalars().all():
             if p.id not in all_results_map:
                 all_results_map[p.id] = p
+                _ilike_found_for_item = True
+
+        # 🔹 1b. Split-word ILIKE: if full-phrase missed, try individual words > 3 chars
+        # "johs calabresa" fails full ILIKE but "calabresa" alone matches
+        if not _ilike_found_for_item:
+            words = [w for w in item_name.split() if len(w) > 3]
+            for word in words:
+                word_query = (
+                    select(Product)
+                    .where(
+                        Product.bot_id == bot_id,
+                        Product.is_available == True,
+                        Product.is_deleted == False,
+                        Product.name.ilike(f"%{escape_ilike(word)}%", escape="\\"),
+                    )
+                    .limit(limit_per_item)
+                )
+                for p in (await session.execute(word_query)).scalars().all():
+                    if p.id not in all_results_map:
+                        all_results_map[p.id] = p
+                        _ilike_found_for_item = True
 
         # 🔹 2. Busca por keywords (nova camada super importante!)
         keywords_query = (
@@ -343,6 +374,7 @@ async def find_relevant_products(
         for p in (await session.execute(keywords_query)).scalars().all():
             if p.id not in all_results_map:
                 all_results_map[p.id] = p
+                _ilike_found_for_item = True
 
         # 🔹 3. Busca por descrição
         desc_query = (
@@ -359,8 +391,37 @@ async def find_relevant_products(
         for p in (await session.execute(desc_query)).scalars().all():
             if p.id not in all_results_map:
                 all_results_map[p.id] = p
+                _ilike_found_for_item = True
 
-        # 🔹 4. Fallback: busca semântica (RAG) — with similarity threshold
+        # 🔹 4. pg_trgm fuzzy search (catches typos: "burguer"→"burger", "crispi"→"crispy")
+        # Only runs if all ILIKE layers found nothing for this item.
+        if not _ilike_found_for_item:
+            _TRGM_THRESHOLD = 0.3
+            trgm_query = (
+                select(Product)
+                .where(
+                    Product.bot_id == bot_id,
+                    Product.is_available == True,
+                    Product.is_deleted == False,
+                    func.similarity(Product.name, item_name) > _TRGM_THRESHOLD,
+                )
+                .order_by(func.similarity(Product.name, item_name).desc())
+                .limit(limit_per_item)
+            )
+            try:
+                # Use SAVEPOINT so a failure only rolls back this query,
+                # not the outer transaction (which would expire all ORM objects).
+                async with session.begin_nested():
+                    for p in (await session.execute(trgm_query)).scalars().all():
+                        if p.id not in all_results_map:
+                            all_results_map[p.id] = p
+                            _ilike_found_for_item = True
+            except Exception:
+                # pg_trgm extension not available — SAVEPOINT was rolled back
+                # automatically, outer transaction is still healthy.
+                logger.debug("pg_trgm similarity search unavailable, skipping")
+
+        # 🔹 5. Fallback: busca semântica (RAG) — with similarity threshold
         # cosine_distance < 0.3 means cosine_similarity > 0.7
         # Prevents weak matches like "cachorro quente" → "Bacon"
         _EMBEDDING_MAX_DISTANCE = 0.3
@@ -444,8 +505,10 @@ async def find_unavailable_products(
                 results_map[p.id] = p
 
         # 3. Embedding search (handles typos like "johs" → "john's")
-        # No strict threshold here — this is a last resort for typos.
-        # The downstream SequenceMatcher comparison in whatsapp.py validates matches.
+        # Threshold 0.35 (cosine_distance) = ~0.65 similarity — tight enough to prevent
+        # phantom matches (e.g. "truffle burger" → "Adicional de Calabresa") while still
+        # catching real typos. The downstream SequenceMatcher in whatsapp.py adds a second filter.
+        _UNAVAIL_EMBEDDING_MAX_DISTANCE = 0.35
         if not results_map:
             text_to_embed = f"PRODUTO PRINCIPAL: {item_name}"
             embeddings = await embed_async(
@@ -458,6 +521,8 @@ async def find_unavailable_products(
                     Product.bot_id == bot_id,
                     Product.is_available == False,
                     Product.is_deleted == False,
+                    Product.embedding.cosine_distance(query_embedding)
+                    < _UNAVAIL_EMBEDDING_MAX_DISTANCE,
                 )
                 .order_by(Product.embedding.cosine_distance(query_embedding))
                 .limit(limit)
@@ -1385,3 +1450,18 @@ async def delete_plan(session: AsyncSession, plan_id: int) -> bool:
     await session.delete(plan)
     await session.commit()
     return True
+
+
+async def cleanup_old_conversation_history(session: AsyncSession) -> int:
+    """Delete ConversationHistory records older than 24 hours."""
+    from sqlalchemy import delete as sa_delete
+
+    cutoff = utcnow() - timedelta(hours=24)
+    result = await session.execute(
+        sa_delete(ConversationHistory).where(ConversationHistory.created_at < cutoff)
+    )
+    await session.commit()
+    count = result.rowcount
+    if count:
+        logger.info("Cleaned up %d old conversation history records", count)
+    return count

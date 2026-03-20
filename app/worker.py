@@ -9,7 +9,7 @@ from app.monitoring import start_flush_task, stop_flush_task, run_aggregate_dail
 # Importamos a função pesada que já existe
 from app.whatsapp import process_whatsapp_message
 from app.database import async_session
-from app.crud import cancel_expired_pix_orders
+from app.crud import cancel_expired_pix_orders, cleanup_old_conversation_history
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +19,13 @@ async def run_cancel_expired_pix_orders(ctx):
         count = await cancel_expired_pix_orders(session)
         if count:
             logger.info("Cron: canceled %d expired PIX orders", count)
+
+
+async def run_cleanup_conversation_history(ctx):
+    async with async_session() as session:
+        count = await cleanup_old_conversation_history(session)
+        if count:
+            logger.info("Cron: cleaned up %d old conversation history records", count)
 
 
 # Configurações do Redis (Pega do env ou usa default)
@@ -45,6 +52,7 @@ class WorkerSettings:
             minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55},
         ),
         cron(run_aggregate_daily_costs, hour={3}, minute={0}),
+        cron(run_cleanup_conversation_history, hour={4}, minute={0}),
     ]
 
     # Configurações extras

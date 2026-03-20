@@ -334,12 +334,14 @@ async def extract_products_from_image(
         "Você é um assistente especializado em digitalizar cardápios. "
         "Analise esta imagem. Extraia TODOS os itens que possuem preço, "
         "incluindo adicionais, complementos, extras, acompanhamentos, combos e promoções. "
-        "Para cada item, identifique: nome, descrição, preço e CATEGORIA. "
+        "Para cada item, identifique: nome, descrição, preço, CATEGORIA e KEYWORDS. "
         "Regras de Categoria: agrupe itens similares (ex: Coca, Água, Suco -> 'Bebidas'). "
         "Adicionais/extras devem ter categoria 'Adicionais'. "
         "Use APENAS categorias que existem no cardápio. NÃO invente categorias. "
         "Use nomes curtos e em Português. "
-        "Ex: 'Entradas', 'Pratos Principais', 'Sobremesas', 'Lanches', 'Porções', 'Adicionais'."
+        "Ex: 'Entradas', 'Pratos Principais', 'Sobremesas', 'Lanches', 'Porções', 'Adicionais'. "
+        "Keywords: inclua sinônimos, abreviações, erros de digitação comuns e variações "
+        "(ex: 'burguer' para 'burger', 'refri' para refrigerante, nome sem acentos, singular/plural)."
     )
 
     def sync_call():

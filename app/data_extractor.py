@@ -19,9 +19,10 @@ O resultado final DEVE SER um único objeto JSON com uma única chave chamada "p
 O valor da chave "products" deve ser um array de objetos, onde cada objeto representa um item do cardápio.
 
 REGRAS PARA CADA OBJETO DE PRODUTO:
-- Cada objeto DEVE conter as chaves "name" (string), "price" (float), "description" (string), e "keywords" (array de strings).
+- Cada objeto DEVE conter as chaves "name" (string), "price" (float), "description" (string), "keywords" (array de strings), e "category" (string).
 - A chave "price" deve ser um número. Se não encontrar o preço, use null.
-- A chave "keywords" DEVE conter uma lista de sinônimos, abreviações e termos de busca relevantes. Pense em como um cliente com pressa pediria por este item. Inclua o nome principal sem acentos e em singular/plural se aplicável.
+- A chave "category" deve agrupar itens similares (ex: "Lanches", "Bebidas", "Sobremesas", "Adicionais"). Use APENAS categorias que existem no cardápio.
+- A chave "keywords" DEVE conter uma lista de sinônimos, abreviações, erros de digitação comuns e termos de busca relevantes. Pense em como um cliente com pressa pediria por este item. Inclua: o nome sem acentos, singular/plural, abreviações comuns (ex: "refri" para refrigerante), e erros de digitação prováveis (ex: "burguer" para "burger", "cheeseburguer" para "cheeseburger").
 
 EXEMPLO DE SAÍDA PERFEITA:
 {{

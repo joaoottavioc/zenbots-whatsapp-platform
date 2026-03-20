@@ -18,11 +18,12 @@ def _make_cart(cart_id=1, items=None):
     return cart
 
 
-def _make_product(product_id, name, is_available=True, bot_id=1):
+def _make_product(product_id, name, is_available=True, bot_id=1, is_deleted=False):
     product = MagicMock()
     product.id = product_id
     product.name = name
     product.is_available = is_available
+    product.is_deleted = is_deleted
     product.bot_id = bot_id
     return product
 
@@ -53,8 +54,8 @@ async def test_skipped_items_populated_for_unavailable_product():
 
 
 @pytest.mark.asyncio
-async def test_skipped_items_populated_for_nonexistent_product():
-    """Non-existent products should use a fallback name in skipped_items."""
+async def test_nonexistent_product_silently_skipped():
+    """Non-existent products should be silently skipped (LLM hallucination)."""
     cart = _make_cart()
 
     session = AsyncMock()
@@ -73,8 +74,8 @@ async def test_skipped_items_populated_for_nonexistent_product():
         skipped_items=skipped,
     )
 
-    assert len(skipped) == 1
-    assert "999" in skipped[0]
+    # Non-existent products are silently skipped — no user-facing message
+    assert len(skipped) == 0
 
 
 @pytest.mark.asyncio

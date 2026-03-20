@@ -1124,7 +1124,16 @@ async def _handle_shopping_intent(
     history_records = await crud.get_history_for_contact(
         session, bot.id, contact_number
     )
-    past_messages = [{"role": h.role, "content": h.content} for h in history_records]
+    # Filter out assistant messages containing "em falta"/"indisponível" to prevent
+    # history contamination where the LLM repeats old unavailability messages.
+    past_messages = []
+    for h in history_records:
+        if h.role == "assistant" and (
+            "em falta" in (h.content or "").lower()
+            or "indisponível" in (h.content or "").lower()
+        ):
+            continue
+        past_messages.append({"role": h.role, "content": h.content})
     await _load_cart_items_with_products(cart, session)
     cart_items = [
         {
@@ -1246,14 +1255,34 @@ async def _handle_shopping_intent(
         )
         if unavailable_candidates:
             if not found_products:
-                # No available products → customer clearly wanted the unavailable one
-                unavailable_matches = unavailable_candidates
+                # No available products — but don't blindly accept all candidates.
+                # Verify each candidate has reasonable similarity to a search term.
+                from difflib import SequenceMatcher as _SM
+
+                _MIN_BLIND_SIM = 0.55
+
+                def _norm_blind(s: str) -> str:
+                    return s.lower().replace("'", "").replace("\u2019", "").strip()
+
+                unavailable_matches = [
+                    cand
+                    for cand in unavailable_candidates
+                    if any(
+                        _SM(None, _norm_blind(term), _norm_blind(cand.name)).ratio()
+                        >= _MIN_BLIND_SIM
+                        for term in search_terms
+                    )
+                ]
             else:
                 # Available products found — compare name similarity to decide
                 # if the customer wanted the unavailable product instead.
                 # Use extracted search terms (not full message) for fair comparison,
                 # and strip apostrophes so "johns bacon" vs "john's bacon" scores high.
                 from difflib import SequenceMatcher
+
+                _MIN_UNAVAIL_SIM = (
+                    0.45  # minimum absolute similarity to flag as em falta
+                )
 
                 def _norm(s: str) -> str:
                     return s.lower().replace("'", "").replace("\u2019", "").strip()
@@ -1269,6 +1298,9 @@ async def _handle_shopping_intent(
                     unavail_score = SequenceMatcher(
                         None, term_norm, _norm(best_unavail.name)
                     ).ratio()
+                    # Must exceed minimum absolute threshold AND beat available match
+                    if unavail_score < _MIN_UNAVAIL_SIM:
+                        continue
                     best_avail_score = max(
                         SequenceMatcher(None, term_norm, _norm(p.name)).ratio()
                         for p in found_products
@@ -1310,6 +1342,34 @@ async def _handle_shopping_intent(
             if cart.last_suggestions:
                 _em_falta_msg += " Diga *'sim'* para ver alternativas!"
 
+        # Filter false-positive search results before sending to LLM.
+        # When embedding returns a product for a term that actually matches
+        # an unavailable product, the LLM will wrongly substitute it.
+        # Only keep products whose name has reasonable similarity to a search term.
+        if found_products and len(found_products) > 1:
+            from difflib import SequenceMatcher as _FilterSM
+
+            _MIN_NAME_SIM = 0.35
+
+            def _fnorm(s: str) -> str:
+                return s.lower().replace("'", "").replace("\u2019", "").strip()
+
+            _filtered_for_prompt = [
+                p
+                for p in found_products
+                if any(
+                    _FilterSM(None, _fnorm(term), _fnorm(p.name)).ratio()
+                    >= _MIN_NAME_SIM
+                    for term in search_terms
+                )
+            ]
+            # Only use filtered list if it's not empty (preserve at least something)
+            _prompt_products = (
+                _filtered_for_prompt if _filtered_for_prompt else found_products
+            )
+        else:
+            _prompt_products = found_products
+
         # Fetch distinct categories for the bot's menu
         _cat_result = await session.execute(
             select(Product.category)
@@ -1325,12 +1385,14 @@ async def _handle_shopping_intent(
 
         # Don't pass unavailable_products to the LLM — we handle em falta
         # programmatically. This lets the LLM focus on adding valid items.
+        # Use _prompt_products (filtered) instead of found_products (raw) to
+        # avoid false-positive embedding results being shown to the LLM.
         prompt = create_central_prompt(
             user_query=text_body,
             history=past_messages,
             restaurant_name=bot.restaurant_name,
             cart_items=cart_items,
-            search_results=found_products,
+            search_results=_prompt_products,
             recent_suggestions=recent_suggestions,
             unavailable_products=[],
             available_categories=_available_categories,
