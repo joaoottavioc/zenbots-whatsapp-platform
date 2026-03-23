@@ -136,16 +136,25 @@ PRODUCT_DEFS = [
 # ---------------------------------------------------------------------------
 
 _setup_done = False
+_setup_skipped = False
 _bot_data = {}  # {"bot_id": ..., "user_id": ...}
 _product_map = {}  # {"CLASSIC BURGER": 123, ...}
 _has_trgm = False
 
 
 async def _ensure_test_data():
-    """Create test bot + products if not already done. Idempotent."""
-    global _setup_done, _bot_data, _product_map, _has_trgm
+    """Create test bot + products if not already done. Skips if DB unreachable."""
+    global _setup_done, _setup_skipped, _bot_data, _product_map, _has_trgm
 
-    if _setup_done:
+    if _setup_done or _setup_skipped:
+        return
+
+    # Check if DB is reachable before attempting setup
+    try:
+        async with async_session() as check_session:
+            await check_session.execute(text("SELECT 1"))
+    except Exception:
+        _setup_skipped = True
         return
 
     async with async_session() as session:
@@ -267,6 +276,10 @@ def pytest_sessionfinish(session, exitstatus):
 async def db_session():
     """Fresh session per test. Test data is created on first use."""
     await _ensure_test_data()
+    if _setup_skipped:
+        pytest.skip(
+            "Database not reachable (integration tests require Docker services)"
+        )
     async with async_session() as session:
         yield session
 
