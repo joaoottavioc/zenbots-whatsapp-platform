@@ -4,6 +4,10 @@
 FROM python:3.10-slim AS base
 WORKDIR /code
 
+# Prevent stale .pyc bytecode cache issues across deploys
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
 # Non-root user for security
 RUN useradd -m -u 1000 appuser
 

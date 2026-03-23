@@ -71,6 +71,7 @@ services:
     env_file:
       - .env
     environment:
+      - PYTHONDONTWRITEBYTECODE=1
       # URL para o Rate Limiter (Banco 0)
       - REDIS_URL=redis://redis:6379/0
       # Host para a Fila ARQ (Banco 1 configurado no código python)
@@ -95,6 +96,7 @@ services:
     env_file:
       - .env
     environment:
+      - PYTHONDONTWRITEBYTECODE=1
       - PYTHONUNBUFFERED=1
       # Precisa das mesmas configs do backend para acessar Banco e Redis
       - REDIS_URL=redis://redis:6379/0

@@ -415,6 +415,9 @@ async def _handle_session_expiry(mctx: MessageContext) -> bool:
         )
         clear_pending(cart)
         await crud.clear_db_cart(session, cart.id)
+        # Clear conversation history — stale context from old session
+        if mctx.contact:
+            await crud.clear_contact_history(session, mctx.contact.id)
         cart.state = CartState.GREETING
         cart.delivery_method = None
         await _send_welcome_with_menu(
@@ -869,6 +872,9 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
                 session.add(contact)
 
             await crud.clear_db_cart(session, _cart_id)
+            # Clear conversation history — fresh context for next visit
+            if contact:
+                await crud.clear_contact_history(session, contact.id)
             # Commit BEFORE broadcast so the order is visible when the
             # frontend refetches via the SSE-triggered invalidation.
             await session.commit()
@@ -1253,6 +1259,9 @@ async def _handle_shopping_intent(
         unavailable_candidates = await crud.find_unavailable_products(
             session, bot.id, search_terms
         )
+        # Track which user search term matched which unavailable product,
+        # so the LLM sees e.g. "cheesuburger" → THE CHEESEBURGER (explicit link).
+        _unavail_term_map: dict[int, str] = {}  # product_id → user's search term
         if unavailable_candidates:
             if not found_products:
                 # No available products — but don't blindly accept all candidates.
@@ -1264,15 +1273,15 @@ async def _handle_shopping_intent(
                 def _norm_blind(s: str) -> str:
                     return s.lower().replace("'", "").replace("\u2019", "").strip()
 
-                unavailable_matches = [
-                    cand
-                    for cand in unavailable_candidates
-                    if any(
-                        _SM(None, _norm_blind(term), _norm_blind(cand.name)).ratio()
-                        >= _MIN_BLIND_SIM
-                        for term in search_terms
-                    )
-                ]
+                for cand in unavailable_candidates:
+                    for term in search_terms:
+                        if (
+                            _SM(None, _norm_blind(term), _norm_blind(cand.name)).ratio()
+                            >= _MIN_BLIND_SIM
+                        ):
+                            unavailable_matches.append(cand)
+                            _unavail_term_map[cand.id] = term
+                            break
             else:
                 # Available products found — compare name similarity to decide
                 # if the customer wanted the unavailable product instead.
@@ -1287,6 +1296,7 @@ async def _handle_shopping_intent(
                 def _norm(s: str) -> str:
                     return s.lower().replace("'", "").replace("\u2019", "").strip()
 
+                _seen_unavail_ids: set[int] = set()
                 for term in search_terms:
                     term_norm = _norm(term)
                     best_unavail = max(
@@ -1305,40 +1315,48 @@ async def _handle_shopping_intent(
                         SequenceMatcher(None, term_norm, _norm(p.name)).ratio()
                         for p in found_products
                     )
-                    if unavail_score > best_avail_score:
-                        unavailable_matches = [best_unavail]
-                        # Fetch alternatives from SAME CATEGORY directly from DB
-                        # (don't rely on search results which may be all addons)
-                        if best_unavail.category:
-                            alt_query = (
-                                select(Product)
-                                .where(
-                                    Product.bot_id == bot.id,
-                                    Product.is_available == True,
-                                    Product.is_deleted == False,
-                                    Product.category == best_unavail.category,
-                                    Product.id != best_unavail.id,
-                                )
-                                .limit(5)
-                            )
-                            alt_res = await session.execute(alt_query)
-                            alternatives = list(alt_res.scalars().all())
-                        else:
-                            alternatives = []
+                    if (
+                        unavail_score > best_avail_score
+                        and best_unavail.id not in _seen_unavail_ids
+                    ):
+                        unavailable_matches.append(best_unavail)
+                        _seen_unavail_ids.add(best_unavail.id)
+                        _unavail_term_map[best_unavail.id] = term
 
-                        if alternatives:
-                            cart.last_suggestions = [p.id for p in alternatives]
-                        # No pending action — "sim" should show alternatives
-                        # as a numbered list, not auto-add
-                        clear_pending(cart)
-                        break
+                # Fetch alternatives from same category as the first unavailable match
+                if unavailable_matches:
+                    _first_unavail = unavailable_matches[0]
+                    if _first_unavail.category:
+                        _unavail_ids = {p.id for p in unavailable_matches}
+                        alt_query = (
+                            select(Product)
+                            .where(
+                                Product.bot_id == bot.id,
+                                Product.is_available == True,
+                                Product.is_deleted == False,
+                                Product.category == _first_unavail.category,
+                                Product.id.not_in(_unavail_ids),
+                            )
+                            .limit(5)
+                        )
+                        alt_res = await session.execute(alt_query)
+                        alternatives = list(alt_res.scalars().all())
+                    else:
+                        alternatives = []
+
+                    if alternatives:
+                        cart.last_suggestions = [p.id for p in alternatives]
+                    clear_pending(cart)
 
         # Build em falta message programmatically (don't rely on LLM).
         # The LLM will focus on adding valid items; we append this after.
         _em_falta_msg = ""
         if unavailable_matches:
             _unavail_names = ", ".join(f"*{p.name}*" for p in unavailable_matches)
-            _em_falta_msg = f"\n\nPuxa, {_unavail_names} está em falta no momento. 😕"
+            _verb = "estão" if len(unavailable_matches) > 1 else "está"
+            _em_falta_msg = (
+                f"\n\nPuxa, {_unavail_names} {_verb} em falta no momento. 😕"
+            )
             if cart.last_suggestions:
                 _em_falta_msg += " Diga *'sim'* para ver alternativas!"
 
@@ -1383,8 +1401,10 @@ async def _handle_shopping_intent(
         )
         _available_categories = [r[0] for r in _cat_result]
 
-        # Don't pass unavailable_products to the LLM — we handle em falta
-        # programmatically. This lets the LLM focus on adding valid items.
+        # Pass unavailable_matches so the LLM knows to skip those items
+        # (won't try to substitute them with available products).
+        # The em falta message is still built programmatically — the LLM
+        # just needs to know not to map "cheesuburger" to PCQ.
         # Use _prompt_products (filtered) instead of found_products (raw) to
         # avoid false-positive embedding results being shown to the LLM.
         prompt = create_central_prompt(
@@ -1394,7 +1414,8 @@ async def _handle_shopping_intent(
             cart_items=cart_items,
             search_results=_prompt_products,
             recent_suggestions=recent_suggestions,
-            unavailable_products=[],
+            unavailable_products=unavailable_matches,
+            unavailable_term_map=_unavail_term_map,
             available_categories=_available_categories,
         )
         ai_message = await get_ai_decision(prompt, tools_schema, force_tool=True)
@@ -1825,8 +1846,20 @@ async def _handle_shopping_intent(
         else:
             response_to_user = "Me diga o que gostaria de pedir e posso ajudar! 😊"
 
-    # Append programmatic em falta message if unavailable products were detected
-    if _em_falta_msg:
+    # Append programmatic em falta message if unavailable products were detected.
+    # Strip any LLM-generated em falta text first to avoid duplication.
+    if _em_falta_msg and unavailable_matches:
+        _unavail_names_lower = {p.name.lower() for p in unavailable_matches}
+        _em_falta_keywords = {"em falta", "indisponível", "indisponivel"}
+        _cleaned_lines = []
+        for _line in response_to_user.split("\n"):
+            _line_lower = _line.lower()
+            _is_duplicate = any(
+                name in _line_lower for name in _unavail_names_lower
+            ) and any(kw in _line_lower for kw in _em_falta_keywords)
+            if not _is_duplicate:
+                _cleaned_lines.append(_line)
+        response_to_user = "\n".join(_cleaned_lines).rstrip()
         response_to_user += _em_falta_msg
 
     return response_to_user
@@ -1923,19 +1956,60 @@ async def _handle_suggestion_selection(mctx: MessageContext) -> str | None:
         "oito": 8,
         "nove": 9,
         "dez": 10,
+        "onze": 11,
+        "doze": 12,
+        "treze": 13,
+        "quatorze": 14,
+        "catorze": 14,
+        "quinze": 15,
+        "dezesseis": 16,
+        "dezessete": 17,
+        "dezoito": 18,
+        "dezenove": 19,
+        "vinte": 20,
+        "trinta": 30,
+        "quarenta": 40,
+        "cinquenta": 50,
+        "cem": 100,
+        "cento": 100,
+        "duzentos": 200,
+        "duzentas": 200,
+        "trezentos": 300,
+        "trezentas": 300,
+        "mil": 1000,
     }
 
+    def _parse_compound_qty(words: list[str]) -> int | None:
+        """Parse a compound Portuguese number like ['vinte', 'e', 'sete'] → 27."""
+        total = 0
+        current = 0
+        found_any = False
+        for w in words:
+            if w == "e":
+                continue
+            val = _WRITTEN_QTY.get(w)
+            if val is None:
+                continue
+            found_any = True
+            if val >= 100:
+                current = max(current, 1) * val
+            else:
+                current += val
+        total += current
+        return total if found_any else None
+
     def _parse_qty_from_text(part_text: str) -> int:
-        """Extract quantity from a text fragment."""
-        qty = 1
-        for qty_word, qty_val in _WRITTEN_QTY.items():
-            if qty_word in part_text.split():
-                qty = qty_val
-                break
-        qty_digit = re.search(r"\b(\d{1,2})\b", part_text)
+        """Extract quantity from a text fragment, supporting compound numbers."""
+        words = part_text.lower().split()
+        # Try compound number first (handles "vinte e sete" → 27)
+        compound = _parse_compound_qty(words)
+        if compound is not None:
+            return compound
+        # Fallback to digit match
+        qty_digit = re.search(r"\b(\d{1,4})\b", part_text)
         if qty_digit:
-            qty = int(qty_digit.group(1))
-        return qty
+            return int(qty_digit.group(1))
+        return 1
 
     def _match_part(part: str) -> tuple | None:
         """Try to match a message part to a suggestion. Returns (product, qty) or None."""
@@ -1979,8 +2053,43 @@ async def _handle_suggestion_selection(mctx: MessageContext) -> str | None:
 
         return None
 
-    # Split message into parts and match each
-    parts = re.split(r"\s*(?:\be\b|,|;)\s*", text, flags=re.IGNORECASE)
+    # Merge compound numbers into digits before splitting so "vinte e sete
+    # do primeiro" doesn't get split at the "e" between "vinte" and "sete".
+    # e.g. "vinte e sete do primeiro" → "27 do primeiro"
+    # Ordinals are excluded — they're item selectors, not quantities.
+    _MERGE_QTY_WORDS = {w for w in _WRITTEN_QTY}
+
+    def _merge_compound_numbers(txt: str) -> str:
+        words = txt.lower().split()
+        result = []
+        i = 0
+        while i < len(words):
+            if words[i] in _MERGE_QTY_WORDS:
+                # Check if this is a COMPOUND number (qty "e" qty ...)
+                j = i
+                while (
+                    j + 2 < len(words)
+                    and words[j + 1] == "e"
+                    and words[j + 2] in _MERGE_QTY_WORDS
+                ):
+                    j += 2
+                if j > i:
+                    # Compound number — merge into a single digit
+                    qty_words = words[i : j + 1]
+                    val = _parse_compound_qty(qty_words)
+                    result.append(str(val) if val else words[i])
+                    i = j + 1
+                else:
+                    # Single qty word — leave as-is for _parse_qty_from_text
+                    result.append(words[i])
+                    i += 1
+            else:
+                result.append(words[i])
+                i += 1
+        return " ".join(result)
+
+    _merged = _merge_compound_numbers(text)
+    parts = re.split(r"\s*(?:\be\b|,|;)\s*", _merged, flags=re.IGNORECASE)
     selections: list[tuple] = []  # [(product, quantity), ...]
     seen_ids: set[int] = set()
 
@@ -2059,6 +2168,10 @@ async def _handle_order_cancel(mctx: MessageContext) -> str:
     # Cancel the order
     active_order.status = OrderStatus.CANCELED
     session.add(active_order)
+
+    # Clear conversation history — fresh context for next interaction
+    if mctx.contact:
+        await crud.clear_contact_history(session, mctx.contact.id)
 
     _order_id = active_order.id
     _bot_id = bot.id

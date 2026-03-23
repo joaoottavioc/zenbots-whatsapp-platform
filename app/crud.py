@@ -321,10 +321,12 @@ async def find_relevant_products(
         if len(all_results_map) >= limit_per_item * len(extracted_items):
             break
 
-        # Track whether ILIKE layers found anything for this item
-        _ilike_found_for_item = False
+        # Track match quality per layer to gate weaker layers properly.
+        # Strong layers: name, split-word, keywords (high precision).
+        # Weak layers: pg_trgm, description, embedding (broader, more false positives).
+        _found_for_item = False
 
-        # 🔹 1. Busca por nome (correspondência exata/parcial forte)
+        # 🔹 Layer 1. Name ILIKE (strongest — exact/partial substring match)
         name_query = (
             select(Product)
             .where(
@@ -338,11 +340,11 @@ async def find_relevant_products(
         for p in (await session.execute(name_query)).scalars().all():
             if p.id not in all_results_map:
                 all_results_map[p.id] = p
-                _ilike_found_for_item = True
+                _found_for_item = True
 
-        # 🔹 1b. Split-word ILIKE: if full-phrase missed, try individual words > 3 chars
+        # 🔹 Layer 2. Split-word name ILIKE (only if full-phrase missed)
         # "johs calabresa" fails full ILIKE but "calabresa" alone matches
-        if not _ilike_found_for_item:
+        if not _found_for_item:
             words = [w for w in item_name.split() if len(w) > 3]
             for word in words:
                 word_query = (
@@ -358,9 +360,9 @@ async def find_relevant_products(
                 for p in (await session.execute(word_query)).scalars().all():
                     if p.id not in all_results_map:
                         all_results_map[p.id] = p
-                        _ilike_found_for_item = True
+                        _found_for_item = True
 
-        # 🔹 2. Busca por keywords (nova camada super importante!)
+        # 🔹 Layer 3. Keywords ILIKE (strong — curated search terms)
         keywords_query = (
             select(Product)
             .where(
@@ -374,28 +376,13 @@ async def find_relevant_products(
         for p in (await session.execute(keywords_query)).scalars().all():
             if p.id not in all_results_map:
                 all_results_map[p.id] = p
-                _ilike_found_for_item = True
+                _found_for_item = True
 
-        # 🔹 3. Busca por descrição
-        desc_query = (
-            select(Product)
-            .where(
-                Product.bot_id == bot_id,
-                Product.is_available == True,
-                Product.is_deleted == False,
-                Product.description.is_not(None),
-                Product.description.ilike(f"%{escape_ilike(item_name)}%", escape="\\"),
-            )
-            .limit(limit_per_item)
-        )
-        for p in (await session.execute(desc_query)).scalars().all():
-            if p.id not in all_results_map:
-                all_results_map[p.id] = p
-                _ilike_found_for_item = True
-
-        # 🔹 4. pg_trgm fuzzy search (catches typos: "burguer"→"burger", "crispi"→"crispy")
-        # Only runs if all ILIKE layers found nothing for this item.
-        if not _ilike_found_for_item:
+        # 🔹 Layer 4. pg_trgm fuzzy name match (typos: "burguer"→"burger")
+        # Gated on strong layers only (name + split-word + keywords).
+        # Runs BEFORE description because a fuzzy name match is more relevant
+        # than a substring match buried in a description.
+        if not _found_for_item:
             _TRGM_THRESHOLD = 0.3
             trgm_query = (
                 select(Product)
@@ -415,36 +402,57 @@ async def find_relevant_products(
                     for p in (await session.execute(trgm_query)).scalars().all():
                         if p.id not in all_results_map:
                             all_results_map[p.id] = p
-                            _ilike_found_for_item = True
+                            _found_for_item = True
             except Exception:
                 # pg_trgm extension not available — SAVEPOINT was rolled back
                 # automatically, outer transaction is still healthy.
                 logger.debug("pg_trgm similarity search unavailable, skipping")
 
-        # 🔹 5. Fallback: busca semântica (RAG) — with similarity threshold
-        # cosine_distance < 0.3 means cosine_similarity > 0.7
-        # Prevents weak matches like "cachorro quente" → "Bacon"
-        _EMBEDDING_MAX_DISTANCE = 0.3
-        text_to_embed = f"PRODUTO PRINCIPAL: {item_name}"
-        embeddings = await embed_async(
-            [text_to_embed], space="products", normalize=False
-        )
-        query_embedding = embeddings[0]
-        embedding_query = (
-            select(Product)
-            .where(
-                Product.bot_id == bot_id,
-                Product.is_available == True,
-                Product.is_deleted == False,
-                Product.embedding.cosine_distance(query_embedding)
-                < _EMBEDDING_MAX_DISTANCE,
+        # 🔹 Layer 5. Description ILIKE (weak — substring in description text)
+        # Only runs if stronger layers found nothing.
+        if not _found_for_item:
+            desc_query = (
+                select(Product)
+                .where(
+                    Product.bot_id == bot_id,
+                    Product.is_available == True,
+                    Product.is_deleted == False,
+                    Product.description.is_not(None),
+                    Product.description.ilike(
+                        f"%{escape_ilike(item_name)}%", escape="\\"
+                    ),
+                )
+                .limit(limit_per_item)
             )
-            .order_by(Product.embedding.cosine_distance(query_embedding))
-            .limit(limit_per_item)
-        )
-        for p in (await session.execute(embedding_query)).scalars().all():
-            if p.id not in all_results_map:
-                all_results_map[p.id] = p
+            for p in (await session.execute(desc_query)).scalars().all():
+                if p.id not in all_results_map:
+                    all_results_map[p.id] = p
+                    _found_for_item = True
+
+        # 🔹 Layer 6. Embedding (weakest — semantic similarity fallback)
+        # Only runs if all other layers found nothing.
+        if not _found_for_item:
+            _EMBEDDING_MAX_DISTANCE = 0.3
+            text_to_embed = f"PRODUTO PRINCIPAL: {item_name}"
+            embeddings = await embed_async(
+                [text_to_embed], space="products", normalize=False
+            )
+            query_embedding = embeddings[0]
+            embedding_query = (
+                select(Product)
+                .where(
+                    Product.bot_id == bot_id,
+                    Product.is_available == True,
+                    Product.is_deleted == False,
+                    Product.embedding.cosine_distance(query_embedding)
+                    < _EMBEDDING_MAX_DISTANCE,
+                )
+                .order_by(Product.embedding.cosine_distance(query_embedding))
+                .limit(limit_per_item)
+            )
+            for p in (await session.execute(embedding_query)).scalars().all():
+                if p.id not in all_results_map:
+                    all_results_map[p.id] = p
 
     # Retorna apenas os valores do dicionário, garantindo produtos únicos
     return list(all_results_map.values())
@@ -458,21 +466,21 @@ async def find_unavailable_products(
 ) -> List[Product]:
     """
     Check if any of the searched items match products that exist but are unavailable.
-    Searches by name ILIKE (apostrophe-normalized), keywords ILIKE, and embedding similarity.
+    Same 6-layer architecture as find_relevant_products, but filters is_available=False.
+    Apostrophe-normalized on name/keywords so "johns" matches "John's".
     """
     if not extracted_items:
         return []
 
-    from sqlalchemy import func
-
     results_map: Dict[int, Product] = {}
 
     for item_name in extracted_items:
+        _found_for_item = False
         # Normalize: strip apostrophes so "johns bacon" matches "John's Bacon"
         clean_name = item_name.replace("'", "").replace("\u2019", "")
         escaped = escape_ilike(clean_name)
 
-        # 1. Name search (apostrophe-normalized)
+        # 🔹 Layer 1. Name ILIKE (apostrophe-normalized)
         name_query = (
             select(Product)
             .where(
@@ -486,8 +494,31 @@ async def find_unavailable_products(
         for p in (await session.execute(name_query)).scalars().all():
             if p.id not in results_map:
                 results_map[p.id] = p
+                _found_for_item = True
 
-        # 2. Keywords search (apostrophe-normalized)
+        # 🔹 Layer 2. Split-word name ILIKE (only if full-phrase missed)
+        if not _found_for_item:
+            words = [w for w in clean_name.split() if len(w) > 3]
+            for word in words:
+                word_escaped = escape_ilike(word)
+                word_query = (
+                    select(Product)
+                    .where(
+                        Product.bot_id == bot_id,
+                        Product.is_available == False,
+                        Product.is_deleted == False,
+                        func.replace(Product.name, "'", "").ilike(
+                            f"%{word_escaped}%", escape="\\"
+                        ),
+                    )
+                    .limit(limit)
+                )
+                for p in (await session.execute(word_query)).scalars().all():
+                    if p.id not in results_map:
+                        results_map[p.id] = p
+                        _found_for_item = True
+
+        # 🔹 Layer 3. Keywords ILIKE (apostrophe-normalized)
         kw_query = (
             select(Product)
             .where(
@@ -503,13 +534,52 @@ async def find_unavailable_products(
         for p in (await session.execute(kw_query)).scalars().all():
             if p.id not in results_map:
                 results_map[p.id] = p
+                _found_for_item = True
 
-        # 3. Embedding search (handles typos like "johs" → "john's")
-        # Threshold 0.35 (cosine_distance) = ~0.65 similarity — tight enough to prevent
-        # phantom matches (e.g. "truffle burger" → "Adicional de Calabresa") while still
-        # catching real typos. The downstream SequenceMatcher in whatsapp.py adds a second filter.
-        _UNAVAIL_EMBEDDING_MAX_DISTANCE = 0.35
-        if not results_map:
+        # 🔹 Layer 4. pg_trgm fuzzy name match
+        if not _found_for_item:
+            _TRGM_THRESHOLD = 0.3
+            trgm_query = (
+                select(Product)
+                .where(
+                    Product.bot_id == bot_id,
+                    Product.is_available == False,
+                    Product.is_deleted == False,
+                    func.similarity(Product.name, item_name) > _TRGM_THRESHOLD,
+                )
+                .order_by(func.similarity(Product.name, item_name).desc())
+                .limit(limit)
+            )
+            try:
+                async with session.begin_nested():
+                    for p in (await session.execute(trgm_query)).scalars().all():
+                        if p.id not in results_map:
+                            results_map[p.id] = p
+                            _found_for_item = True
+            except Exception:
+                logger.debug("pg_trgm similarity search unavailable, skipping")
+
+        # 🔹 Layer 5. Description ILIKE
+        if not _found_for_item:
+            desc_query = (
+                select(Product)
+                .where(
+                    Product.bot_id == bot_id,
+                    Product.is_available == False,
+                    Product.is_deleted == False,
+                    Product.description.is_not(None),
+                    Product.description.ilike(f"%{escaped}%", escape="\\"),
+                )
+                .limit(limit)
+            )
+            for p in (await session.execute(desc_query)).scalars().all():
+                if p.id not in results_map:
+                    results_map[p.id] = p
+                    _found_for_item = True
+
+        # 🔹 Layer 6. Embedding (with threshold to prevent phantom matches)
+        if not _found_for_item:
+            _UNAVAIL_EMBEDDING_MAX_DISTANCE = 0.35
             text_to_embed = f"PRODUTO PRINCIPAL: {item_name}"
             embeddings = await embed_async(
                 [text_to_embed], space="products", normalize=False
@@ -1450,6 +1520,25 @@ async def delete_plan(session: AsyncSession, plan_id: int) -> bool:
     await session.delete(plan)
     await session.commit()
     return True
+
+
+async def clear_contact_history(session: AsyncSession, contact_id: int) -> int:
+    """Clear all conversation history for a specific contact. Does NOT commit."""
+    from sqlalchemy import delete as sa_delete
+
+    result = await session.execute(
+        sa_delete(ConversationHistory).where(
+            ConversationHistory.contact_id == contact_id
+        )
+    )
+    count = result.rowcount
+    if count:
+        logger.info(
+            "Cleared %d conversation history records for contact %d",
+            count,
+            contact_id,
+        )
+    return count
 
 
 async def cleanup_old_conversation_history(session: AsyncSession) -> int:

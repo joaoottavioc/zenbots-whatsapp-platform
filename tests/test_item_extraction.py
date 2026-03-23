@@ -130,6 +130,78 @@ class TestEdgeCases:
         assert any("água" in item for item in result)
 
 
+class TestCompoundNumbers:
+    """Compound Portuguese numbers like 'vinte e sete' should be treated as
+    a single quantity, not split at the 'e' conjunction."""
+
+    def test_vinte_e_sete_not_split(self):
+        result = extract_items_local("vinte e sete flipflops e um cabana")
+        assert "flipflops" in result
+        assert "cabana" in result
+        assert len(result) == 2
+
+    def test_trinta_e_dois_not_split(self):
+        result = extract_items_local("trinta e dois bacon blasts e 1 pcq")
+        assert any("bacon blasts" in item for item in result)
+        assert "pcq" in result
+
+    def test_cento_e_vinte_e_tres(self):
+        result = extract_items_local("cento e vinte e tres pcqs e doze flipflops")
+        assert "pcqs" in result
+        assert "flipflops" in result
+
+    def test_mil_e_duzentos(self):
+        result = extract_items_local("mil e duzentos e trinta e quatro flipflops")
+        assert "flipflops" in result
+        assert len(result) == 1
+
+    def test_vinte_e_um(self):
+        result = extract_items_local("vinte e um pcq e trinta e cinco sunburger")
+        assert "pcq" in result
+        assert "sunburger" in result
+        assert len(result) == 2
+
+    def test_simple_quantities_still_separate(self):
+        """Non-compound quantities like 'tres pcq e doze flipflops' should
+        still split items correctly."""
+        result = extract_items_local("tres pcq e doze flipflops")
+        assert "pcq" in result
+        assert "flipflops" in result
+
+
+class TestQuantityAsSeparator:
+    """Quantity words should act as item separators, not just be stripped."""
+
+    def test_quantity_between_items(self):
+        result = extract_items_local(
+            "quero um truffle burguer tres pcq e doze flipflops"
+        )
+        assert any("truffle burguer" in item for item in result)
+        assert "pcq" in result
+        assert "flipflops" in result
+
+    def test_doze_stripped(self):
+        result = extract_items_local("doze flipflops")
+        assert "flipflops" in result
+        assert all("doze" not in item for item in result)
+
+    def test_trinta_stripped(self):
+        result = extract_items_local("trinta pcqs")
+        assert "pcqs" in result
+        assert all("trinta" not in item for item in result)
+
+    def test_complex_multi_item_order(self):
+        result = extract_items_local(
+            "hoje vou de dois cheesuburger um sunberguer e "
+            "trinta e dois bacon blasts e 1 pcq e um oklahoma krispy"
+        )
+        assert any("cheesuburger" in item for item in result)
+        assert any("sunberguer" in item for item in result)
+        assert any("bacon blasts" in item for item in result)
+        assert "pcq" in result
+        assert any("oklahoma krispy" in item for item in result)
+
+
 class TestRealWorldMessages:
     """Test with messages from the extract_potential_items LLM prompt examples."""
 

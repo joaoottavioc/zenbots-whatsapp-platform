@@ -35,6 +35,7 @@ _STOP = frozenset(
         "pode",
         "ser",
         "só",
+        "so",
         "também",
         "mais",
         "aí",
@@ -110,6 +111,92 @@ _NUM_RE = re.compile(r"\b\d+(?:[.,]\d+)?\b")
 # Splits on "e", ",", ";" — common conjunctions in Brazilian Portuguese orders
 _SPLIT_RE = re.compile(r"\s*(?:\be\b|,|;)\s*", re.IGNORECASE)
 
+# Quantity words that act as item separators
+_QTY_WORDS = frozenset(
+    {
+        "um",
+        "uma",
+        "duas",
+        "dois",
+        "três",
+        "tres",
+        "quatro",
+        "cinco",
+        "seis",
+        "sete",
+        "oito",
+        "nove",
+        "dez",
+        "onze",
+        "doze",
+        "treze",
+        "quatorze",
+        "catorze",
+        "quinze",
+        "dezesseis",
+        "dezessete",
+        "dezoito",
+        "dezenove",
+        "vinte",
+        "trinta",
+        "quarenta",
+        "cinquenta",
+        "cem",
+        "cento",
+        "duzentos",
+        "duzentas",
+        "trezentos",
+        "trezentas",
+        "mil",
+        "primeiro",
+        "segunda",
+        "segundo",
+        "terceiro",
+        "terceira",
+    }
+)
+
+# Words that are only quantity-related (not compound number parts)
+_QTY_ONLY_WORDS = frozenset({"porção", "porções", "unidade", "unidades"})
+
+
+def _collapse_compound_numbers(text: str) -> str:
+    """Replace quantity words with commas, but keep compound numbers together.
+
+    "vinte e sete flipflops e um cabana"
+    → "vinte e sete" is a compound number → single comma
+    → ", flipflops e , cabana"
+
+    "cento e vinte e três pcqs e doze flipflops"
+    → "cento e vinte e três" is one compound number → single comma
+    → ", pcqs e , flipflops"
+    """
+    words = text.split()
+    result = []
+    i = 0
+    while i < len(words):
+        word = words[i]
+        if word in _QTY_WORDS:
+            # Look ahead: is this part of a compound number?
+            # Pattern: qty "e" qty ["e" qty ...]
+            j = i
+            while (
+                j + 2 < len(words)
+                and words[j + 1] == "e"
+                and words[j + 2] in _QTY_WORDS
+            ):
+                j += 2  # skip "e" + next qty word
+            # Replace the entire compound number span with a single comma
+            result.append(",")
+            i = j + 1
+        elif word in _QTY_ONLY_WORDS:
+            result.append(",")
+            i += 1
+        else:
+            result.append(word)
+            i += 1
+    return " ".join(result)
+
 
 def extract_items_local(text: str) -> List[str]:
     """
@@ -120,6 +207,7 @@ def extract_items_local(text: str) -> List[str]:
         "me vê um x-burger com queijo" → ["x-burger queijo"]
         "só uma água, obrigado" → ["água"]
         "quero duas nega maluca e um café" → ["nega maluca", "café"]
+        "vinte e sete flipflops e um cabana" → ["flipflops", "cabana"]
 
     Returns a list of cleaned item strings. Falls back to [text.strip()]
     if nothing meaningful is extracted (so the caller always has something
@@ -128,17 +216,9 @@ def extract_items_local(text: str) -> List[str]:
     # 1. Lowercase and strip numbers
     cleaned = _NUM_RE.sub("", text.lower())
 
-    # 2. Remove common written-out quantities (Portuguese)
-    # Also treat quantity words as item separators by replacing with comma
-    # so "truffle burguer tres pcq" becomes "truffle burguer , pcq"
-    cleaned = re.sub(
-        r"\b(duas?|três|tres|quatro|cinco|seis|sete|oito|nove|dez|"
-        r"onze|doze|treze|quatorze|catorze|quinze|dezesseis|dezessete|"
-        r"dezoito|dezenove|vinte|trinta|quarenta|cinquenta|cem|"
-        r"uma?|primeiro|segunda?|terceir[ao]|porções?|porção|unidades?)\b",
-        ",",
-        cleaned,
-    )
+    # 2. Replace quantity words with commas (item separators),
+    # but keep compound numbers like "vinte e sete" together as one separator.
+    cleaned = _collapse_compound_numbers(cleaned)
 
     # 3. Split on conjunctions/commas
     parts = _SPLIT_RE.split(cleaned)

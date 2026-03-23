@@ -112,6 +112,7 @@ class BaseConversationTest:
         self.crud_mock.get_or_create_cart = AsyncMock(return_value=mock_cart)
         self.crud_mock.add_interaction_to_history = AsyncMock()
         self.crud_mock.clear_db_cart = AsyncMock()
+        self.crud_mock.clear_contact_history = AsyncMock(return_value=0)
         self.crud_mock.get_history_for_contact = AsyncMock(return_value=[])
         self.crud_mock.find_relevant_products = AsyncMock(return_value=[])
         self.crud_mock.save_address_to_cart = AsyncMock()

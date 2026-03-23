@@ -592,6 +592,7 @@ class TestHandleOrderCancel:
             patch("app.whatsapp.broadcast_order_update", new_callable=AsyncMock),
         ):
             mock_crud.get_latest_active_order = AsyncMock(return_value=order)
+            mock_crud.clear_contact_history = AsyncMock(return_value=0)
             result = await _handle_order_cancel(mctx)
 
         assert "cancelado com sucesso" in result.lower()

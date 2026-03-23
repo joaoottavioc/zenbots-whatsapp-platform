@@ -13,6 +13,7 @@ def create_central_prompt(
     search_results: Optional[List[Product]] = None,
     recent_suggestions: Optional[List[Product]] = None,
     unavailable_products: Optional[List[Product]] = None,
+    unavailable_term_map: Optional[Dict[int, str]] = None,
     available_categories: Optional[List[str]] = None,
 ) -> List[Dict]:
     """
@@ -108,11 +109,21 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
     # --- CONTEXTO DE PRODUTOS INDISPONÍVEIS ---
     unavailable_context = ""
     if unavailable_products:
-        unavailable_names = ", ".join(p.name for p in unavailable_products)
+        _term_map = unavailable_term_map or {}
+        unavail_lines = []
+        for p in unavailable_products:
+            user_term = _term_map.get(p.id)
+            if user_term:
+                unavail_lines.append(f'- "{user_term}" → {p.name} (em falta)')
+            else:
+                unavail_lines.append(f"- {p.name} (em falta)")
         unavailable_context = (
-            f"\n**Produtos indisponíveis no momento:**\n"
-            f"{unavailable_names}\n"
-            f"Se o cliente pediu algum desses, informe que está em falta e sugira outras opções do cardápio.\n"
+            "\n**Produtos indisponíveis no momento:**\n"
+            + "\n".join(unavail_lines)
+            + "\nO cliente JÁ FOI informado sobre esses itens pelo sistema. "
+            "NÃO mencione esses itens na sua resposta — NÃO diga que estão em falta, "
+            "NÃO sugira alternativas para eles. Apenas ignore-os completamente e "
+            "adicione os demais itens que o cliente pediu.\n"
         )
 
     # --- CONTEXTO DE CATEGORIAS DO CARDÁPIO ---

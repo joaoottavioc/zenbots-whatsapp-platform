@@ -17,6 +17,10 @@ Run this from the project root directory every time after modifying files.
 - `docker compose restart backend worker` — gracefully restarts the running `backend` and `worker` containers so the new code is loaded.
 - `docker compose up` — ensures any stopped or dependent services (db, redis, ollama) are running and properly connected.
 
+## Bytecode Cache (`PYTHONDONTWRITEBYTECODE=1`)
+
+Both `backend` and `worker` services have `PYTHONDONTWRITEBYTECODE=1` set in `docker-compose.yml`. This prevents Python from writing `.pyc` bytecode cache files. Without this, Docker volume mounts between Windows and Linux can cause **stale bytecode** issues: Python reads the old `.pyc` instead of the updated `.py` source because cross-OS file timestamps are unreliable. This applies to **all environments** (local dev, dev deploy, production deploy) — never allow `.pyc` caching on volume-mounted code.
+
 ## Which Services to Restart
 
 | Changed file(s) | Services to restart |

@@ -337,7 +337,7 @@ Four GitHub Actions workflows in `.github/workflows/`:
 
 All workflows use AWS OIDC federation (no long-lived keys). Three IAM roles: `github-actions-dev`, `github-actions-prod`, `github-actions-terraform`.
 
-**Docker build**: Multi-stage (base → backend/worker/migrations), ARM64 (Graviton), Python 3.10, non-root user, embedding model pre-warmed.
+**Docker build**: Multi-stage (base → backend/worker/migrations), ARM64 (Graviton), Python 3.10, non-root user, embedding model pre-warmed. `PYTHONDONTWRITEBYTECODE=1` set in Dockerfile and `docker-compose.yml` to prevent stale `.pyc` bytecode cache issues (critical for volume-mounted code on Windows/Docker and for clean deploys).
 
 ### Rollback
 
