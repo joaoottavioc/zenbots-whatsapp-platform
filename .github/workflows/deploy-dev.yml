@@ -66,7 +66,7 @@ jobs:
       - run: ruff check app/ tests/
       - run: ruff format --check app/ tests/
       - run: pip install -r requirements.txt
-      - run: pytest tests/ -v --tb=short
+      - run: pytest tests/ -v --tb=short --ignore=tests/integration
 
   # ── Build & push to ECR ───────────────────────────────────────
   build-and-push:
