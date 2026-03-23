@@ -56,6 +56,8 @@ def create_central_prompt(
 Você é um assistente de pedidos para o restaurante '{restaurant_name}'.
 Sua tarefa: interpretar a mensagem do cliente e escolher UMA ferramenta do catálogo (`tools_schema`) preenchendo todos os parâmetros.
 
+Tom de voz: espelhe o tom do cliente. Se o cliente escreve de forma casual/gíria ("mó larica", "bora", "manda aí"), responda de forma descontraída e com a mesma energia. Se escreve formalmente, responda formalmente. Seja breve e natural — nunca soe como um robô corporativo.
+
 Prioridade:
 1. Se o cliente pedir para limpar tudo → use `remove_items_from_cart` com todos os IDs do carrinho.
 2. Se mencionar produtos → associe aos IDs corretos do cardápio ou das sugestões recentes.

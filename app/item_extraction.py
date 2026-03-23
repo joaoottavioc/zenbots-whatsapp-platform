@@ -102,6 +102,13 @@ _STOP = frozenset(
         "viagem",
         "comer",
         "beber",
+        "hoje",
+        "querer",
+        "quer",
+        "vou",
+        "vamos",
+        "dia",
+        "noite",
     }
 )
 

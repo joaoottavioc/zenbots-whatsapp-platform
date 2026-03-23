@@ -1000,14 +1000,17 @@ async def _handle_confirm_negate(
                     )
                 else:
                     cart.last_suggestions = None
-                    response = "Perfeito! Mais alguma coisa? 😊"
+                    # Nothing to confirm — fall through to shopping flow
+                    return None
             else:
-                response = "Perfeito! Mais alguma coisa? 😊"
+                # Nothing to confirm — fall through to shopping flow
+                return None
         else:
             response = "Sem problema! Quer ver sugestões ou já sabe o que quer? 😊"
     else:
         if intent == "CONFIRM":
-            response = "Perfeito! Mais alguma coisa? 😊"
+            # Nothing to confirm — fall through to shopping flow
+            return None
         else:
             response = "Entendido! Como posso ajudar? 😊"
 
@@ -1209,6 +1212,19 @@ async def _handle_shopping_intent(
 
         found_products = await crud.find_relevant_products(session, bot.id, [concept])
 
+        if not found_products:
+            # Fallback: show top products from the menu instead of a dead-end message
+            _all_products_res = await session.execute(
+                select(Product)
+                .where(
+                    Product.bot_id == bot.id,
+                    Product.is_available == True,
+                    Product.is_deleted == False,
+                )
+                .limit(10)
+            )
+            found_products = list(_all_products_res.scalars().all())
+            title = "Aqui estão algumas das nossas sugestões:"
         if not found_products:
             response_to_user = "Puxa, não encontrei nenhuma sugestão no momento. Mas nosso cardápio está cheio de delícias! O que você gostaria?"
         else:
@@ -1643,6 +1659,11 @@ async def _handle_shopping_intent(
                     continue
 
                 elif tool_name == "propose_and_confirm_action":
+                    # If a cart tool already succeeded, skip propose_and_confirm —
+                    # the LLM is likely trying to handle an unavailable item which
+                    # we already handle programmatically via _em_falta_msg.
+                    if cart_tool_processed:
+                        continue
                     question = tool_args.get("confirmation_question")
                     proposed = tool_args.get("proposed_action", {}) or {}
                     ptool, pargs = (
@@ -1735,8 +1756,58 @@ async def _handle_shopping_intent(
                             )
                             if _filtered:
                                 cart.last_suggestions = [p.id for p in _filtered]
+                                # Only show "Não encontrei X" when search terms
+                                # look like actual food items, not conversational
+                                # noise ("poxa tia chegou", "gente muita fome").
+                                # Heuristic: if extraction kept >50% of the original
+                                # words, it didn't really "extract" — it's noise.
+                                _orig_word_count = len(text_body.split())
+                                _extracted_word_count = sum(
+                                    len(t.split()) for t in search_terms
+                                )
+                                _is_food_search = (
+                                    _orig_word_count > 0
+                                    and _extracted_word_count / _orig_word_count <= 0.5
+                                )
+                                _food_like_terms = (
+                                    [t for t in search_terms if len(t) > 2]
+                                    if _is_food_search
+                                    else []
+                                )
+                                if not found_products and _food_like_terms:
+                                    _items_str = ", ".join(
+                                        f"*{t}*" for t in _food_like_terms
+                                    )
+                                    _title = (
+                                        f"Não encontrei {_items_str} no nosso cardápio. 😕 "
+                                        "Mas veja nossas opções:"
+                                    )
+                                else:
+                                    # Use the LLM's conversational text as the title
+                                    # if it's not garbage (not a fallback/error/em falta).
+                                    _BAD_TITLE_MARKERS = {
+                                        "não entendi",
+                                        "nao entendi",
+                                        "desculpe",
+                                        "em falta",
+                                        "indisponível",
+                                        "não está disponível",
+                                        "não encontrei",
+                                    }
+                                    _llm_title = conv_text.split("\n")[0].strip()
+                                    if (
+                                        _llm_title
+                                        and len(_llm_title) > 5
+                                        and not any(
+                                            m in _llm_title.lower()
+                                            for m in _BAD_TITLE_MARKERS
+                                        )
+                                    ):
+                                        _title = _llm_title + " Veja nossas opções:"
+                                    else:
+                                        _title = "Posso te ajudar! Veja nossas opções:"
                                 conv_text = _format_product_suggestions_message(
-                                    _filtered, "Posso te ajudar! Veja nossas opções:"
+                                    _filtered, _title
                                 )
 
                         if cart_tool_processed:
@@ -1849,17 +1920,41 @@ async def _handle_shopping_intent(
     # Append programmatic em falta message if unavailable products were detected.
     # Strip any LLM-generated em falta text first to avoid duplication.
     if _em_falta_msg and unavailable_matches:
-        _unavail_names_lower = {p.name.lower() for p in unavailable_matches}
-        _em_falta_keywords = {"em falta", "indisponível", "indisponivel"}
+        # Build a set of words/terms to match against LLM's em falta text.
+        # Includes: full product names, significant words (>3 chars) from names,
+        # and user's search terms from _unavail_term_map.
+        _match_terms: set[str] = set()
+        for p in unavailable_matches:
+            _match_terms.add(p.name.lower())
+            for w in p.name.lower().split():
+                if len(w) > 3:
+                    _match_terms.add(w)
+            # Also add the user's typo (e.g. "cheesuburger")
+            _user_term = _unavail_term_map.get(p.id)
+            if _user_term:
+                _match_terms.add(_user_term.lower())
+
+        _em_falta_keywords = {
+            "em falta",
+            "indisponível",
+            "indisponivel",
+            "não está disponível",
+            "nao esta disponivel",
+            "não temos",
+            "nao temos",
+            "não disponível",
+            "não encontrei",
+            "nao encontrei",
+        }
         _cleaned_lines = []
         for _line in response_to_user.split("\n"):
             _line_lower = _line.lower()
-            _is_duplicate = any(
-                name in _line_lower for name in _unavail_names_lower
-            ) and any(kw in _line_lower for kw in _em_falta_keywords)
+            _is_duplicate = any(term in _line_lower for term in _match_terms) and any(
+                kw in _line_lower for kw in _em_falta_keywords
+            )
             if not _is_duplicate:
                 _cleaned_lines.append(_line)
-        response_to_user = "\n".join(_cleaned_lines).rstrip()
+        response_to_user = "\n".join(_cleaned_lines).strip()
         response_to_user += _em_falta_msg
 
     return response_to_user
@@ -2093,17 +2188,21 @@ async def _handle_suggestion_selection(mctx: MessageContext) -> str | None:
     selections: list[tuple] = []  # [(product, quantity), ...]
     seen_ids: set[int] = set()
 
+    unmatched_parts: list[str] = []
     for part in parts:
         match = _match_part(part)
         if match and match[0].id not in seen_ids:
             selections.append(match)
             seen_ids.add(match[0].id)
+        elif part.strip():
+            unmatched_parts.append(part.strip())
 
     # Fallback: if no parts matched but the whole message matches, use it
     if not selections:
         whole_match = _match_part(text)
         if whole_match:
             selections.append(whole_match)
+            unmatched_parts = []  # whole message matched, no leftovers
 
     if not selections:
         return None
@@ -2137,6 +2236,22 @@ async def _handle_suggestion_selection(mctx: MessageContext) -> str | None:
     if skipped:
         names = ", ".join(skipped)
         response += f"\n\n⚠️ Indisponível no momento: {names}"
+
+    # Filter unmatched parts: remove stopwords/noise, keep only food-like terms
+    _food_unmatched: list[str] = []
+    if unmatched_parts:
+        from app.item_extraction import extract_items_local
+
+        for part in unmatched_parts:
+            extracted = extract_items_local(part)
+            for item in extracted:
+                if len(item) > 2 and item != part.strip().lower():
+                    _food_unmatched.append(item)
+                elif len(item) > 2:
+                    _food_unmatched.append(item)
+
+    if _food_unmatched:
+        return response, _food_unmatched
     return response
 
 
@@ -2279,6 +2394,23 @@ async def _process_contact_message_inner(
     if cart.state in [CartState.GREETING, CartState.SHOPPING] and cart.last_suggestions:
         sug_result = await _handle_suggestion_selection(mctx)
         if sug_result is not None:
+            # sug_result can be a string or (string, unmatched_parts) tuple
+            _sug_unmatched: list[str] = []
+            if isinstance(sug_result, tuple):
+                sug_result, _sug_unmatched = sug_result
+
+            if _sug_unmatched:
+                # Route unmatched parts through the shopping flow.
+                # Override mctx.text_body so _handle_shopping_intent searches
+                # for the unmatched items (not the full original message).
+                _original_text = mctx.text_body
+                mctx.text_body = " e ".join(_sug_unmatched)
+                shopping_result = await _handle_shopping_intent(mctx, "ADD")
+                mctx.text_body = _original_text  # restore
+                if shopping_result:
+                    # Shopping flow returns full cart summary — use it instead
+                    sug_result = shopping_result
+
             cart.last_activity_at = utcnow()
             session.add(cart)
             await session.flush()
@@ -2347,6 +2479,9 @@ async def _process_contact_message_inner(
     result = await _handle_confirm_negate(mctx, intent)
     if result is not None:
         return
+    # If CONFIRM had nothing to confirm, treat as ADD so Option C can show suggestions
+    if intent == "CONFIRM":
+        intent = "ADD"
 
     # F-17: Order cancellation via WhatsApp
     if intent == "ORDER_CANCEL":
@@ -2854,22 +2989,22 @@ async def _resolve_items_for_proposal(
     valid_ids, resolved = await _product_ids_for_bot(session, bot_id), []
     for it in items_arg:
         if not isinstance(it, dict):
-            return []
+            continue
         q = int(it.get("quantity", 0) or 0)
         if q <= 0:
-            return []
+            continue
         pid = it.get("product_id")
         if pid is not None:
             pid = _safe_int(pid, "product_id")
             if pid is None:
-                return []
+                continue
             if pid not in valid_ids:
-                return []
+                continue
             resolved.append({"product_id": pid, "quantity": q})
             continue
         pname = (it.get("product_name") or it.get("name") or "").strip()
         if not pname:
-            return []
+            continue
         found = await session.execute(
             select(Product)
             .where(
@@ -2881,7 +3016,7 @@ async def _resolve_items_for_proposal(
         )
         p = found.scalars().first()
         if not p:
-            return []
+            continue
         resolved.append({"product_id": p.id, "quantity": q})
     return resolved
 

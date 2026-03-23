@@ -25,6 +25,9 @@ db_data/
 .coverage
 htmlcov/
 
+# Documentation (generated/internal, not tracked)
+docs/
+
 # Terraform
 **/.terraform/
 *.tfstate
