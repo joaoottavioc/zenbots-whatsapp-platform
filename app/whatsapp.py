@@ -27,7 +27,11 @@ from app.openai_client import (
     get_ai_decision,
     extract_potential_items,
 )
-from app.item_extraction import extract_items_local
+from app.item_extraction import (
+    extract_items_local,
+    extract_items_with_quantities,
+    rewrite_as_structured_order,
+)
 from app.menu_storage import generate_presigned_url
 from app.prompt_central import create_central_prompt
 from app.tools_definition import tools_schema
@@ -1166,6 +1170,9 @@ async def _handle_shopping_intent(
 
     response_to_user = "Não entendi bem. 😅 Pode tentar de outra forma?"
     _em_falta_msg = ""
+    cart_tool_processed = False
+    _variant_map: dict[str, list[str]] = {}
+    _full_menu: list = []
 
     if intent == "REQUEST_SUGGESTION":
         concept = None
@@ -1257,6 +1264,11 @@ async def _handle_shopping_intent(
         # T2-1: Local extraction first (no LLM call), LLM fallback only if RAG finds nothing
         extracted_items = extract_items_local(text_body)
         search_terms = extracted_items if extracted_items else [text_body]
+
+        # Pre-parse quantity-item pairs for structured LLM query rewrite.
+        # This prevents quantity shifting when items are unavailable.
+        _qty_pairs = extract_items_with_quantities(text_body)
+        _structured_query = rewrite_as_structured_order(_qty_pairs)
         found_products = await crud.find_relevant_products(
             session, bot.id, search_terms
         )
@@ -1404,25 +1416,18 @@ async def _handle_shopping_intent(
         else:
             _prompt_products = found_products
 
-        # Remove available variants of unavailable products from prompt
-        # so the LLM doesn't auto-substitute them (e.g. Picanha → Picanha com catupiry).
-        # The programmatic em falta message handles informing the customer.
-        if unavailable_matches and _prompt_products:
-            _unavail_roots = set()
-            for up in unavailable_matches:
-                # Extract the first word (>2 chars) as the "root" of the product name
-                for w in up.name.split():
-                    if len(w) > 2:
-                        _unavail_roots.add(w.lower())
-                        break
-            if _unavail_roots:
-                _prompt_products = [
-                    p
-                    for p in _prompt_products
-                    if not any(
-                        p.name.lower().startswith(root) for root in _unavail_roots
-                    )
-                ]
+        # Fetch ALL available products for this bot — gives LLM full context
+        # for quantity-product parsing from turn 1 (no history dependency).
+        _all_products_result = await session.execute(
+            select(Product)
+            .where(
+                Product.bot_id == bot.id,
+                Product.is_available == True,
+                Product.is_deleted == False,
+            )
+            .order_by(Product.category, Product.name)
+        )
+        _full_menu = list(_all_products_result.scalars().all())
 
         # Fetch distinct categories for the bot's menu
         _cat_result = await session.execute(
@@ -1437,22 +1442,40 @@ async def _handle_shopping_intent(
         )
         _available_categories = [r[0] for r in _cat_result]
 
-        # Pass unavailable_matches so the LLM knows to skip those items
-        # (won't try to substitute them with available products).
-        # The em falta message is still built programmatically — the LLM
-        # just needs to know not to map "cheesuburger" to PCQ.
-        # Use _prompt_products (filtered) instead of found_products (raw) to
-        # avoid false-positive embedding results being shown to the LLM.
+        # Build variant map: {unavailable_name: [available variant names]}
+        # so the prompt can explicitly tell the LLM not to substitute.
+        _variant_map: dict[str, list[str]] = {}
+        if unavailable_matches and _full_menu:
+            for up in unavailable_matches:
+                root = None
+                for w in up.name.split():
+                    if len(w) > 2:
+                        root = w.lower()
+                        break
+                if root:
+                    variants = [
+                        p.name
+                        for p in _full_menu
+                        if p.name.lower().startswith(root) and p.id != up.id
+                    ]
+                    if variants:
+                        _variant_map[up.name] = variants
+
+        # Use structured query if available (pre-parsed quantities),
+        # otherwise fall back to original message.
+        _llm_query = _structured_query or text_body
+
         prompt = create_central_prompt(
-            user_query=text_body,
+            user_query=_llm_query,
             history=past_messages,
             restaurant_name=bot.restaurant_name,
             cart_items=cart_items,
-            search_results=_prompt_products,
+            search_results=_full_menu,
             recent_suggestions=recent_suggestions,
             unavailable_products=unavailable_matches,
             unavailable_term_map=_unavail_term_map,
             available_categories=_available_categories,
+            variant_map=_variant_map,
         )
         ai_message = await get_ai_decision(prompt, tools_schema, force_tool=True)
 
@@ -1473,7 +1496,6 @@ async def _handle_shopping_intent(
                 "search_catalog_for_suggestions",
             }
 
-            cart_tool_processed = False
             for tool_call in ai_message.tool_calls:
                 tool_name = tool_call.function.name
 
@@ -1990,6 +2012,32 @@ async def _handle_shopping_intent(
             )
         else:
             response_to_user = "Me diga o que gostaria de pedir e posso ajudar! 😊"
+
+    # Post-process: remove auto-substituted variant products from cart.
+    # The LLM may add variants (e.g. "Picanha com catupiry" when user said "picanha"
+    # and "Picanha" is unavailable). Deterministically remove them.
+    if cart_tool_processed and _variant_map:
+        _variant_ids = {
+            p.id
+            for p in _full_menu
+            if p.name in {n for names in _variant_map.values() for n in names}
+        }
+        _items_removed = False
+        for item in list(cart.items):
+            if item.product_id in _variant_ids:
+                await crud.modify_item_quantity_in_db_cart(
+                    session, cart.id, item.product_id, 0
+                )
+                _items_removed = True
+        if _items_removed:
+            await _load_cart_items_with_products(cart, session)
+            if cart.items:
+                response_to_user = (
+                    _build_cart_summary_message(cart, bot, "✅")
+                    + "\n\nAdicionado! Mais alguma coisa ou *só isso* para finalizar? 😊"
+                )
+            else:
+                response_to_user = ""
 
     # Append programmatic em falta message if unavailable products were detected.
     # Strip any LLM-generated em falta text first to avoid duplication.

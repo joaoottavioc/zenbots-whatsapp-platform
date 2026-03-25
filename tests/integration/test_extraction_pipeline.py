@@ -170,9 +170,10 @@ class TestUnavailableTermMapping:
 
 
 @pytest.mark.integration
-class TestVariantFilter:
-    """Test that available variants of unavailable products are filtered
-    from the LLM prompt context to prevent auto-substitution."""
+class TestFullMenuContext:
+    """With full-menu context (Option A), available variants of unavailable
+    products remain visible to the LLM for correct quantity-product parsing.
+    The prompt instruction prevents auto-substitution."""
 
     @pytest.mark.asyncio
     async def test_unavailable_detected(self, db_session, test_bot, test_products):
@@ -183,22 +184,22 @@ class TestVariantFilter:
         assert any(p.name == "PICANHA COM CATUPIRY" for p in unavail)
 
     @pytest.mark.asyncio
-    async def test_variants_filtered_from_results(
+    async def test_available_variants_kept_in_results(
         self, db_session, test_bot, test_products
     ):
-        """Available variants (same root) ARE filtered from search results."""
+        """Available variants (same root) remain in search results — no filtering."""
         available = await find_relevant_products(
             db_session, test_bot["bot_id"], ["picanha com catupiry"]
         )
         available_names = {p.name for p in available}
 
-        # Variants sharing the "picanha" root should be filtered
-        assert "PICANHA" not in available_names
-        assert "PICANHA COM BACON" not in available_names
+        # Variants should be present for LLM context
+        assert "PICANHA" in available_names
+        assert "PICANHA COM BACON" in available_names
 
     @pytest.mark.asyncio
     async def test_unrelated_products_kept(self, db_session, test_bot, test_products):
-        """Unrelated products remain in search results alongside filtering."""
+        """Unrelated products remain in search results."""
         available = await find_relevant_products(
             db_session,
             test_bot["bot_id"],

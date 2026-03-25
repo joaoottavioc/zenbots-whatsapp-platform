@@ -8,7 +8,7 @@ food/drink names for pgvector semantic search.
 """
 
 import re
-from typing import List
+from typing import List, Tuple
 
 # Common Portuguese stopwords in restaurant ordering context.
 # These are words that appear around food names but are not food names.
@@ -166,6 +166,44 @@ _QTY_WORDS = frozenset(
 # Words that are only quantity-related (not compound number parts)
 _QTY_ONLY_WORDS = frozenset({"porção", "porções", "unidade", "unidades"})
 
+# Mapping of Portuguese quantity words to their numeric values
+_QTY_VALUES: dict[str, int] = {
+    "um": 1,
+    "uma": 1,
+    "duas": 2,
+    "dois": 2,
+    "três": 3,
+    "tres": 3,
+    "quatro": 4,
+    "cinco": 5,
+    "seis": 6,
+    "sete": 7,
+    "oito": 8,
+    "nove": 9,
+    "dez": 10,
+    "onze": 11,
+    "doze": 12,
+    "treze": 13,
+    "quatorze": 14,
+    "catorze": 14,
+    "quinze": 15,
+    "dezesseis": 16,
+    "dezessete": 17,
+    "dezoito": 18,
+    "dezenove": 19,
+    "vinte": 20,
+    "trinta": 30,
+    "quarenta": 40,
+    "cinquenta": 50,
+    "cem": 100,
+    "cento": 100,
+    "duzentos": 200,
+    "duzentas": 200,
+    "trezentos": 300,
+    "trezentas": 300,
+    "mil": 1000,
+}
+
 
 def _collapse_compound_numbers(text: str) -> str:
     """Replace quantity words with commas, but keep compound numbers together.
@@ -245,3 +283,119 @@ def extract_items_local(text: str) -> List[str]:
     # If extraction yielded nothing, return the original text so pgvector
     # can still attempt a semantic match.
     return items if items else [text.strip()]
+
+
+def _resolve_compound_qty(words: List[str], start: int) -> Tuple[int, int]:
+    """Resolve a compound number starting at index `start`.
+
+    Handles patterns like "vinte e três" (23), "cento e vinte" (120).
+    Returns (numeric_value, end_index_exclusive).
+    """
+    total = _QTY_VALUES.get(words[start], 0)
+    j = start + 1
+    while j + 1 < len(words) and words[j] == "e" and words[j + 1] in _QTY_VALUES:
+        total += _QTY_VALUES[words[j + 1]]
+        j += 2
+    return total, j
+
+
+def extract_items_with_quantities(text: str) -> List[Tuple[int, str]]:
+    """Extract (quantity, item_name) pairs from a user message.
+
+    Examples:
+        "um picanha dois prensadão treze supremo x"
+        → [(1, "picanha"), (2, "prensadão"), (13, "supremo x")]
+
+        "quero 3 pizzas e 1 coca"
+        → [(3, "pizzas"), (1, "coca")]
+
+        "vinte e sete classic burger e um cabana"
+        → [(27, "classic burger"), (1, "cabana")]
+
+    Returns empty list if no quantity-item pairs found.
+    """
+    cleaned = text.lower().strip()
+    words = cleaned.split()
+
+    pairs: List[Tuple[int, str]] = []
+    current_qty: int | None = None
+    current_words: List[str] = []
+
+    i = 0
+    while i < len(words):
+        word = words[i]
+
+        # Check for digit quantity (e.g., "3", "20")
+        digit_match = re.match(r"^(\d+)$", word)
+
+        if word in _QTY_VALUES:
+            # Flush previous item if any
+            if current_words:
+                item = _clean_item_words(current_words)
+                if item:
+                    pairs.append((current_qty or 1, item))
+                current_words = []
+
+            # Resolve compound number
+            qty, end = _resolve_compound_qty(words, i)
+            current_qty = qty
+            i = end
+            continue
+
+        elif digit_match:
+            # Flush previous item
+            if current_words:
+                item = _clean_item_words(current_words)
+                if item:
+                    pairs.append((current_qty or 1, item))
+                current_words = []
+
+            current_qty = int(digit_match.group(1))
+            i += 1
+            continue
+
+        elif word in _QTY_ONLY_WORDS:
+            i += 1
+            continue
+
+        # Conjunction/separator — flush if we have words
+        elif word == "e" or word in (",", ";"):
+            if current_words:
+                item = _clean_item_words(current_words)
+                if item:
+                    pairs.append((current_qty or 1, item))
+                    current_qty = None
+                current_words = []
+            i += 1
+            continue
+
+        # Regular word — skip stopwords, collect item words
+        elif word not in _STOP:
+            current_words.append(word)
+
+        i += 1
+
+    # Flush last item
+    if current_words:
+        item = _clean_item_words(current_words)
+        if item:
+            pairs.append((current_qty or 1, item))
+
+    return pairs
+
+
+def _clean_item_words(words: List[str]) -> str:
+    """Clean and join item words, removing punctuation."""
+    cleaned = " ".join(words).strip(".,;!?")
+    return cleaned if len(cleaned) >= 2 else ""
+
+
+def rewrite_as_structured_order(pairs: List[Tuple[int, str]]) -> str | None:
+    """Convert quantity-item pairs into a structured order string for the LLM.
+
+    Returns None if pairs is empty (caller should use original message).
+    """
+    if not pairs:
+        return None
+    parts = [f"{qty}x {name}" for qty, name in pairs]
+    return "Adicionar ao carrinho: " + ", ".join(parts)

@@ -15,7 +15,12 @@ from difflib import SequenceMatcher
 
 import pytest
 
-from app.item_extraction import _collapse_compound_numbers, _QTY_WORDS
+from app.item_extraction import (
+    _collapse_compound_numbers,
+    _QTY_WORDS,
+    extract_items_with_quantities,
+    rewrite_as_structured_order,
+)
 
 
 # =========================================================================
@@ -59,6 +64,93 @@ class TestCollapseCompoundNumbers:
         assert "primeiro" in _QTY_WORDS
         assert "segundo" in _QTY_WORDS
         assert "terceiro" in _QTY_WORDS
+
+
+# =========================================================================
+# Quantity extraction (extract_items_with_quantities)
+# =========================================================================
+
+
+class TestExtractItemsWithQuantities:
+    """extract_items_with_quantities returns (quantity, item_name) pairs."""
+
+    def test_interleaved_written_quantities(self):
+        """Written quantities interleaved with product names."""
+        pairs = extract_items_with_quantities(
+            "hoje vou querer um picanha dois prensadão treze supremo x e vinte migno com cebola"
+        )
+        assert pairs == [
+            (1, "picanha"),
+            (2, "prensadão"),
+            (13, "supremo x"),
+            (20, "migno cebola"),
+        ]
+
+    def test_digit_quantities(self):
+        """Digit quantities (3, 1) are correctly extracted."""
+        pairs = extract_items_with_quantities("quero 3 pizzas e 1 coca")
+        assert pairs == [(3, "pizzas"), (1, "coca")]
+
+    def test_compound_number(self):
+        """Compound numbers like 'vinte e sete' → 27."""
+        pairs = extract_items_with_quantities("vinte e sete classic burger e um cabana")
+        assert pairs == [(27, "classic burger"), (1, "cabana")]
+
+    def test_single_item_with_modifier(self):
+        """Single item with 'com/sem' modifier."""
+        pairs = extract_items_with_quantities("me vê dois x-burger com queijo")
+        assert pairs == [(2, "x-burger queijo")]
+
+    def test_no_quantity_defaults_to_one(self):
+        """Items without explicit quantity default to 1."""
+        pairs = extract_items_with_quantities("só água")
+        assert pairs == [(1, "água")]
+
+    def test_empty_input(self):
+        pairs = extract_items_with_quantities("")
+        assert pairs == []
+
+    def test_stopwords_stripped(self):
+        """Stopwords like 'quero', 'hoje', 'vou' are stripped."""
+        pairs = extract_items_with_quantities("quero um hamburger")
+        assert pairs == [(1, "hamburger")]
+
+    def test_multi_item_with_conjunction(self):
+        """Multiple items separated by 'e' with quantities."""
+        pairs = extract_items_with_quantities(
+            "quero um classic burger tres spicy wings e doze tropical drink"
+        )
+        assert pairs == [
+            (1, "classic burger"),
+            (3, "spicy wings"),
+            (12, "tropical drink"),
+        ]
+
+
+# =========================================================================
+# Structured query rewrite
+# =========================================================================
+
+
+class TestRewriteAsStructuredOrder:
+    """rewrite_as_structured_order converts pairs into LLM-friendly format."""
+
+    def test_basic_rewrite(self):
+        pairs = [(2, "prensadão"), (13, "supremo x")]
+        result = rewrite_as_structured_order(pairs)
+        assert result == "Adicionar ao carrinho: 2x prensadão, 13x supremo x"
+
+    def test_single_item(self):
+        result = rewrite_as_structured_order([(1, "picanha")])
+        assert result == "Adicionar ao carrinho: 1x picanha"
+
+    def test_empty_returns_none(self):
+        assert rewrite_as_structured_order([]) is None
+
+    def test_preserves_modifiers(self):
+        pairs = [(2, "x-burger queijo")]
+        result = rewrite_as_structured_order(pairs)
+        assert result == "Adicionar ao carrinho: 2x x-burger queijo"
 
 
 # =========================================================================
@@ -180,6 +272,34 @@ class TestUnavailableTermMapping:
         assert '"cheesuburger"' in all_content
         assert "THE CHEESEBURGER" in all_content
         assert "em falta" in all_content
+
+    def test_variant_annotation_in_unavailable(self):
+        """When variant_map is provided, unavailable lines include variant names."""
+        from app.prompt_central import create_central_prompt
+
+        class FakeProduct:
+            def __init__(self, id, name, category=None, description=None):
+                self.id = id
+                self.name = name
+                self.category = category
+                self.description = description
+
+        unavail = [FakeProduct(690, "Picanha")]
+        variant_map = {"Picanha": ["Picanha com catupiry", "Picanha com bacon"]}
+
+        prompt = create_central_prompt(
+            user_query="quero um picanha",
+            history=[],
+            restaurant_name="Test",
+            cart_items=[],
+            unavailable_products=unavail,
+            variant_map=variant_map,
+        )
+
+        all_content = " ".join(msg.get("content") or "" for msg in prompt)
+        assert "NÃO substitua por:" in all_content
+        assert "Picanha com catupiry" in all_content
+        assert "Picanha com bacon" in all_content
 
     def test_term_map_format_without_term(self):
         """When no term map, format should show product name with em falta."""
@@ -479,84 +599,115 @@ class TestEmFaltaPlural:
 
 
 # =========================================================================
-# Variant filter (prevents substitution of unavailable product variants)
+# Variant map building (identifies variants for post-process removal)
 # =========================================================================
 
 
-class TestVariantFilter:
-    """When unavailable products have available variants (same root name),
-    the variants should be removed from the LLM prompt context."""
+class TestVariantMapBuilding:
+    """The variant map identifies available products that are variants of
+    unavailable products. Used for post-process removal after LLM tool calls."""
 
-    def _filter_variants(self, available_names, unavail_names):
-        """Replicate the variant filter logic from whatsapp.py."""
-        roots = set()
-        for name in unavail_names:
-            for w in name.lower().split():
+    def _build_variant_map(self, available_names, unavail_names):
+        """Replicate the variant map logic from whatsapp.py."""
+        variant_map = {}
+        for uname in unavail_names:
+            root = None
+            for w in uname.lower().split():
                 if len(w) > 2:
-                    roots.add(w)
+                    root = w
                     break
-        return [
-            n
-            for n in available_names
-            if not any(n.lower().startswith(root) for root in roots)
-        ]
+            if root:
+                variants = [n for n in available_names if n.lower().startswith(root)]
+                if variants:
+                    variant_map[uname] = variants
+        return variant_map
 
-    def test_plain_variant_filtered(self):
-        """'PICANHA' removed when 'PICANHA COM CATUPIRY' is unavailable."""
-        result = self._filter_variants(
-            ["PICANHA", "PRENSADÃO"],
-            ["PICANHA COM CATUPIRY"],
+    def test_picanha_variants_detected(self):
+        """Picanha variants correctly mapped when Picanha is unavailable."""
+        vmap = self._build_variant_map(
+            ["PICANHA COM CATUPIRY", "PICANHA COM BACON", "PRENSADÃO"],
+            ["PICANHA"],
         )
-        assert "PICANHA" not in result
-        assert "PRENSADÃO" in result
-
-    def test_all_same_root_variants_filtered(self):
-        """All products sharing root are removed."""
-        result = self._filter_variants(
-            ["PICANHA", "PICANHA COM BACON", "PICANHA DUPLA", "SPICY WINGS"],
-            ["PICANHA COM CATUPIRY"],
-        )
-        assert "PICANHA" not in result
-        assert "PICANHA COM BACON" not in result
-        assert "PICANHA DUPLA" not in result
-        assert "SPICY WINGS" in result
+        assert "PICANHA" in vmap
+        assert "PICANHA COM CATUPIRY" in vmap["PICANHA"]
+        assert "PICANHA COM BACON" in vmap["PICANHA"]
+        assert "PRENSADÃO" not in vmap.get("PICANHA", [])
 
     def test_multiple_unavail_roots(self):
-        """Multiple unavailable products filter all their variants."""
-        result = self._filter_variants(
-            ["PICANHA", "MIGNON", "MIGNON AO CHEDDAR", "PRENSADÃO"],
+        """Multiple unavailable products each get their own variant list."""
+        vmap = self._build_variant_map(
+            ["PICANHA COM BACON", "MIGNON", "MIGNON AO CHEDDAR", "PRENSADÃO"],
             ["PICANHA COM CATUPIRY", "MIGNON COM CEBOLA"],
         )
-        assert "PICANHA" not in result
-        assert "MIGNON" not in result
-        assert "MIGNON AO CHEDDAR" not in result
-        assert "PRENSADÃO" in result
+        assert "PICANHA COM CATUPIRY" in vmap
+        assert "PICANHA COM BACON" in vmap["PICANHA COM CATUPIRY"]
+        assert "MIGNON COM CEBOLA" in vmap
+        assert "MIGNON" in vmap["MIGNON COM CEBOLA"]
+        assert "MIGNON AO CHEDDAR" in vmap["MIGNON COM CEBOLA"]
 
-    def test_no_unavail_no_filtering(self):
-        """No unavailable products means no filtering."""
-        result = self._filter_variants(
+    def test_no_unavail_empty_map(self):
+        vmap = self._build_variant_map(
             ["PICANHA", "MIGNON", "PRENSADÃO"],
             [],
         )
-        assert len(result) == 3
+        assert vmap == {}
 
-    def test_unrelated_products_kept(self):
-        """Products with different roots are always kept."""
-        result = self._filter_variants(
-            ["SPICY WINGS", "TROPICAL DRINK", "AÇAÍ BOWL"],
+    def test_unrelated_products_not_mapped(self):
+        vmap = self._build_variant_map(
+            ["SPICY WINGS", "TROPICAL DRINK"],
             ["PICANHA COM CATUPIRY"],
         )
-        assert len(result) == 3
+        assert vmap == {}
 
     def test_short_root_words_skipped(self):
         """Root words <=2 chars (like 'de', 'ao') are skipped."""
-        # "de" is the first word but <=2 chars, so "bacon" would be the root
-        result = self._filter_variants(
+        vmap = self._build_variant_map(
             ["BACON BLAST", "CLASSIC BURGER"],
-            ["de BACON ESPECIAL"],  # root should be "bacon" not "de"
+            ["de BACON ESPECIAL"],
         )
-        assert "BACON BLAST" not in result
-        assert "CLASSIC BURGER" in result
+        assert "de BACON ESPECIAL" in vmap
+        assert "BACON BLAST" in vmap["de BACON ESPECIAL"]
+        assert "CLASSIC BURGER" not in vmap.get("de BACON ESPECIAL", [])
+
+
+class TestPostProcessVariantRemoval:
+    """Post-process removal deterministically removes auto-substituted
+    variant products from the cart after LLM tool calls."""
+
+    def _get_variant_ids(self, full_menu, variant_map):
+        """Replicate the variant ID set logic from whatsapp.py."""
+        variant_names = {n for names in variant_map.values() for n in names}
+        return {p["id"] for p in full_menu if p["name"] in variant_names}
+
+    def test_variant_ids_identified(self):
+        """Variant product IDs are correctly identified for removal."""
+        full_menu = [
+            {"id": 691, "name": "Picanha com catupiry"},
+            {"id": 692, "name": "Picanha com bacon"},
+            {"id": 700, "name": "Prensadão"},
+            {"id": 701, "name": "Supremo X"},
+        ]
+        variant_map = {"Picanha": ["Picanha com catupiry", "Picanha com bacon"]}
+        variant_ids = self._get_variant_ids(full_menu, variant_map)
+        assert variant_ids == {691, 692}
+
+    def test_empty_variant_map_no_ids(self):
+        full_menu = [{"id": 700, "name": "Prensadão"}]
+        variant_ids = self._get_variant_ids(full_menu, {})
+        assert variant_ids == set()
+
+    def test_only_matching_variants_removed(self):
+        """Non-variant products are not in the removal set."""
+        full_menu = [
+            {"id": 691, "name": "Picanha com catupiry"},
+            {"id": 700, "name": "Prensadão"},
+            {"id": 701, "name": "Supremo X"},
+        ]
+        variant_map = {"Picanha": ["Picanha com catupiry"]}
+        variant_ids = self._get_variant_ids(full_menu, variant_map)
+        assert 700 not in variant_ids
+        assert 701 not in variant_ids
+        assert 691 in variant_ids
 
 
 # =========================================================================

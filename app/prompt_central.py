@@ -15,6 +15,7 @@ def create_central_prompt(
     unavailable_products: Optional[List[Product]] = None,
     unavailable_term_map: Optional[Dict[int, str]] = None,
     available_categories: Optional[List[str]] = None,
+    variant_map: Optional[Dict[str, List[str]]] = None,
 ) -> List[Dict]:
     """
     Prompt central multishot para escolha de ferramenta,
@@ -100,7 +101,7 @@ Lembre-se: Você é um assistente de restaurante.
 - Se o cliente perguntar algo fora desse escopo, informe gentilmente que só pode ajudar com assuntos do restaurante.
 Se a quantidade for escrita por extenso (ex.: trinta e dois, doze, quinze), converta para número inteiro no campo quantity.
 Se um item pedido não existir no cardápio, use `answer_conversationally` para informar educadamente que não temos esse item e sugira alternativas.
-Itens listados em **Produtos indisponíveis no momento** já são tratados automaticamente pelo sistema — NÃO mencione esses itens, NÃO diga que estão em falta. Apenas ignore-os e adicione os demais itens que o cliente pediu.
+Itens listados em **Produtos indisponíveis no momento** já são tratados automaticamente pelo sistema — NÃO mencione esses itens, NÃO diga que estão em falta, e NÃO substitua por produtos com nomes parecidos. Apenas ignore-os e adicione os demais itens que o cliente pediu.
 - "proposed_action" preenchida com a tool real e argumentos resolvidos (IDs/quantidades).
 Após a confirmação do cliente, NÃO gere outra resposta: o backend executará a ação proposta.
 """,
@@ -110,19 +111,22 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
     unavailable_context = ""
     if unavailable_products:
         _term_map = unavailable_term_map or {}
+        _vmap = variant_map or {}
         unavail_lines = []
         for p in unavailable_products:
             user_term = _term_map.get(p.id)
-            if user_term:
-                unavail_lines.append(f'- "{user_term}" → {p.name} (em falta)')
-            else:
-                unavail_lines.append(f"- {p.name} (em falta)")
+            label = f'"{user_term}" → {p.name}' if user_term else p.name
+            variant_names = _vmap.get(p.name, [])
+            if variant_names:
+                label += f" — NÃO substitua por: {', '.join(variant_names)}"
+            unavail_lines.append(f"- {label} (em falta)")
         unavailable_context = (
             "\n**Produtos indisponíveis no momento:**\n"
             + "\n".join(unavail_lines)
             + "\nO cliente JÁ FOI informado sobre esses itens pelo sistema. "
             "NÃO mencione esses itens na sua resposta — NÃO diga que estão em falta, "
-            "NÃO sugira alternativas para eles. Apenas ignore-os completamente e "
+            "NÃO sugira alternativas para eles, e NÃO substitua por variantes. "
+            "Apenas ignore-os completamente e "
             "adicione os demais itens que o cliente pediu.\n"
         )
 
