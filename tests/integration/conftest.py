@@ -128,6 +128,33 @@ PRODUCT_DEFS = [
         "is_available": True,
         "is_deleted": False,
     },
+    {
+        "name": "PICANHA",
+        "price": 35.0,
+        "category": "Lanches",
+        "description": "Lanche de picanha artesanal",
+        "keywords": "picanha, carne",
+        "is_available": True,
+        "is_deleted": False,
+    },
+    {
+        "name": "PICANHA COM CATUPIRY",
+        "price": 40.0,
+        "category": "Lanches",
+        "description": "Lanche de picanha com catupiry",
+        "keywords": "picanha, catupiry, carne",
+        "is_available": False,  # UNAVAILABLE variant
+        "is_deleted": False,
+    },
+    {
+        "name": "PICANHA COM BACON",
+        "price": 42.0,
+        "category": "Lanches",
+        "description": "Lanche de picanha com bacon",
+        "keywords": "picanha, bacon, carne",
+        "is_available": True,
+        "is_deleted": False,
+    },
 ]
 
 

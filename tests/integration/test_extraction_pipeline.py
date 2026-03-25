@@ -167,3 +167,55 @@ class TestUnavailableTermMapping:
         assert len(term_map) >= 1
         # The mapped term should be the user's typo
         assert any(v == "vegie wrap" for v in term_map.values())
+
+
+@pytest.mark.integration
+class TestVariantFilter:
+    """Test that available variants of unavailable products are filtered
+    from the LLM prompt context to prevent auto-substitution."""
+
+    @pytest.mark.asyncio
+    async def test_unavailable_detected(self, db_session, test_bot, test_products):
+        """Unavailable products are correctly identified by search."""
+        unavail = await find_unavailable_products(
+            db_session, test_bot["bot_id"], ["picanha com catupiry"]
+        )
+        assert any(p.name == "PICANHA COM CATUPIRY" for p in unavail)
+
+    @pytest.mark.asyncio
+    async def test_variants_filtered_from_results(
+        self, db_session, test_bot, test_products
+    ):
+        """Available variants (same root) ARE filtered from search results."""
+        available = await find_relevant_products(
+            db_session, test_bot["bot_id"], ["picanha com catupiry"]
+        )
+        available_names = {p.name for p in available}
+
+        # Variants sharing the "picanha" root should be filtered
+        assert "PICANHA" not in available_names
+        assert "PICANHA COM BACON" not in available_names
+
+    @pytest.mark.asyncio
+    async def test_unrelated_products_kept(self, db_session, test_bot, test_products):
+        """Unrelated products remain in search results alongside filtering."""
+        available = await find_relevant_products(
+            db_session,
+            test_bot["bot_id"],
+            ["picanha com catupiry", "spicy wings"],
+        )
+        available_names = {p.name for p in available}
+        assert "SPICY WINGS" in available_names
+
+    @pytest.mark.asyncio
+    async def test_no_unavailable_keeps_all(self, db_session, test_bot, test_products):
+        """When nothing is unavailable, all search results are kept."""
+        available = await find_relevant_products(
+            db_session, test_bot["bot_id"], ["spicy wings"]
+        )
+        unavail = await find_unavailable_products(
+            db_session, test_bot["bot_id"], ["spicy wings"]
+        )
+
+        assert len(unavail) == 0
+        assert len(available) >= 1

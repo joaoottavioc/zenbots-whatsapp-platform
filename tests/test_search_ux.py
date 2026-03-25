@@ -479,6 +479,87 @@ class TestEmFaltaPlural:
 
 
 # =========================================================================
+# Variant filter (prevents substitution of unavailable product variants)
+# =========================================================================
+
+
+class TestVariantFilter:
+    """When unavailable products have available variants (same root name),
+    the variants should be removed from the LLM prompt context."""
+
+    def _filter_variants(self, available_names, unavail_names):
+        """Replicate the variant filter logic from whatsapp.py."""
+        roots = set()
+        for name in unavail_names:
+            for w in name.lower().split():
+                if len(w) > 2:
+                    roots.add(w)
+                    break
+        return [
+            n
+            for n in available_names
+            if not any(n.lower().startswith(root) for root in roots)
+        ]
+
+    def test_plain_variant_filtered(self):
+        """'PICANHA' removed when 'PICANHA COM CATUPIRY' is unavailable."""
+        result = self._filter_variants(
+            ["PICANHA", "PRENSADÃO"],
+            ["PICANHA COM CATUPIRY"],
+        )
+        assert "PICANHA" not in result
+        assert "PRENSADÃO" in result
+
+    def test_all_same_root_variants_filtered(self):
+        """All products sharing root are removed."""
+        result = self._filter_variants(
+            ["PICANHA", "PICANHA COM BACON", "PICANHA DUPLA", "SPICY WINGS"],
+            ["PICANHA COM CATUPIRY"],
+        )
+        assert "PICANHA" not in result
+        assert "PICANHA COM BACON" not in result
+        assert "PICANHA DUPLA" not in result
+        assert "SPICY WINGS" in result
+
+    def test_multiple_unavail_roots(self):
+        """Multiple unavailable products filter all their variants."""
+        result = self._filter_variants(
+            ["PICANHA", "MIGNON", "MIGNON AO CHEDDAR", "PRENSADÃO"],
+            ["PICANHA COM CATUPIRY", "MIGNON COM CEBOLA"],
+        )
+        assert "PICANHA" not in result
+        assert "MIGNON" not in result
+        assert "MIGNON AO CHEDDAR" not in result
+        assert "PRENSADÃO" in result
+
+    def test_no_unavail_no_filtering(self):
+        """No unavailable products means no filtering."""
+        result = self._filter_variants(
+            ["PICANHA", "MIGNON", "PRENSADÃO"],
+            [],
+        )
+        assert len(result) == 3
+
+    def test_unrelated_products_kept(self):
+        """Products with different roots are always kept."""
+        result = self._filter_variants(
+            ["SPICY WINGS", "TROPICAL DRINK", "AÇAÍ BOWL"],
+            ["PICANHA COM CATUPIRY"],
+        )
+        assert len(result) == 3
+
+    def test_short_root_words_skipped(self):
+        """Root words <=2 chars (like 'de', 'ao') are skipped."""
+        # "de" is the first word but <=2 chars, so "bacon" would be the root
+        result = self._filter_variants(
+            ["BACON BLAST", "CLASSIC BURGER"],
+            ["de BACON ESPECIAL"],  # root should be "bacon" not "de"
+        )
+        assert "BACON BLAST" not in result
+        assert "CLASSIC BURGER" in result
+
+
+# =========================================================================
 # Clear contact history function
 # =========================================================================
 

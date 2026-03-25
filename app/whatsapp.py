@@ -1404,6 +1404,26 @@ async def _handle_shopping_intent(
         else:
             _prompt_products = found_products
 
+        # Remove available variants of unavailable products from prompt
+        # so the LLM doesn't auto-substitute them (e.g. Picanha → Picanha com catupiry).
+        # The programmatic em falta message handles informing the customer.
+        if unavailable_matches and _prompt_products:
+            _unavail_roots = set()
+            for up in unavailable_matches:
+                # Extract the first word (>2 chars) as the "root" of the product name
+                for w in up.name.split():
+                    if len(w) > 2:
+                        _unavail_roots.add(w.lower())
+                        break
+            if _unavail_roots:
+                _prompt_products = [
+                    p
+                    for p in _prompt_products
+                    if not any(
+                        p.name.lower().startswith(root) for root in _unavail_roots
+                    )
+                ]
+
         # Fetch distinct categories for the bot's menu
         _cat_result = await session.execute(
             select(Product.category)
@@ -1594,7 +1614,30 @@ async def _handle_shopping_intent(
                         pid = _safe_int(tool_args.get("product_id"), "product_id")
                         newq = _safe_int(tool_args.get("new_quantity"), "new_quantity")
 
-                        if pid is None or newq is None or pid not in current_ids:
+                        if pid is None or newq is None:
+                            response_to_user = "Esse item não está no seu carrinho. Posso adicioná-lo para você?"
+                        elif pid not in current_ids and newq > 0:
+                            # Fallback: item not in cart yet — add it
+                            skipped_items: list[str] = []
+                            await crud.add_items_to_db_cart(
+                                session,
+                                cart.id,
+                                [{"product_id": pid, "quantity": newq}],
+                                bot_id=bot.id,
+                                skipped_items=skipped_items,
+                            )
+                            await _load_cart_items_with_products(cart, session)
+                            if skipped_items:
+                                names = ", ".join(skipped_items)
+                                response_to_user = f"*{names}* está em falta no momento. 😕 Quer tentar outro item?"
+                            elif any(it.product_id == pid for it in cart.items):
+                                response_to_user = (
+                                    _build_cart_summary_message(cart, bot, "✅")
+                                    + "\n\nAdicionado! Mais alguma coisa ou *só isso* para finalizar? 😊"
+                                )
+                            else:
+                                response_to_user = "Esse item não está no seu carrinho. Posso adicioná-lo para você?"
+                        elif pid not in current_ids:
                             response_to_user = "Esse item não está no seu carrinho. Posso adicioná-lo para você?"
                         else:
                             await crud.modify_item_quantity_in_db_cart(
@@ -1629,31 +1672,57 @@ async def _handle_shopping_intent(
                     else:
                         # bulk_modify_quantities
                         updates_raw = tool_args.get("updates", []) or []
-                        updates = []
+                        modify_updates = []
+                        add_items = []
                         for upd in updates_raw:
                             pid = _safe_int(upd.get("product_id"), "product_id")
                             newq = _safe_int(upd.get("new_quantity"), "new_quantity")
                             if pid is None or newq is None:
                                 continue
                             if pid in current_ids:
-                                updates.append(
+                                modify_updates.append(
                                     {"product_id": pid, "new_quantity": newq}
                                 )
+                            elif newq > 0:
+                                # Fallback: item not in cart yet — add it
+                                add_items.append({"product_id": pid, "quantity": newq})
 
-                        if not updates:
+                        if not modify_updates and not add_items:
                             response_to_user = "Não encontrei esses itens no seu carrinho. Posso sugerir opções para adicionar?"
                         else:
-                            for upd in updates:
+                            for upd in modify_updates:
                                 await crud.modify_item_quantity_in_db_cart(
                                     session,
                                     cart.id,
                                     upd["product_id"],
                                     upd["new_quantity"],
                                 )
+                            skipped_items_bulk: list[str] = []
+                            if add_items:
+                                await crud.add_items_to_db_cart(
+                                    session,
+                                    cart.id,
+                                    add_items,
+                                    bot_id=bot.id,
+                                    skipped_items=skipped_items_bulk,
+                                )
                             await _load_cart_items_with_products(cart, session)
+
+                            emoji = "✅" if add_items and not modify_updates else "✏️"
+                            skipped_msg = ""
+                            if skipped_items_bulk:
+                                names = ", ".join(skipped_items_bulk)
+                                skipped_msg = f"\n\n⚠️ Indisponível no momento: {names}"
+
+                            suffix = (
+                                "\n\nAdicionado! Mais alguma coisa ou *só isso* para finalizar? 😊"
+                                if add_items and not modify_updates
+                                else "\n\nAlgo mais?"
+                            )
                             response_to_user = (
-                                _build_cart_summary_message(cart, bot, "✏️")
-                                + "\n\nAlgo mais?"
+                                _build_cart_summary_message(cart, bot, emoji)
+                                + suffix
+                                + skipped_msg
                             )
                     cart_tool_processed = True
                     continue
@@ -1810,7 +1879,12 @@ async def _handle_shopping_intent(
                                     _filtered, _title
                                 )
 
-                        if cart_tool_processed:
+                        if cart_tool_processed and unavailable_matches:
+                            # Cart tool already succeeded and programmatic em falta
+                            # will handle unavailable items — skip LLM's redundant
+                            # (and often contradictory) conversational text.
+                            pass
+                        elif cart_tool_processed:
                             response_to_user = response_to_user + "\n\n" + conv_text
                         else:
                             response_to_user = conv_text
