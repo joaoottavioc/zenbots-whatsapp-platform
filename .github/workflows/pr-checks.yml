@@ -21,6 +21,9 @@ jobs:
     services:
       postgres:
         image: pgvector/pgvector:pg14
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -33,6 +36,9 @@ jobs:
           --health-retries=5
       redis:
         image: redis:alpine
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
         ports: ["6379:6379"]
         options: >-
           --health-cmd="redis-cli ping"
