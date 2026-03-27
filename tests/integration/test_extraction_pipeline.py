@@ -100,6 +100,42 @@ class TestNoiseDetection:
         ratio = ext_wc / orig_wc
         assert ratio <= 0.5
 
+    def test_greeting_high_ratio(self):
+        """Simple greetings are noise."""
+        text = "oi tudo bem como vai voce"
+        items = extract_items_local(text)
+        orig_wc = len(text.split())
+        ext_wc = sum(len(t.split()) for t in items)
+        ratio = ext_wc / orig_wc
+        assert ratio > 0.5
+
+    def test_single_food_word_low_ratio(self):
+        """Single food word: 'quero picanha' → low ratio."""
+        text = "quero picanha"
+        items = extract_items_local(text)
+        orig_wc = len(text.split())
+        ext_wc = sum(len(t.split()) for t in items)
+        ratio = ext_wc / orig_wc
+        assert ratio <= 0.5
+
+    def test_question_about_menu_high_ratio(self):
+        """Menu question is not a food order."""
+        text = "voces tem algo vegano no cardapio"
+        items = extract_items_local(text)
+        orig_wc = len(text.split())
+        ext_wc = sum(len(t.split()) for t in items)
+        ratio = ext_wc / orig_wc
+        assert ratio > 0.5
+
+    def test_borderline_mixed_message(self):
+        """'acho que vou querer um burger' → food despite filler."""
+        text = "acho que vou querer um burger e uma coca"
+        items = extract_items_local(text)
+        orig_wc = len(text.split())
+        ext_wc = sum(len(t.split()) for t in items)
+        ratio = ext_wc / orig_wc
+        assert ratio <= 0.5
+
 
 @pytest.mark.integration
 class TestPromptFilter:
@@ -168,6 +204,64 @@ class TestUnavailableTermMapping:
         # The mapped term should be the user's typo
         assert any(v == "vegie wrap" for v in term_map.values())
 
+    @pytest.mark.asyncio
+    async def test_exact_name_maps_perfectly(self, db_session, test_bot, test_products):
+        """Exact unavailable product name maps with high confidence."""
+        from difflib import SequenceMatcher
+
+        unavail = await find_unavailable_products(
+            db_session, test_bot["bot_id"], ["veggie wrap"]
+        )
+        if not unavail:
+            pytest.skip("VEGGIE WRAP not found as unavailable")
+
+        score = SequenceMatcher(None, "veggie wrap", unavail[0].name.lower()).ratio()
+        assert score >= 0.8
+
+    @pytest.mark.asyncio
+    async def test_multiple_terms_map_independently(
+        self, db_session, test_bot, test_products
+    ):
+        """Multiple search terms each map to their own unavailable product."""
+        from difflib import SequenceMatcher
+
+        terms = ["veggie wrap", "picanha com catupiry"]
+        unavail = await find_unavailable_products(db_session, test_bot["bot_id"], terms)
+        if len(unavail) < 2:
+            pytest.skip("Need 2+ unavailable products")
+
+        def _norm(s):
+            return s.lower().replace("'", "").strip()
+
+        mapped_names = set()
+        for term in terms:
+            best = max(
+                unavail,
+                key=lambda p, t=term: SequenceMatcher(
+                    None, _norm(t), _norm(p.name)
+                ).ratio(),
+            )
+            score = SequenceMatcher(None, _norm(term), _norm(best.name)).ratio()
+            if score >= 0.45:
+                mapped_names.add(best.name)
+
+        assert len(mapped_names) >= 2
+
+    @pytest.mark.asyncio
+    async def test_unrelated_term_doesnt_map(self, db_session, test_bot, test_products):
+        """Completely unrelated term doesn't map to any unavailable product."""
+        from difflib import SequenceMatcher
+
+        unavail = await find_unavailable_products(
+            db_session, test_bot["bot_id"], ["xyz123nonsense"]
+        )
+        # Either no results found, or similarity is too low to map
+        if not unavail:
+            return  # pass — nothing found
+
+        score = SequenceMatcher(None, "xyz123nonsense", unavail[0].name.lower()).ratio()
+        assert score < 0.45
+
 
 @pytest.mark.integration
 class TestFullMenuContext:
@@ -220,3 +314,64 @@ class TestFullMenuContext:
 
         assert len(unavail) == 0
         assert len(available) >= 1
+
+    @pytest.mark.asyncio
+    async def test_deleted_products_excluded(self, db_session, test_bot, test_products):
+        """Deleted products (is_deleted=True) don't appear in available results."""
+        from sqlmodel import select
+        from app.models import Product
+
+        result = await db_session.execute(
+            select(Product).where(
+                Product.bot_id == test_bot["bot_id"],
+                Product.is_available.is_(True),
+                Product.is_deleted.is_(False),
+            )
+        )
+        available = list(result.scalars().all())
+        names = {p.name for p in available}
+        assert "OLD MENU ITEM" not in names
+
+    @pytest.mark.asyncio
+    async def test_variant_map_builds_from_real_products(
+        self, db_session, test_bot, test_products
+    ):
+        """Variant map correctly maps unavail → available variants from DB."""
+        from sqlmodel import select
+        from app.models import Product
+
+        unavail = await find_unavailable_products(
+            db_session, test_bot["bot_id"], ["picanha com catupiry"]
+        )
+        if not unavail:
+            pytest.skip("PICANHA COM CATUPIRY not found")
+
+        result = await db_session.execute(
+            select(Product).where(
+                Product.bot_id == test_bot["bot_id"],
+                Product.is_available.is_(True),
+                Product.is_deleted.is_(False),
+            )
+        )
+        full_menu = list(result.scalars().all())
+
+        variant_map = {}
+        for up in unavail:
+            root = None
+            for w in up.name.split():
+                if len(w) > 2:
+                    root = w.lower()
+                    break
+            if root:
+                variants = [
+                    p.name
+                    for p in full_menu
+                    if p.name.lower().startswith(root) and p.id != up.id
+                ]
+                if variants:
+                    variant_map[up.name] = variants
+
+        assert "PICANHA COM CATUPIRY" in variant_map
+        variant_names = variant_map["PICANHA COM CATUPIRY"]
+        assert "PICANHA" in variant_names
+        assert "PICANHA COM BACON" in variant_names

@@ -171,6 +171,9 @@ class BotResponse(BaseModel):
     # F-17: Cancellation window
     cancellation_window_minutes: int = 5
 
+    # Restaurant cover image
+    restaurant_image_url: Optional[str] = None
+
     # O bot agora retorna a lista de produtos e de histórico associados a ele
     products: List[ProductResponse] = []
     history: List[ConversationHistoryResponse] = []
@@ -197,6 +200,16 @@ class BotResponse(BaseModel):
             from app.menu_storage import generate_presigned_url
 
             self.menu_url = generate_presigned_url(self.menu_url)
+        return self
+
+    @model_validator(mode="after")
+    def presign_restaurant_image_url(self) -> "BotResponse":
+        if self.restaurant_image_url:
+            from app.menu_storage import generate_presigned_url
+
+            self.restaurant_image_url = generate_presigned_url(
+                self.restaurant_image_url
+            )
         return self
 
 

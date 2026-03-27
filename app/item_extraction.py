@@ -263,7 +263,11 @@ def _is_qty_word(word: str) -> bool:
     if len(word) < 4:
         return False
     best = max(
-        (SequenceMatcher(None, word, k).ratio() for k in _QTY_WORDS if abs(len(k) - len(word)) <= 3),
+        (
+            SequenceMatcher(None, word, k).ratio()
+            for k in _QTY_WORDS
+            if abs(len(k) - len(word)) <= 3
+        ),
         default=0.0,
     )
     return best >= 0.8
@@ -294,11 +298,7 @@ def _collapse_compound_numbers(text: str) -> str:
                 if _is_qty_word(nxt):
                     # Adjacent qty word: "mil duzentos"
                     j += 1
-                elif (
-                    nxt == "e"
-                    and j + 2 < len(words)
-                    and _is_qty_word(words[j + 2])
-                ):
+                elif nxt == "e" and j + 2 < len(words) and _is_qty_word(words[j + 2]):
                     # "e" + qty word: "vinte e sete"
                     j += 2
                 else:

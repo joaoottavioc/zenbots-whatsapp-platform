@@ -807,8 +807,7 @@ class TestNoiseIntentResolution:
         ):
             # Longer food order with quantities — ratio drops below 0.5
             intent = await resolve_intent(
-                "hoje vou de dois prensadão treze supremo x"
-                " e vinte migno com cebola",
+                "hoje vou de dois prensadão treze supremo x e vinte migno com cebola",
                 cart,
                 [],
             )
@@ -874,9 +873,7 @@ class TestConversationalHandlerInShopping:
 
         # We test the elif block indirectly by checking
         # get_chat_response_gpt is called and JSON is parsed.
-        mock_gpt = AM(
-            return_value='{"response_to_user": "Que legal! O que ele quer?"}'
-        )
+        mock_gpt = AM(return_value='{"response_to_user": "Que legal! O que ele quer?"}')
         with patch("app.whatsapp.get_chat_response_gpt", mock_gpt):
             import json
 

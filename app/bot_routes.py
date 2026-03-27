@@ -198,6 +198,92 @@ async def upload_catalog_from_text(
     }
 
 
+ALLOWED_IMAGE_TYPES = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+}
+MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
+
+
+@router.post("/bots/{bot_id}/image")
+async def upload_restaurant_image(
+    bot_id: int,
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Upload a restaurant cover image for the bot."""
+    db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
+    if not db_bot or db_bot.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Acesso negado.")
+
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Apenas JPEG, PNG ou WebP são permitidos.",
+        )
+
+    content = await file.read()
+    if len(content) > MAX_IMAGE_SIZE:
+        raise HTTPException(status_code=400, detail="Imagem excede o limite de 5MB.")
+
+    # Delete old image if exists
+    if db_bot.restaurant_image_url:
+        from app.menu_storage import delete_s3_object
+
+        delete_s3_object(db_bot.restaurant_image_url)
+
+    ext = ALLOWED_IMAGE_TYPES[file.content_type]
+    from uuid import uuid4
+
+    s3_key = f"restaurant-images/{bot_id}/{uuid4()}.{ext}"
+
+    from app.menu_storage import s3_client, BUCKET_NAME, REGION
+    import io
+
+    s3_client.upload_fileobj(
+        io.BytesIO(content),
+        BUCKET_NAME,
+        s3_key,
+        ExtraArgs={
+            "ContentType": file.content_type,
+            "CacheControl": "max-age=31536000",
+        },
+    )
+    s3_url = f"https://{BUCKET_NAME}.s3.{REGION}.amazonaws.com/{s3_key}"
+
+    db_bot.restaurant_image_url = s3_url
+    session.add(db_bot)
+    await session.commit()
+
+    from app.menu_storage import generate_presigned_url
+
+    return {"restaurant_image_url": generate_presigned_url(s3_url)}
+
+
+@router.delete("/bots/{bot_id}/image", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_restaurant_image(
+    bot_id: int,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete the restaurant cover image."""
+    db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
+    if not db_bot or db_bot.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Acesso negado.")
+
+    if db_bot.restaurant_image_url:
+        from app.menu_storage import delete_s3_object
+
+        delete_s3_object(db_bot.restaurant_image_url)
+        db_bot.restaurant_image_url = None
+        session.add(db_bot)
+        await session.commit()
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.delete("/bots/{bot_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user_bot(
     bot_id: int,
