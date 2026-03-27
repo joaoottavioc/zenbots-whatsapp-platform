@@ -8,6 +8,7 @@ food/drink names for pgvector semantic search.
 """
 
 import re
+from difflib import SequenceMatcher
 from typing import List, Tuple
 
 # Common Portuguese stopwords in restaurant ordering context.
@@ -59,7 +60,6 @@ _STOP = frozenset(
         "essas",
         "este",
         "esta",
-        "com",
         "sem",
         "queria",
         "preciso",
@@ -148,13 +148,39 @@ _QTY_WORDS = frozenset(
         "trinta",
         "quarenta",
         "cinquenta",
+        "sessenta",
+        "setenta",
+        "oitenta",
+        "noventa",
         "cem",
         "cento",
         "duzentos",
         "duzentas",
         "trezentos",
         "trezentas",
+        "quatrocentos",
+        "quatrocentas",
+        "quinhentos",
+        "quinhentas",
+        "seiscentos",
+        "seiscentas",
+        "setecentos",
+        "setecentas",
+        "oitocentos",
+        "oitocentas",
+        "novecentos",
+        "novecentas",
         "mil",
+        # Common typos / Spanishisms / informal
+        "cuatro",
+        "cuarenta",
+        "sinco",
+        "sinquenta",
+        "ceis",  # informal "seis"
+        "tresentos",  # typo for "trezentos"
+        "tresentas",
+        "dusentos",  # typo for "duzentos"
+        "dusentas",
         "primeiro",
         "segunda",
         "segundo",
@@ -175,7 +201,10 @@ _QTY_VALUES: dict[str, int] = {
     "três": 3,
     "tres": 3,
     "quatro": 4,
+    "cuatro": 4,  # Spanish typo
     "cinco": 5,
+    "sinco": 5,  # common typo
+    "ceis": 6,  # informal "seis"
     "seis": 6,
     "sete": 7,
     "oito": 8,
@@ -194,15 +223,50 @@ _QTY_VALUES: dict[str, int] = {
     "vinte": 20,
     "trinta": 30,
     "quarenta": 40,
+    "cuarenta": 40,  # Spanish typo
     "cinquenta": 50,
+    "sinquenta": 50,  # common typo
+    "sessenta": 60,
+    "setenta": 70,
+    "oitenta": 80,
+    "noventa": 90,
     "cem": 100,
     "cento": 100,
     "duzentos": 200,
     "duzentas": 200,
     "trezentos": 300,
     "trezentas": 300,
+    "tresentos": 300,  # common typo
+    "tresentas": 300,
+    "dusentos": 200,  # common typo
+    "dusentas": 200,
+    "quatrocentos": 400,
+    "quatrocentas": 400,
+    "quinhentos": 500,
+    "quinhentas": 500,
+    "seiscentos": 600,
+    "seiscentas": 600,
+    "setecentos": 700,
+    "setecentas": 700,
+    "oitocentos": 800,
+    "oitocentas": 800,
+    "novecentos": 900,
+    "novecentas": 900,
     "mil": 1000,
 }
+
+
+def _is_qty_word(word: str) -> bool:
+    """Check if word is a quantity word, with fuzzy matching for typos."""
+    if word in _QTY_WORDS:
+        return True
+    if len(word) < 4:
+        return False
+    best = max(
+        (SequenceMatcher(None, word, k).ratio() for k in _QTY_WORDS if abs(len(k) - len(word)) <= 3),
+        default=0.0,
+    )
+    return best >= 0.8
 
 
 def _collapse_compound_numbers(text: str) -> str:
@@ -221,16 +285,24 @@ def _collapse_compound_numbers(text: str) -> str:
     i = 0
     while i < len(words):
         word = words[i]
-        if word in _QTY_WORDS:
+        if _is_qty_word(word):
             # Look ahead: is this part of a compound number?
-            # Pattern: qty "e" qty ["e" qty ...]
+            # Pattern: qty [qty | "e" qty] ...  (handles "mil duzentos" and "vinte e sete")
             j = i
-            while (
-                j + 2 < len(words)
-                and words[j + 1] == "e"
-                and words[j + 2] in _QTY_WORDS
-            ):
-                j += 2  # skip "e" + next qty word
+            while j + 1 < len(words):
+                nxt = words[j + 1]
+                if _is_qty_word(nxt):
+                    # Adjacent qty word: "mil duzentos"
+                    j += 1
+                elif (
+                    nxt == "e"
+                    and j + 2 < len(words)
+                    and _is_qty_word(words[j + 2])
+                ):
+                    # "e" + qty word: "vinte e sete"
+                    j += 2
+                else:
+                    break
             # Replace the entire compound number span with a single comma
             result.append(",")
             i = j + 1

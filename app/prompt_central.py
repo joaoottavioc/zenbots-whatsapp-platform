@@ -24,10 +24,9 @@ def create_central_prompt(
     # --- CONTEXTO DO CARDÁPIO ---
     menu_context = "Nenhum item relevante encontrado."
     if search_results:
-        capped = search_results[:15]
         menu_context = "\n".join(
             f"- [{p.category or 'Geral'}] {p.name} (ID: {p.id}) – {(p.description or '')[:80]}"
-            for p in capped
+            for p in search_results
         )
 
     # --- CONTEXTO DO CARRINHO ---
@@ -89,6 +88,11 @@ Regra de adicionais vs pratos principais:
 Conversão de quantidades:
 - Se a quantidade vier por extenso (ex.: “mil duzentos e vinte e quatro”), converta para inteiro no `quantity` (ex.: 1224).
 - Não reduza quantidades sem pedido explícito do cliente.
+
+Regra de remoção parcial (IMPORTANTE):
+- Quando o cliente pedir para “tirar”, “tire”, “tira”, “retira” ou “remove” uma QUANTIDADE de um produto que JÁ ESTÁ no carrinho, isso significa SUBTRAIR essa quantidade do total atual.
+- Exemplo: se o carrinho tem 12x Prensadão e o cliente diz “tire dois prensadão”, a nova quantidade é 12 - 2 = 10. Use `modify_item_quantity` com new_quantity=10 ou `bulk_modify_quantities` para múltiplos itens.
+- NUNCA use `add_items_to_cart` quando o cliente pedir para tirar/remover itens.
 
 3. Se for uma dúvida genérica (ex: “tem algo com chocolate?”) → use `answer_with_found_products` com nomes reais dos produtos encontrados.
 4. Você **sempre** deve responder usando UMA chamada de ferramenta do catálogo (`tools_schema`), sem nunca responder em texto puro.
@@ -413,6 +417,39 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
 
     # T1-2: Removed ex_notes_simple (redundant with ex_notes_complex)
 
+    # PARTIAL REMOVE (subtract from cart)
+    # Cart context for this example: 12x Prensadão (ID: 501), 19x Bagunça (ID: 502)
+    ex_partial_remove_user = {
+        "role": "user",
+        "content": "tire dois prensadão e 9 bagunças",
+    }
+    ex_partial_remove_assistant = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": "call-ex-partial-remove",
+                "type": "function",
+                "function": {
+                    "name": "bulk_modify_quantities",
+                    "arguments": json.dumps(
+                        {
+                            "updates": [
+                                {"product_id": 501, "new_quantity": 10},  # 12 - 2 = 10
+                                {"product_id": 502, "new_quantity": 10},  # 19 - 9 = 10
+                            ]
+                        }
+                    ),
+                },
+            }
+        ],
+    }
+    ex_partial_remove_tool = {
+        "role": "tool",
+        "tool_call_id": "call-ex-partial-remove",
+        "content": "Quantidades atualizadas.",
+    }
+
     # Exemplo: Adicionar com observação complexa
     ex_notes_complex_user = {
         "role": "user",
@@ -512,6 +549,9 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
         ex_suggestion_user,
         ex_suggestion_assistant,
         ex_suggestion_tool,
+        ex_partial_remove_user,
+        ex_partial_remove_assistant,
+        ex_partial_remove_tool,
         ex_notes_complex_user,
         ex_notes_complex_assistant,
         ex_notes_complex_tool,

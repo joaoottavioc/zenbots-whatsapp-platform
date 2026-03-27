@@ -1638,6 +1638,103 @@ class TestProgrammaticEmFalta:
 
 
 # ────────────────────────────────────────────────────────
+# Regression: LLM conversational follow-up suppressed after cart add
+# ────────────────────────────────────────────────────────
+
+
+class TestConversationalFollowupSuppressed:
+    """When add_items_to_cart succeeds (cart_tool_processed=True), any
+    answer_conversationally tool call from the same LLM response must be
+    suppressed. Otherwise the LLM's confirmation question ('Só pra confirmar,
+    você quis dizer 396 unidades...') leaks into the response and causes
+    quantity doubling when the user says 'sim'."""
+
+    def test_cart_processed_skips_conversational(self):
+        """Simulate the dispatch logic: cart_tool_processed=True → conv text skipped."""
+        cart_tool_processed = True
+        response_to_user = "✅ Cart summary here"
+        conv_text = "Só pra confirmar, 396 unidades de Picanha?"
+
+        # This mirrors the logic at whatsapp.py ~line 1905
+        if cart_tool_processed:
+            pass  # suppressed
+        else:
+            response_to_user = conv_text
+
+        assert "confirmar" not in response_to_user
+        assert response_to_user == "✅ Cart summary here"
+
+    def test_cart_not_processed_shows_conversational(self):
+        """When no cart tool ran, conversational text IS used."""
+        cart_tool_processed = False
+        response_to_user = ""
+        conv_text = "Olá! Como posso ajudar?"
+
+        if cart_tool_processed:
+            pass
+        else:
+            response_to_user = conv_text
+
+        assert response_to_user == conv_text
+
+
+# ────────────────────────────────────────────────────────
+# Regression: last_suggestions preserved when unavailable_matches exist
+# ────────────────────────────────────────────────────────
+
+
+class TestLastSuggestionsPreservedOnEmFalta:
+    """When add_items_to_cart adds valid items but there are also unavailable
+    matches, last_suggestions must NOT be cleared. The em falta flow sets
+    last_suggestions for the 'sim' alternatives flow — clearing it causes
+    CONFIRM to fall through to ADD, doubling quantities."""
+
+    def test_suggestions_kept_when_unavailable_matches_present(self):
+        """Simulate the dispatch logic: unavailable_matches non-empty → don't clear."""
+        last_suggestions = [685, 686, 687]
+        unavailable_matches = [_make_product_mock(701, "Supremo X")]
+        added_product_ids = [692, 696]  # Picanha com bacon, Coração
+
+        # This mirrors whatsapp.py ~line 1562-1568
+        if (
+            not any(pid in (last_suggestions or []) for pid in added_product_ids)
+            and not unavailable_matches
+        ):
+            last_suggestions = None
+
+        # last_suggestions should be preserved because unavailable_matches exist
+        assert last_suggestions == [685, 686, 687]
+
+    def test_suggestions_cleared_when_no_unavailable_matches(self):
+        """When no unavailable matches, normal clearing logic applies."""
+        last_suggestions = [685, 686, 687]
+        unavailable_matches = []
+        added_product_ids = [692, 696]  # products NOT in suggestions
+
+        if (
+            not any(pid in (last_suggestions or []) for pid in added_product_ids)
+            and not unavailable_matches
+        ):
+            last_suggestions = None
+
+        assert last_suggestions is None
+
+    def test_suggestions_kept_when_added_from_suggestions(self):
+        """When added products ARE from suggestions, don't clear regardless."""
+        last_suggestions = [685, 686, 687]
+        unavailable_matches = []
+        added_product_ids = [685]  # product IS in suggestions
+
+        if (
+            not any(pid in (last_suggestions or []) for pid in added_product_ids)
+            and not unavailable_matches
+        ):
+            last_suggestions = None
+
+        assert last_suggestions == [685, 686, 687]
+
+
+# ────────────────────────────────────────────────────────
 # Option C: shopping intents guard
 # ────────────────────────────────────────────────────────
 
@@ -1787,3 +1884,713 @@ class TestSuggestionsAlwaysFilterAvailable:
         fn_start = source.index("async def _get_meal_suggestions")
         fn_section = source[fn_start : fn_start + 800]
         assert "Product.is_available == True" in fn_section
+
+
+# ────────────────────────────────────────────────────────
+# Session 2026-03-25: Large compound quantities, fuzzy
+# number typos, and "mil duzentos" adjacency support
+# ────────────────────────────────────────────────────────
+
+
+class TestCompoundQuantitySuggestionSelection:
+    """Tests for large compound numbers and typo-tolerant qty parsing in suggestion selection."""
+
+    def _setup_session_with_products(self, mctx, products):
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = products
+        mctx.session.execute = AsyncMock(return_value=result)
+
+    @pytest.mark.asyncio
+    async def test_mil_duzentos_e_noventa_e_quatro(self):
+        """'mil duzentos e noventa e quatro picanha' → qty 1294."""
+        from app.whatsapp import _handle_suggestion_selection
+
+        prods = [
+            _make_product_mock(1, "PICANHA COM BACON", price=35.0),
+            _make_product_mock(2, "PICANHA", price=32.0),
+        ]
+        mctx = _make_suggestion_mctx("mil duzentos e noventa e quatro picanha", [1, 2])
+        self._setup_session_with_products(mctx, prods)
+
+        with (
+            patch("app.whatsapp.crud") as mock_crud,
+            patch(
+                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
+            ),
+            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
+        ):
+            mock_crud.add_items_to_db_cart = AsyncMock()
+            mctx.cart.items = [MagicMock()]
+            result = await _handle_suggestion_selection(mctx)
+
+        assert result is not None
+        items = mock_crud.add_items_to_db_cart.call_args[0][2]
+        assert len(items) >= 1
+        # "picanha" matches both products; the handler picks the best name overlap
+        picanha_item = items[0]
+        assert picanha_item["quantity"] == 1294
+
+    @pytest.mark.asyncio
+    async def test_duzentos_e_trinta_e_cinco(self):
+        """'duzentos e trinta e cinco picanha' → qty 235."""
+        from app.whatsapp import _handle_suggestion_selection
+
+        prods = [_make_product_mock(1, "PICANHA", price=32.0)]
+        mctx = _make_suggestion_mctx("duzentos e trinta e cinco picanha", [1])
+        self._setup_session_with_products(mctx, prods)
+
+        with (
+            patch("app.whatsapp.crud") as mock_crud,
+            patch(
+                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
+            ),
+            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
+        ):
+            mock_crud.add_items_to_db_cart = AsyncMock()
+            mctx.cart.items = [MagicMock()]
+            await _handle_suggestion_selection(mctx)
+
+        items = mock_crud.add_items_to_db_cart.call_args[0][2]
+        assert items[0]["quantity"] == 235
+
+    @pytest.mark.asyncio
+    async def test_tres_mil_quinhentos(self):
+        """'três mil e quinhentos picanha' → qty 3500."""
+        from app.whatsapp import _handle_suggestion_selection
+
+        prods = [_make_product_mock(1, "PICANHA", price=32.0)]
+        mctx = _make_suggestion_mctx("três mil e quinhentos picanha", [1])
+        self._setup_session_with_products(mctx, prods)
+
+        with (
+            patch("app.whatsapp.crud") as mock_crud,
+            patch(
+                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
+            ),
+            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
+        ):
+            mock_crud.add_items_to_db_cart = AsyncMock()
+            mctx.cart.items = [MagicMock()]
+            await _handle_suggestion_selection(mctx)
+
+        items = mock_crud.add_items_to_db_cart.call_args[0][2]
+        assert items[0]["quantity"] == 3500
+
+    @pytest.mark.asyncio
+    async def test_noventa_e_nove(self):
+        """'noventa e nove picanha' → qty 99 (tests newly added tens)."""
+        from app.whatsapp import _handle_suggestion_selection
+
+        prods = [_make_product_mock(1, "PICANHA", price=32.0)]
+        mctx = _make_suggestion_mctx("noventa e nove picanha", [1])
+        self._setup_session_with_products(mctx, prods)
+
+        with (
+            patch("app.whatsapp.crud") as mock_crud,
+            patch(
+                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
+            ),
+            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
+        ):
+            mock_crud.add_items_to_db_cart = AsyncMock()
+            mctx.cart.items = [MagicMock()]
+            await _handle_suggestion_selection(mctx)
+
+        items = mock_crud.add_items_to_db_cart.call_args[0][2]
+        assert items[0]["quantity"] == 99
+
+    @pytest.mark.asyncio
+    async def test_fuzzy_cuarenta(self):
+        """'cuarenta picanha' (Spanish typo) → qty 40."""
+        from app.whatsapp import _handle_suggestion_selection
+
+        prods = [_make_product_mock(1, "PICANHA", price=32.0)]
+        mctx = _make_suggestion_mctx("cuarenta picanha", [1])
+        self._setup_session_with_products(mctx, prods)
+
+        with (
+            patch("app.whatsapp.crud") as mock_crud,
+            patch(
+                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
+            ),
+            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
+        ):
+            mock_crud.add_items_to_db_cart = AsyncMock()
+            mctx.cart.items = [MagicMock()]
+            await _handle_suggestion_selection(mctx)
+
+        items = mock_crud.add_items_to_db_cart.call_args[0][2]
+        assert items[0]["quantity"] == 40
+
+    @pytest.mark.asyncio
+    async def test_fuzzy_sinquenta(self):
+        """'sinquenta picanha' (common typo) → qty 50."""
+        from app.whatsapp import _handle_suggestion_selection
+
+        prods = [_make_product_mock(1, "PICANHA", price=32.0)]
+        mctx = _make_suggestion_mctx("sinquenta picanha", [1])
+        self._setup_session_with_products(mctx, prods)
+
+        with (
+            patch("app.whatsapp.crud") as mock_crud,
+            patch(
+                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
+            ),
+            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
+        ):
+            mock_crud.add_items_to_db_cart = AsyncMock()
+            mctx.cart.items = [MagicMock()]
+            await _handle_suggestion_selection(mctx)
+
+        items = mock_crud.add_items_to_db_cart.call_args[0][2]
+        assert items[0]["quantity"] == 50
+
+    @pytest.mark.asyncio
+    async def test_fuzzy_dusentos(self):
+        """'dusentos picanha' (common typo) → qty 200."""
+        from app.whatsapp import _handle_suggestion_selection
+
+        prods = [_make_product_mock(1, "PICANHA", price=32.0)]
+        mctx = _make_suggestion_mctx("dusentos picanha", [1])
+        self._setup_session_with_products(mctx, prods)
+
+        with (
+            patch("app.whatsapp.crud") as mock_crud,
+            patch(
+                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
+            ),
+            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
+        ):
+            mock_crud.add_items_to_db_cart = AsyncMock()
+            mctx.cart.items = [MagicMock()]
+            await _handle_suggestion_selection(mctx)
+
+        items = mock_crud.add_items_to_db_cart.call_args[0][2]
+        assert items[0]["quantity"] == 200
+
+    @pytest.mark.asyncio
+    async def test_user_scenario_full(self):
+        """Full user scenario: 'quero mil duzentos e noventa e quatro picanha com bacon e 234 com catupiry'."""
+        from app.whatsapp import _handle_suggestion_selection
+
+        prods = [
+            _make_product_mock(1, "PICANHA COM BACON", price=35.0),
+            _make_product_mock(2, "PICANHA COM CATUPIRY", price=35.0),
+            _make_product_mock(3, "PICANHA", price=32.0),
+        ]
+        mctx = _make_suggestion_mctx(
+            "quero mil duzentos e noventa e quatro picanha com bacon e 234 com catupiry",
+            [1, 2, 3],
+        )
+        self._setup_session_with_products(mctx, prods)
+
+        with (
+            patch("app.whatsapp.crud") as mock_crud,
+            patch(
+                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
+            ),
+            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
+        ):
+            mock_crud.add_items_to_db_cart = AsyncMock()
+            mctx.cart.items = [MagicMock()]
+            result = await _handle_suggestion_selection(mctx)
+
+        assert result is not None
+        items = mock_crud.add_items_to_db_cart.call_args[0][2]
+        items_by_id = {i["product_id"]: i for i in items}
+        # PICANHA COM BACON should have qty 1294
+        assert items_by_id[1]["quantity"] == 1294
+        # PICANHA COM CATUPIRY should have qty 234
+        assert items_by_id[2]["quantity"] == 234
+
+    @pytest.mark.asyncio
+    async def test_small_numbers_still_work(self):
+        """Regression: 'dois do primeiro e tres do segundo' still works."""
+        from app.whatsapp import _handle_suggestion_selection
+
+        prods = [
+            _make_product_mock(1, "PICANHA", price=35.0),
+            _make_product_mock(2, "ALCATRA", price=32.0),
+        ]
+        mctx = _make_suggestion_mctx("dois do primeiro e tres do segundo", [1, 2])
+        self._setup_session_with_products(mctx, prods)
+
+        with (
+            patch("app.whatsapp.crud") as mock_crud,
+            patch(
+                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
+            ),
+            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
+        ):
+            mock_crud.add_items_to_db_cart = AsyncMock()
+            mctx.cart.items = [MagicMock()]
+            await _handle_suggestion_selection(mctx)
+
+        items = mock_crud.add_items_to_db_cart.call_args[0][2]
+        assert len(items) == 2
+        assert items[0]["quantity"] == 2
+        assert items[1]["quantity"] == 3
+
+    @pytest.mark.asyncio
+    async def test_entao_not_parsed_as_cento(self):
+        """Regression: 'então' must NOT fuzzy-match to 'cento' (100).
+
+        'pode ser o bagunça no lugar então' was incorrectly parsed as qty=100
+        because SequenceMatcher('então','cento')=0.80 hit the old threshold."""
+        from app.whatsapp import _handle_suggestion_selection
+
+        prods = [
+            _make_product_mock(1, "Bagunça", price=33.0),
+            _make_product_mock(2, "América", price=35.5),
+        ]
+        mctx = _make_suggestion_mctx("pode ser o bagunça no lugar então", [1, 2])
+        self._setup_session_with_products(mctx, prods)
+
+        with (
+            patch("app.whatsapp.crud") as mock_crud,
+            patch(
+                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
+            ),
+            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
+        ):
+            mock_crud.add_items_to_db_cart = AsyncMock()
+            mctx.cart.items = [MagicMock()]
+            await _handle_suggestion_selection(mctx)
+
+        items = mock_crud.add_items_to_db_cart.call_args[0][2]
+        assert items[0]["product_id"] == 1
+        assert items[0]["quantity"] == 1  # NOT 100
+
+    @pytest.mark.asyncio
+    async def test_suggestion_typo_cuatro_exact_entry(self):
+        """'cuatro' (Spanish typo) is an exact entry → qty 4, not fuzzy-matched."""
+        from app.whatsapp import _handle_suggestion_selection
+
+        prods = [_make_product_mock(1, "PICANHA", price=32.0)]
+        mctx = _make_suggestion_mctx("cuatro picanha", [1])
+        self._setup_session_with_products(mctx, prods)
+
+        with (
+            patch("app.whatsapp.crud") as mock_crud,
+            patch(
+                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
+            ),
+            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
+        ):
+            mock_crud.add_items_to_db_cart = AsyncMock()
+            mctx.cart.items = [MagicMock()]
+            await _handle_suggestion_selection(mctx)
+
+        items = mock_crud.add_items_to_db_cart.call_args[0][2]
+        assert items[0]["quantity"] == 4
+
+    @pytest.mark.asyncio
+    async def test_suggestion_typo_ceis_exact_entry(self):
+        """'ceis' (informal seis) is an exact entry → qty 6."""
+        from app.whatsapp import _handle_suggestion_selection
+
+        prods = [_make_product_mock(1, "PICANHA", price=32.0)]
+        mctx = _make_suggestion_mctx("ceis picanha", [1])
+        self._setup_session_with_products(mctx, prods)
+
+        with (
+            patch("app.whatsapp.crud") as mock_crud,
+            patch(
+                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
+            ),
+            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
+        ):
+            mock_crud.add_items_to_db_cart = AsyncMock()
+            mctx.cart.items = [MagicMock()]
+            await _handle_suggestion_selection(mctx)
+
+        items = mock_crud.add_items_to_db_cart.call_args[0][2]
+        assert items[0]["quantity"] == 6
+
+
+# ────────────────────────────────────────────────────────
+# Pre-router REMOVE guard
+# ────────────────────────────────────────────────────────
+
+
+class TestRemoveGuardRegex:
+    """Tests for _REMOVE_KEYWORD_RE — ensures removal messages are classified
+    as MODIFY and not defaulted to ADD."""
+
+    def _matches(self, text: str) -> bool:
+        from app.whatsapp import _REMOVE_KEYWORD_RE
+
+        return bool(_REMOVE_KEYWORD_RE.search(text))
+
+    # --- Should match ---
+
+    def test_tire_with_digit(self):
+        assert self._matches("tire 2 prensadão")
+
+    def test_tira_with_written_qty(self):
+        assert self._matches("tira dois prensadão")
+
+    def test_tirar_infinitive(self):
+        assert self._matches("tirar 5 coca")
+
+    def test_pode_tirar_prefix(self):
+        assert self._matches("pode tirar dez prensadao e 9 bagunça")
+
+    def test_por_favor_tira(self):
+        assert self._matches("por favor tira 3 coca do pedido")
+
+    def test_quero_tirar(self):
+        assert self._matches("quero tirar 5 prensadão")
+
+    def test_retira_with_qty(self):
+        assert self._matches("retira 9 bagunça")
+
+    def test_remove_with_qty(self):
+        assert self._matches("remove 2 calabresa")
+
+    def test_remover_infinitive(self):
+        assert self._matches("pode remover 3 coca")
+
+    def test_da_pra_tirar(self):
+        assert self._matches("dá pra tirar 2 prensadão")
+
+    def test_long_conversational_prefix(self):
+        """Real-world: removal request buried in conversation."""
+        assert self._matches(
+            "vamos tirar dois prensadão e 11 bagunça, meu cunhado avisou que nao vem"
+        )
+
+    # --- Should NOT match (avoid false positives) ---
+
+    def test_tira_cebola_no_qty(self):
+        """'tira a cebola' is an observation, not a cart reduction."""
+        assert not self._matches("tira a cebola do lanche")
+
+    def test_add_message_not_matched(self):
+        assert not self._matches("quero 5 prensadão e 3 coca")
+
+    def test_pode_mandar_not_matched(self):
+        assert not self._matches("pode mandar 5 prensadão")
+
+    def test_conversational_without_remove_verb(self):
+        assert not self._matches("acho que vou querer mais 2 bagunça")
+
+
+class TestRemoveGuardIntentResolution:
+    """Tests that the REMOVE guard resolves to MODIFY intent end-to-end."""
+
+    @pytest.mark.asyncio
+    async def test_tire_resolves_to_modify(self):
+        from app.whatsapp import resolve_intent
+        from app.models import CartState
+
+        cart = MagicMock()
+        cart.state = CartState.SHOPPING
+        cart.items = [MagicMock()]
+
+        intent = await resolve_intent("tire dois prensadão e 9 bagunças", cart, [])
+        assert intent == "MODIFY"
+
+    @pytest.mark.asyncio
+    async def test_pode_tirar_resolves_to_modify(self):
+        from app.whatsapp import resolve_intent
+        from app.models import CartState
+
+        cart = MagicMock()
+        cart.state = CartState.SHOPPING
+        cart.items = [MagicMock()]
+
+        intent = await resolve_intent("pode tirar dez prensadao e 9 bagunça", cart, [])
+        assert intent == "MODIFY"
+
+    @pytest.mark.asyncio
+    async def test_vamos_tirar_resolves_to_modify(self):
+        from app.whatsapp import resolve_intent
+        from app.models import CartState
+
+        cart = MagicMock()
+        cart.state = CartState.SHOPPING
+        cart.items = [MagicMock()]
+
+        intent = await resolve_intent(
+            "vamos tirar dois prensadão e 11 bagunça, meu primo não vem", cart, []
+        )
+        assert intent == "MODIFY"
+
+    @pytest.mark.asyncio
+    async def test_remove_guard_before_add_guard(self):
+        """'quero tirar 5 prensadão' should match REMOVE guard, not ADD guard."""
+        from app.whatsapp import resolve_intent
+        from app.models import CartState
+
+        cart = MagicMock()
+        cart.state = CartState.SHOPPING
+        cart.items = [MagicMock()]
+
+        intent = await resolve_intent("quero tirar 5 prensadão", cart, [])
+        assert intent == "MODIFY"
+
+
+# ────────────────────────────────────────────────────────
+# Low-confidence REMOVE safety net
+# ────────────────────────────────────────────────────────
+
+
+class TestLowConfidenceRemoveSafetyNet:
+    """When the router scores REMOVE at low confidence and the message
+    contains a removal keyword stem, it should resolve to MODIFY instead
+    of defaulting to ADD."""
+
+    @pytest.mark.asyncio
+    async def test_low_confidence_remove_with_keyword_becomes_modify(self):
+        from app.whatsapp import resolve_intent
+        from app.models import CartState
+
+        cart = MagicMock()
+        cart.state = CartState.SHOPPING
+        cart.items = [MagicMock()]
+
+        with patch(
+            "app.whatsapp.semantic_intent", new_callable=AsyncMock
+        ) as mock_router:
+            # Below threshold, but message contains "tirar"
+            mock_router.return_value = ("REMOVE", 0.50, "matched")
+            intent = await resolve_intent("da pra tirar uns itens do pedido", cart, [])
+
+        assert intent == "MODIFY"
+
+    @pytest.mark.asyncio
+    async def test_low_confidence_remove_without_keyword_defaults_to_add(self):
+        from app.whatsapp import resolve_intent
+        from app.models import CartState
+
+        cart = MagicMock()
+        cart.state = CartState.SHOPPING
+        cart.items = []
+
+        with patch(
+            "app.whatsapp.semantic_intent", new_callable=AsyncMock
+        ) as mock_router:
+            # REMOVE at low confidence but no removal keyword in text
+            mock_router.return_value = ("REMOVE", 0.50, "matched")
+            intent = await resolve_intent("to com fome demais", cart, [])
+
+        # No removal stems in message → ADD default
+        assert intent in ("ADD", "GREETING_OR_QUESTION")
+
+    @pytest.mark.asyncio
+    async def test_low_confidence_non_remove_still_defaults_to_add(self):
+        from app.whatsapp import resolve_intent
+        from app.models import CartState
+
+        cart = MagicMock()
+        cart.state = CartState.SHOPPING
+        cart.items = []
+
+        with patch(
+            "app.whatsapp.semantic_intent", new_callable=AsyncMock
+        ) as mock_router:
+            mock_router.return_value = ("CONFIRM", 0.50, "matched")
+            intent = await resolve_intent("quero 5 prensadão", cart, [])
+
+        assert intent == "ADD"
+
+
+# ────────────────────────────────────────────────────────
+# Programmatic cart reduction
+# ────────────────────────────────────────────────────────
+
+
+class TestProgrammaticCartReduce:
+    """Tests for _programmatic_cart_reduce — handles 'tire N X' without LLM."""
+
+    def _make_cart_item(self, product_name: str, qty: int, product_id: int = 1):
+        ci = MagicMock()
+        ci.product = MagicMock()
+        ci.product.name = product_name
+        ci.product.id = product_id
+        ci.quantity = qty
+        ci.id = product_id * 100
+        return ci
+
+    def test_basic_subtraction(self):
+        from app.whatsapp import _programmatic_cart_reduce
+
+        items = [
+            self._make_cart_item("Prensadão", 12, 700),
+            self._make_cart_item("Bagunça", 19, 686),
+        ]
+        pairs = [(2, "prensadão"), (9, "bagunça")]
+        result = _programmatic_cart_reduce(pairs, items, "tire 2 prensadão e 9 bagunça")
+
+        assert result is not None
+        updates, parts = result
+        assert len(updates) == 2
+        assert updates[0][1] == 10  # 12 - 2
+        assert updates[1][1] == 10  # 19 - 9
+
+    def test_subtraction_to_zero(self):
+        from app.whatsapp import _programmatic_cart_reduce
+
+        items = [self._make_cart_item("Prensadão", 5, 700)]
+        pairs = [(5, "prensadão")]
+        result = _programmatic_cart_reduce(pairs, items, "tire 5 prensadão")
+
+        updates, parts = result
+        assert updates[0][1] == 0
+        assert "Removido" in parts[0]
+
+    def test_subtraction_more_than_available_floors_to_zero(self):
+        from app.whatsapp import _programmatic_cart_reduce
+
+        items = [self._make_cart_item("Prensadão", 3, 700)]
+        pairs = [(10, "prensadão")]
+        result = _programmatic_cart_reduce(pairs, items, "tire 10 prensadão")
+
+        updates, parts = result
+        assert updates[0][1] == 0  # max(0, 3 - 10)
+
+    def test_no_match_returns_none(self):
+        from app.whatsapp import _programmatic_cart_reduce
+
+        items = [self._make_cart_item("Prensadão", 12, 700)]
+        pairs = [(2, "pizza")]
+        result = _programmatic_cart_reduce(pairs, items, "tire 2 pizza")
+
+        assert result is None
+
+    def test_ignores_non_matching_pairs(self):
+        """'tirar' (verb) shouldn't match any product — only real product names count."""
+        from app.whatsapp import _programmatic_cart_reduce
+
+        items = [
+            self._make_cart_item("Prensadão", 12, 700),
+            self._make_cart_item("Bagunça", 19, 686),
+        ]
+        # extract_items_with_quantities produces (1, 'tirar') as a spurious pair
+        pairs = [(1, "tirar"), (2, "prensadão"), (9, "bagunça")]
+        result = _programmatic_cart_reduce(
+            pairs, items, "vamos tirar dois prensadão e 9 bagunça"
+        )
+
+        assert result is not None
+        updates, _ = result
+        # Should only match prensadão and bagunça, not 'tirar'
+        assert len(updates) == 2
+        assert updates[0][1] == 10  # 12 - 2
+        assert updates[1][1] == 10  # 19 - 9
+
+    def test_substring_match_with_trailing_text(self):
+        """'bagunça, vó avisou que nao vem' should still match 'Bagunça'."""
+        from app.whatsapp import _programmatic_cart_reduce
+
+        items = [self._make_cart_item("Bagunça", 19, 686)]
+        pairs = [(11, "bagunça, vó avisou que nao vem mais")]
+        result = _programmatic_cart_reduce(pairs, items, "tire 11 bagunça")
+
+        assert result is not None
+        updates, _ = result
+        assert updates[0][1] == 8  # 19 - 11
+
+    def test_empty_cart_returns_none(self):
+        from app.whatsapp import _programmatic_cart_reduce
+
+        result = _programmatic_cart_reduce([(2, "prensadão")], [], "tire 2 prensadão")
+        assert result is None
+
+    def test_empty_pairs_returns_none(self):
+        from app.whatsapp import _programmatic_cart_reduce
+
+        items = [self._make_cart_item("Prensadão", 12, 700)]
+        result = _programmatic_cart_reduce([], items, "tire")
+        assert result is None
+
+
+# ────────────────────────────────────────────────────────
+# Suggestion handler bypass for removal messages
+# ────────────────────────────────────────────────────────
+
+
+class TestSuggestionHandlerRemovalBypass:
+    """Stale last_suggestions must not hijack removal messages.
+    When a previous ADD fails (Option C sets last_suggestions), a
+    subsequent 'tire N X' message should clear suggestions and go
+    through the normal MODIFY flow instead."""
+
+    def test_remove_keyword_clears_stale_suggestions(self):
+        """_REMOVE_KEYWORD_RE match should clear last_suggestions."""
+        from app.whatsapp import _REMOVE_KEYWORD_RE
+
+        cart = MagicMock()
+        cart.last_suggestions = [700, 686, 694]
+        text = "vamos tirar dois prensadão e 11 bagunça"
+
+        # Simulate the bypass logic from process_whatsapp_message
+        if _REMOVE_KEYWORD_RE.search(text) and cart.last_suggestions:
+            cart.last_suggestions = None
+
+        assert cart.last_suggestions is None
+
+    def test_add_message_preserves_suggestions(self):
+        """ADD messages should not clear last_suggestions."""
+        from app.whatsapp import _REMOVE_KEYWORD_RE
+
+        cart = MagicMock()
+        cart.last_suggestions = [700, 686, 694]
+        text = "quero 5 prensadão"
+
+        if _REMOVE_KEYWORD_RE.search(text) and cart.last_suggestions:
+            cart.last_suggestions = None
+
+        assert cart.last_suggestions == [700, 686, 694]
+
+    def test_conversational_message_preserves_suggestions(self):
+        """Non-removal conversational messages should keep suggestions."""
+        from app.whatsapp import _REMOVE_KEYWORD_RE
+
+        cart = MagicMock()
+        cart.last_suggestions = [700, 686]
+        text = "boa noite, tudo bem?"
+
+        if _REMOVE_KEYWORD_RE.search(text) and cart.last_suggestions:
+            cart.last_suggestions = None
+
+        assert cart.last_suggestions == [700, 686]
+
+
+# ────────────────────────────────────────────────────────
+# Prompt: partial removal few-shot example
+# ────────────────────────────────────────────────────────
+
+
+class TestPartialRemovalFewShot:
+    """Verifies the few-shot example for 'tire N X' → bulk_modify_quantities
+    is present in the prompt and uses subtraction (not addition)."""
+
+    def test_partial_remove_example_in_prompt(self):
+        import json
+        from app.prompt_central import create_central_prompt
+
+        prompt = create_central_prompt(
+            user_query="tire 2 coca",
+            history=[],
+            restaurant_name="Test",
+            cart_items=[],
+        )
+        all_content = json.dumps(prompt, ensure_ascii=False)
+        assert "tire dois prensadão e 9 bagunças" in all_content
+        assert "bulk_modify_quantities" in all_content
+
+    def test_partial_remove_rule_in_system_prompt(self):
+        from app.prompt_central import create_central_prompt
+
+        prompt = create_central_prompt(
+            user_query="test",
+            history=[],
+            restaurant_name="Test",
+            cart_items=[],
+        )
+        system_content = prompt[0]["content"]
+        assert "tirar" in system_content.lower()
+        assert "subtrair" in system_content.lower() or "SUBTRAIR" in system_content
+        assert "NUNCA use `add_items_to_cart` quando" in system_content

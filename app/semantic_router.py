@@ -75,6 +75,10 @@ PROTOS: Dict[str, List[str]] = {
         "remove esse",
         "não quero mais",
         "pode tirar",
+        "tira dois do meu pedido",
+        "pode tirar 5 prensadão",
+        "tire 3 coca do carrinho",
+        "retira 9 bagunça",
     ],
     "MODIFY": [
         "alterar quantidade",

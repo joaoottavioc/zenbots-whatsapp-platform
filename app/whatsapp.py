@@ -8,7 +8,7 @@ import httpx
 from dotenv import load_dotenv
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
-from sqlmodel import select
+from sqlmodel import delete, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from app import crud
 from app.database import async_session
@@ -25,6 +25,7 @@ from app.models import (
 )
 from app.openai_client import (
     get_ai_decision,
+    get_chat_response_gpt,
     extract_potential_items,
 )
 from app.item_extraction import (
@@ -1268,6 +1269,29 @@ async def _handle_shopping_intent(
         # Pre-parse quantity-item pairs for structured LLM query rewrite.
         # This prevents quantity shifting when items are unavailable.
         _qty_pairs = extract_items_with_quantities(text_body)
+
+        # --- Programmatic cart reduction for "tire/tira N X" ---
+        # Small LLMs (phi3:mini) struggle with subtraction; handle it directly.
+        if intent == "MODIFY" and _qty_pairs and cart.items:
+            _reduce_result = _programmatic_cart_reduce(
+                _qty_pairs, cart.items, text_body
+            )
+            if _reduce_result:
+                _updates, _response_parts = _reduce_result
+                for _upd_item, _new_qty in _updates:
+                    if _new_qty <= 0:
+                        await session.execute(
+                            delete(CartItem).where(CartItem.id == _upd_item.id)
+                        )
+                    else:
+                        _upd_item.quantity = _new_qty
+                        session.add(_upd_item)
+                await session.flush()
+                # Reload cart to build summary
+                await _load_cart_items_with_products(cart, session)
+                response_to_user = _build_cart_summary_message(cart, bot)
+                return response_to_user
+
         _structured_query = rewrite_as_structured_order(_qty_pairs)
         found_products = await crud.find_relevant_products(
             session, bot.id, search_terms
@@ -1558,10 +1582,17 @@ async def _handle_shopping_intent(
                                 if isinstance(i, dict)
                                 and i.get("product_id") is not None
                             ]
-                            if not any(
-                                pid in (cart.last_suggestions or [])
-                                for pid in product_ids
+                            if (
+                                not any(
+                                    pid in (cart.last_suggestions or [])
+                                    for pid in product_ids
+                                )
+                                and not unavailable_matches
                             ):
+                                # Only clear suggestions if there are no
+                                # unavailable matches — em falta sets
+                                # last_suggestions for the "sim" alternatives
+                                # flow and must not be overwritten here.
                                 cart.last_suggestions = None
 
                             skipped_msg = ""
@@ -1901,13 +1932,12 @@ async def _handle_shopping_intent(
                                     _filtered, _title
                                 )
 
-                        if cart_tool_processed and unavailable_matches:
-                            # Cart tool already succeeded and programmatic em falta
-                            # will handle unavailable items — skip LLM's redundant
-                            # (and often contradictory) conversational text.
+                        if cart_tool_processed:
+                            # Cart tool already succeeded — skip LLM's conversational
+                            # follow-up entirely. Appending it causes issues like
+                            # confirmation questions ("Só pra confirmar...") that
+                            # lead to quantity doubling when the user says "sim".
                             pass
-                        elif cart_tool_processed:
-                            response_to_user = response_to_user + "\n\n" + conv_text
                         else:
                             response_to_user = conv_text
 
@@ -2194,22 +2224,74 @@ async def _handle_suggestion_selection(mctx: MessageContext) -> str | None:
         "trezentos": 300,
         "trezentas": 300,
         "mil": 1000,
+        "sessenta": 60,
+        "setenta": 70,
+        "oitenta": 80,
+        "noventa": 90,
+        "quatrocentos": 400,
+        "quatrocentas": 400,
+        "quinhentos": 500,
+        "quinhentas": 500,
+        "seiscentos": 600,
+        "seiscentas": 600,
+        "setecentos": 700,
+        "setecentas": 700,
+        "oitocentos": 800,
+        "oitocentas": 800,
+        "novecentos": 900,
+        "novecentas": 900,
+        # Common typos / Spanishisms
+        "cuatro": 4,
+        "cuarenta": 40,
+        "sinco": 5,
+        "sinquenta": 50,
+        "ceis": 6,
+        "tresentos": 300,
+        "tresentas": 300,
+        "dusentos": 200,
+        "dusentas": 200,
     }
 
+    def _fuzzy_qty(word: str) -> int | None:
+        """Fuzzy lookup for quantity words. Handles typos like 'cuatro'→4, 'sincoenta'→50."""
+        val = _WRITTEN_QTY.get(word)
+        if val is not None:
+            return val
+        if len(word) < 4:
+            return None
+        from difflib import SequenceMatcher
+
+        best_val, best_ratio = None, 0.0
+        for key, v in _WRITTEN_QTY.items():
+            if abs(len(key) - len(word)) > 3:
+                continue
+            ratio = SequenceMatcher(None, word, key).ratio()
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best_val = v
+        return best_val if best_ratio >= 0.85 else None
+
     def _parse_compound_qty(words: list[str]) -> int | None:
-        """Parse a compound Portuguese number like ['vinte', 'e', 'sete'] → 27."""
+        """Parse a compound Portuguese number like ['vinte', 'e', 'sete'] → 27.
+        Handles 'mil' as a multiplier: 'três mil' → 3000, 'mil duzentos' → 1200."""
         total = 0
         current = 0
         found_any = False
         for w in words:
             if w == "e":
                 continue
-            val = _WRITTEN_QTY.get(w)
+            val = _fuzzy_qty(w)
             if val is None:
                 continue
             found_any = True
-            if val >= 100:
-                current = max(current, 1) * val
+            if val == 1000:
+                # "mil" multiplies what came before (or 1 if nothing), then flushes
+                current = max(current, 1) * 1000
+                total += current
+                current = 0
+            elif val >= 100:
+                # Hundreds add to current group: "mil duzentos" → total=1000, current+=200
+                current += val
             else:
                 current += val
         total += current
@@ -2274,22 +2356,28 @@ async def _handle_suggestion_selection(mctx: MessageContext) -> str | None:
     # do primeiro" doesn't get split at the "e" between "vinte" and "sete".
     # e.g. "vinte e sete do primeiro" → "27 do primeiro"
     # Ordinals are excluded — they're item selectors, not quantities.
-    _MERGE_QTY_WORDS = {w for w in _WRITTEN_QTY}
-
     def _merge_compound_numbers(txt: str) -> str:
         words = txt.lower().split()
         result = []
         i = 0
         while i < len(words):
-            if words[i] in _MERGE_QTY_WORDS:
-                # Check if this is a COMPOUND number (qty "e" qty ...)
+            if _fuzzy_qty(words[i]) is not None:
+                # Start of a potential compound number
                 j = i
-                while (
-                    j + 2 < len(words)
-                    and words[j + 1] == "e"
-                    and words[j + 2] in _MERGE_QTY_WORDS
-                ):
-                    j += 2
+                while j + 1 < len(words):
+                    nxt = words[j + 1]
+                    # Adjacent qty word: "mil duzentos"
+                    if _fuzzy_qty(nxt) is not None:
+                        j += 1
+                    # "e" + qty word: "vinte e sete"
+                    elif (
+                        nxt == "e"
+                        and j + 2 < len(words)
+                        and _fuzzy_qty(words[j + 2]) is not None
+                    ):
+                        j += 2
+                    else:
+                        break
                 if j > i:
                     # Compound number — merge into a single digit
                     qty_words = words[i : j + 1]
@@ -2513,6 +2601,11 @@ async def _process_contact_message_inner(
         return
 
     # Handle suggestion selection (number, name, or confirm) BEFORE checkout FSM
+    # Skip if the message is clearly a removal request — stale suggestions
+    # from a previous failed ADD must not hijack MODIFY/REMOVE messages.
+    _is_removal = _REMOVE_KEYWORD_RE.search(text_body)
+    if _is_removal and cart.last_suggestions:
+        cart.last_suggestions = None
     if cart.state in [CartState.GREETING, CartState.SHOPPING] and cart.last_suggestions:
         sug_result = await _handle_suggestion_selection(mctx)
         if sug_result is not None:
@@ -2659,6 +2752,33 @@ async def _process_contact_message_inner(
             response_to_user = finish_result
             # _handle_finish_order does its own early returns for empty cart / min order;
             # for the rest, we fall through to the final send+commit block below.
+    elif intent == "GREETING_OR_QUESTION" and cart.state != CartState.GREETING:
+        # Conversational message while shopping — answer without cart tools.
+        # Simple LLM call with no tools to avoid accidental cart mutations.
+        _conv_prompt = [
+            {
+                "role": "system",
+                "content": (
+                    f"Você é o atendente virtual do {bot.restaurant_name}. "
+                    "Responda de forma breve e simpática. "
+                    "NÃO adicione itens ao carrinho. "
+                    "NÃO liste o cardápio. "
+                    "Se o cliente quiser pedir algo, "
+                    "pergunte o que ele gostaria. "
+                    'Responda em json: {{"response_to_user": "..."}}'
+                ),
+            },
+            {"role": "user", "content": text_body},
+        ]
+        _conv_text = await get_chat_response_gpt(_conv_prompt)
+        if _conv_text:
+            import json as _json
+
+            try:
+                _parsed = _json.loads(_conv_text)
+                response_to_user = _parsed.get("response_to_user", _conv_text)
+            except _json.JSONDecodeError:
+                response_to_user = _conv_text
     else:
         # Shopping logic: ADD, REMOVE, MODIFY, REQUEST_SUGGESTION
         shopping_result = await _handle_shopping_intent(mctx, intent)
@@ -2818,6 +2938,66 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
                     )
                 except Exception as send_err:
                     logger.error("Failed to send error message to user: %s", send_err)
+
+
+def _programmatic_cart_reduce(
+    qty_pairs: list[tuple[int, str]],
+    cart_items: list,
+    text_body: str,
+) -> tuple[list[tuple], list[str]] | None:
+    """Programmatically reduce cart quantities for 'tire/tira N X' patterns.
+
+    Returns list of (cart_item, new_quantity) tuples and response parts,
+    or None if no matches found.
+    """
+    from difflib import SequenceMatcher
+
+    if not qty_pairs or not cart_items:
+        return None
+
+    updates: list[tuple] = []
+    response_parts: list[str] = []
+
+    for req_qty, req_name in qty_pairs:
+        req_lower = req_name.lower().strip()
+        best_item = None
+        best_ratio = 0.0
+
+        for ci in cart_items:
+            pname = ci.product.name.lower()
+            # Exact substring match
+            if req_lower in pname or pname in req_lower:
+                best_item = ci
+                best_ratio = 1.0
+                break
+            # Fuzzy match
+            ratio = SequenceMatcher(None, req_lower, pname).ratio()
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best_item = ci
+
+        if best_item and best_ratio >= 0.6:
+            new_qty = max(0, best_item.quantity - req_qty)
+            updates.append((best_item, new_qty))
+            if new_qty == 0:
+                response_parts.append(f"Removido {best_item.product.name} do carrinho.")
+            else:
+                response_parts.append(
+                    f"{best_item.product.name}: {best_item.quantity} → {new_qty}"
+                )
+            logger.info(
+                "[REDUCE] %s: %d - %d = %d (match=%.2f)",
+                best_item.product.name,
+                best_item.quantity,
+                req_qty,
+                new_qty,
+                best_ratio,
+            )
+
+    if not updates:
+        return None
+
+    return updates, response_parts
 
 
 def _build_cart_summary_message(cart: ShoppingCart, bot: Bot, emoji: str = "🛒") -> str:
@@ -3180,9 +3360,24 @@ _CHECKOUT_INTENT_OVERRIDES = {
 # Detects obvious ADD messages that the semantic router may misclassify
 # when the message contains specific product names (long messages diverge
 # from short prototypes, causing false REQUEST_SUGGESTION matches).
+# Written quantity words for pre-router ADD guard.
+# Includes standard Portuguese, common typos/Spanishisms (cuatro, sinco, etc.).
+_ADD_QTY_WORDS = (
+    "um|uma|uns|umas|dois|duas|três|tres|quatro|cuatro|cinco|sinco|seis|ceis|sete|oito|"
+    "nove|dez|onze|doze|treze|quatorze|catorze|quinze|dezesseis|dezessete|dezoito|"
+    "dezenove|vinte|trinta|quarenta|cuarenta|cinquenta|sinquenta|sessenta|setenta|"
+    "oitenta|noventa|cem|cento|duzentos|dusentos|duzentas|trezentos|tresentos|trezentas|"
+    "quatrocentos|quinhentos|seiscentos|setecentos|oitocentos|novecentos|mil"
+)
+_REMOVE_KEYWORD_RE = re.compile(
+    r"(?:(?:pode|por\s+favor|favor|quero|preciso|d[aá]\s+pra|tem\s+como)\s+)?"
+    r"(?:tire|tira|tirar|retira|retire|retirar|remov[ea]|remove|remover)"
+    rf"\s+(?:{_ADD_QTY_WORDS}|\d+)\s*\(?[a-záàâãéèêíìîóòôõúùûç]",
+    re.IGNORECASE,
+)
 _ADD_KEYWORD_RE = re.compile(
     r"(?:quero|manda|coloca|bota|adiciona|me\s+v[eê]|vou\s+querer|pode\s+mandar)"
-    r"\s+(?:um[a]?|dois|duas|três|tres|\d+)\s*\(?[a-záàâãéèêíìîóòôõúùûç]",
+    rf"\s+(?:{_ADD_QTY_WORDS}|\d+)\s*\(?[a-záàâãéèêíìîóòôõúùûç]",
     re.IGNORECASE,
 )
 
@@ -3192,7 +3387,17 @@ async def resolve_intent(text_body, cart, cart_items_for_intent, found_products=
     cart_state = getattr(cart, "state", None)
     in_checkout = cart_state in _CHECKOUT_STATES
 
-    # 0b. Pre-router guard: obvious ADD patterns bypass the semantic router.
+    # 0b. Pre-router guard: obvious REMOVE/MODIFY patterns bypass the semantic router.
+    # "tire/tira/retira/remove" + qty + product is unambiguously a cart reduction,
+    # but the router misclassifies it as ADD because product names shift the embedding.
+    if _REMOVE_KEYWORD_RE.search(text_body):
+        logger.info("[INTENT] pre-router REMOVE guard matched: %r", text_body[:80])
+        final_intent = "MODIFY"
+        if in_checkout and final_intent in _CHECKOUT_INTENT_OVERRIDES:
+            final_intent = _CHECKOUT_INTENT_OVERRIDES[final_intent]
+        return final_intent
+
+    # 0c. Pre-router guard: obvious ADD patterns bypass the semantic router.
     # Messages like "quero um(a) Coca-cola e um(a) X" are unambiguously ADD,
     # but the router may misclassify them because product names in long messages
     # shift the embedding away from short ADD prototypes.
@@ -3255,15 +3460,53 @@ async def resolve_intent(text_body, cart, cart_items_for_intent, found_products=
             )
             final_intent = router_intent
     else:
-        # 5. Very low confidence or router failed — default to ADD
-        # The tool-calling prompt will implicitly classify via tool selection
-        logger.info(
-            "[INTENT] router low confidence: %s score=%.2f threshold=%.2f → default ADD",
-            router_intent,
-            router_score,
-            thresh,
-        )
-        final_intent = "ADD"
+        # 5. Very low confidence or router failed.
+        # Use word-ratio heuristic to distinguish food orders from conversational noise.
+        # Food orders lose most words after extraction (ratio ≤ 0.5);
+        # conversational messages keep most words (ratio > 0.5).
+        _extracted = extract_items_local(text_body)
+        _orig_wc = len(text_body.split())
+        _ext_wc = sum(len(t.split()) for t in _extracted)
+        _ratio = _ext_wc / _orig_wc if _orig_wc > 0 else 1.0
+
+        if _ratio > 0.5:
+            # Conversational noise — let the LLM handle it conversationally
+            logger.info(
+                "[INTENT] low confidence + noise: %s score=%.2f"
+                " ratio=%.2f → GREETING_OR_QUESTION",
+                router_intent,
+                router_score,
+                _ratio,
+            )
+            final_intent = "GREETING_OR_QUESTION"
+        else:
+            # Safety net: if router says REMOVE/MODIFY and the message
+            # contains a removal keyword stem, trust it — removal verbs
+            # are unambiguous and should not default to ADD.
+            _REMOVAL_STEMS = ("tir", "retir", "remov")
+            _lower = text_body.lower()
+            if router_intent in ("REMOVE", "MODIFY") and any(
+                s in _lower for s in _REMOVAL_STEMS
+            ):
+                logger.info(
+                    "[INTENT] low confidence but removal keyword found: %s"
+                    " score=%.2f ratio=%.2f → MODIFY",
+                    router_intent,
+                    router_score,
+                    _ratio,
+                )
+                final_intent = "MODIFY"
+            else:
+                # Likely a food order — default to ADD as before
+                logger.info(
+                    "[INTENT] low confidence: %s score=%.2f"
+                    " thresh=%.2f ratio=%.2f → default ADD",
+                    router_intent,
+                    router_score,
+                    thresh,
+                    _ratio,
+                )
+                final_intent = "ADD"
 
     # 6. Cart-state-aware override: reinterpret intents during checkout
     if in_checkout and final_intent in _CHECKOUT_INTENT_OVERRIDES:

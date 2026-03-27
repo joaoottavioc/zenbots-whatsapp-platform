@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class CartItemInput(BaseModel):
     product_id: int
-    quantity: int = Field(ge=1, le=50)
+    quantity: int = Field(ge=1, le=9999)
     notes: Optional[str] = Field(default=None, max_length=200)
     product_name: Optional[str] = Field(default=None, max_length=200)
 
@@ -22,7 +22,7 @@ class RemoveItemsArgs(BaseModel):
 
 class ModifyQuantityArgs(BaseModel):
     product_id: int
-    new_quantity: int = Field(ge=0, le=50)
+    new_quantity: int = Field(ge=0, le=9999)
 
 
 class BulkModifyArgs(BaseModel):

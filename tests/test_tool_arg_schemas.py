@@ -25,9 +25,19 @@ class TestCartItemInput:
         with pytest.raises(ValidationError):
             CartItemInput(product_id=1, quantity=0)
 
-    def test_quantity_over_50_rejected(self):
+    def test_quantity_over_9999_rejected(self):
         with pytest.raises(ValidationError):
-            CartItemInput(product_id=1, quantity=51)
+            CartItemInput(product_id=1, quantity=10000)
+
+    def test_large_quantity_accepted(self):
+        """Quantities up to 9999 are valid (raised from 50 for compound number orders)."""
+        item = CartItemInput(product_id=1, quantity=9999)
+        assert item.quantity == 9999
+
+    def test_quantity_396_accepted(self):
+        """Real-world compound number: 'tresentos e noventa e seis' → 396."""
+        item = CartItemInput(product_id=1, quantity=396)
+        assert item.quantity == 396
 
     def test_notes_too_long_rejected(self):
         with pytest.raises(ValidationError):
