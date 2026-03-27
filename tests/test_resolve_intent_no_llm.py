@@ -48,15 +48,17 @@ class TestNoLLMFallback:
         assert result == "ADD"
 
     @pytest.mark.asyncio
-    async def test_low_confidence_defaults_to_add(self):
-        """When router score is very low, default to ADD (not router's guess)."""
-        # ADD threshold is 0.78, 75% = 0.585, score 0.40 is below
+    async def test_low_confidence_defaults_to_greeting_or_question(self):
+        """When router score is very low and message is conversational noise, default to GREETING_OR_QUESTION."""
+        # ADD threshold is 0.78, 75% = 0.585, score 0.40 is below.
+        # "algo" is a short conversational word — extract_items_local produces it as-is,
+        # word ratio > 0.5 → GREETING_OR_QUESTION (conversational noise branch).
         with patch(
             PATCH_SEMANTIC,
             AsyncMock(return_value=("GREETING_OR_QUESTION", 0.40, "algo")),
         ):
             result = await resolve_intent("algo", _make_cart(), [])
-        assert result == "ADD"
+        assert result == "GREETING_OR_QUESTION"
 
     @pytest.mark.asyncio
     async def test_router_exception_defaults_to_add(self):
@@ -77,8 +79,9 @@ class TestNoLLMFallback:
             PATCH_SEMANTIC, AsyncMock(return_value=("GREETING_OR_QUESTION", 0.30, "oi"))
         ):
             result = await resolve_intent("xyzzy nonsense", _make_cart(), [])
-        # Low confidence defaults to ADD (tool-calling prompt classifies implicitly)
-        assert result == "ADD"
+        # Low confidence: word-ratio heuristic decides between ADD and GREETING_OR_QUESTION.
+        # "xyzzy nonsense" has no food items → ratio > 0.5 → GREETING_OR_QUESTION.
+        assert result == "GREETING_OR_QUESTION"
 
 
 class TestAllIntentsWork:

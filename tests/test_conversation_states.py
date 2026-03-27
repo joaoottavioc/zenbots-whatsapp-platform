@@ -866,15 +866,46 @@ class TestUpdateItemObservation(BaseConversationTest):
     @pytest.fixture(autouse=True)
     def set_state(self):
         self.cart.state = "SHOPPING"
-        self.cart.items = [
+        _items = [
             make_cart_item(10, "John's Paranaense", 45.0),
             make_cart_item(20, "Coca-cola 600ml", 10.0),
         ]
+        self.cart.items = _items
         self.crud_mock.update_item_notes = AsyncMock(return_value=self.cart)
+        _products = [ci.product for ci in _items]
+        self.crud_mock.find_relevant_products = AsyncMock(return_value=_products)
+
+        # The tool dispatch code for update_item_observation does a direct
+        # session.execute(select(CartItem)...) followed by set_committed_value
+        # to reload cart items.  The base execute_factory returns empty results
+        # by this point, which overwrites cart.items with [].
+        # Fix: override session.execute to return the cart items for all
+        # queries after the initial Bot + ProcessedMessage lookups.
+        _base_execute = self.session.execute
+        _call_count = 0
+
+        def _make_result_with(items_list):
+            r = MagicMock()
+            r.scalars.return_value.first.return_value = (
+                items_list[0] if items_list else None
+            )
+            r.scalars.return_value.all.return_value = items_list
+            return r
+
+        async def _custom_execute(*args, **kwargs):
+            nonlocal _call_count
+            _call_count += 1
+            if _call_count <= 2:
+                # First 2 calls: Bot lookup + ProcessedMessage check (from base)
+                return await _base_execute(*args, **kwargs)
+            # All subsequent calls: return cart items
+            return _make_result_with(list(_items))
+
+        self.session.execute = AsyncMock(side_effect=_custom_execute)
 
     @pytest.mark.asyncio
     async def test_update_observation_calls_crud_and_confirms(self):
-        """LLM returns update_item_observation → crud.update_item_notes is called, user gets confirmation."""
+        """LLM returns update_item_observation -> crud.update_item_notes is called, user gets confirmation."""
         from app.whatsapp import process_whatsapp_message
 
         ai_msg = _make_tool_call_message(
@@ -882,23 +913,27 @@ class TestUpdateItemObservation(BaseConversationTest):
         )
 
         with (
-            patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="MODIFY")),
+            patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="ADD")),
             patch(PATCH_GET_AI, AsyncMock(return_value=ai_msg)),
             patch(PATCH_EXTRACT_ITEMS, AsyncMock(return_value=["johns paranaense"])),
+            patch(
+                "app.whatsapp._load_cart_items_with_products",
+                new_callable=AsyncMock,
+            ),
         ):
             await process_whatsapp_message(
-                {}, build_whatsapp_payload(text="o johns paranaense é sem cebola")
+                {}, build_whatsapp_payload(text="o johns paranaense sem cebola")
             )
 
         self.crud_mock.update_item_notes.assert_called_once_with(
             self.session, self.cart.id, 10, "sem cebola"
         )
         msg = get_sent_message(self.send_mock)
-        assert "observação anotada" in msg.lower() or "anotada" in msg.lower()
+        assert "anotada" in msg.lower()
 
     @pytest.mark.asyncio
     async def test_update_observation_product_not_in_cart(self):
-        """update_item_observation with a product_id not in the cart → user gets helpful error."""
+        """update_item_observation with a product_id not in the cart -> user gets helpful error."""
         from app.whatsapp import process_whatsapp_message
 
         ai_msg = _make_tool_call_message(
@@ -906,12 +941,16 @@ class TestUpdateItemObservation(BaseConversationTest):
         )
 
         with (
-            patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="MODIFY")),
+            patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="ADD")),
             patch(PATCH_GET_AI, AsyncMock(return_value=ai_msg)),
             patch(PATCH_EXTRACT_ITEMS, AsyncMock(return_value=["johns paranaense"])),
+            patch(
+                "app.whatsapp._load_cart_items_with_products",
+                new_callable=AsyncMock,
+            ),
         ):
             await process_whatsapp_message(
-                {}, build_whatsapp_payload(text="o johns paranaense é sem cebola")
+                {}, build_whatsapp_payload(text="o johns paranaense sem cebola")
             )
 
         self.crud_mock.update_item_notes.assert_not_called()
@@ -920,15 +959,19 @@ class TestUpdateItemObservation(BaseConversationTest):
 
     @pytest.mark.asyncio
     async def test_update_observation_missing_notes(self):
-        """update_item_observation with missing notes → user is asked to clarify."""
+        """update_item_observation with missing notes -> user is asked to clarify."""
         from app.whatsapp import process_whatsapp_message
 
         ai_msg = _make_tool_call_message("update_item_observation", {"product_id": 10})
 
         with (
-            patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="MODIFY")),
+            patch(PATCH_RESOLVE_INTENT, AsyncMock(return_value="ADD")),
             patch(PATCH_GET_AI, AsyncMock(return_value=ai_msg)),
             patch(PATCH_EXTRACT_ITEMS, AsyncMock(return_value=["johns paranaense"])),
+            patch(
+                "app.whatsapp._load_cart_items_with_products",
+                new_callable=AsyncMock,
+            ),
         ):
             await process_whatsapp_message(
                 {}, build_whatsapp_payload(text="o johns paranaense precisa de algo")

@@ -142,8 +142,8 @@ class TestCreateCentralPrompt:
 
     # 7 -----------------------------------------------------------------------
     # 8 -----------------------------------------------------------------------
-    def test_menu_context_capped_at_15_items(self):
-        """When more than 15 products are passed, only the first 15 appear in the system message."""
+    def test_menu_context_includes_all_items(self):
+        """All products are included in the system message (no cap)."""
         products = [
             _make_product(product_id=i, name=f"Product_{i}", description=f"Desc {i}")
             for i in range(30)
@@ -156,10 +156,8 @@ class TestCreateCentralPrompt:
             search_results=products,
         )
         system = _all_system_content(messages)
-        for i in range(15):
+        for i in range(30):
             assert f"Product_{i}" in system
-        for i in range(15, 30):
-            assert f"Product_{i}" not in system
 
     # 9 -----------------------------------------------------------------------
     def test_description_truncated_at_80_chars(self):
@@ -355,8 +353,8 @@ class TestPrefixCachingStructure:
 class TestReducedExamples:
     """T1-2: Verify example count reduced from 13 to 10."""
 
-    def test_example_count_is_11(self):
-        """Prompt must contain exactly 11 example groups (33 messages: user+assistant+tool each)."""
+    def test_example_count_is_12(self):
+        """Prompt must contain exactly 12 example groups (36 messages: user+assistant+tool each)."""
         messages = create_central_prompt(
             user_query="oi",
             history=[],
@@ -369,7 +367,7 @@ class TestReducedExamples:
         ]
         example_msgs = messages[system_indices[0] + 1 : system_indices[1]]
         # Each example is a triplet (user, assistant, tool)
-        assert len(example_msgs) == 33  # 11 examples * 3 messages each
+        assert len(example_msgs) == 36  # 12 examples * 3 messages each
 
     def test_removed_examples_not_present(self):
         """Removed examples (ex7, ex_ordinals, ex_notes_simple) must not appear."""

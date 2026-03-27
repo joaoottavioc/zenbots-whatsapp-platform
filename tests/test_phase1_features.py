@@ -1434,8 +1434,8 @@ class TestResolveIntentFixes:
     """Tests for intent resolution changes: low confidence default + FINISH_ORDER demotion."""
 
     @pytest.mark.asyncio
-    async def test_low_confidence_defaults_to_add(self):
-        """Very low router confidence should default to ADD."""
+    async def test_low_confidence_defaults_to_greeting_or_question(self):
+        """Very low router confidence with conversational noise defaults to GREETING_OR_QUESTION."""
         from app.whatsapp import resolve_intent
         from app.models import CartState
 
@@ -1449,7 +1449,9 @@ class TestResolveIntentFixes:
             mock_router.return_value = ("FINISH_ORDER", 0.40, "matched")
             intent = await resolve_intent("to com fome demais", cart, [])
 
-        assert intent == "ADD"
+        # "to com fome demais" is conversational noise (word ratio > 0.5)
+        # → GREETING_OR_QUESTION, not ADD
+        assert intent == "GREETING_OR_QUESTION"
 
     @pytest.mark.asyncio
     async def test_finish_order_demoted_at_moderate(self):

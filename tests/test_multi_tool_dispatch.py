@@ -63,25 +63,22 @@ async def test_cart_tool_followed_by_conversational_tool():
 
     mock_product = MagicMock(id=1, name="Pizza", price=30.0)
 
-    # After adding item, cart has items
-    async def mock_refresh(obj, attribute_names=None):
-        if attribute_names and "items" in attribute_names:
-            obj.items = [
-                MagicMock(
-                    product_id=1,
-                    quantity=1,
-                    product=mock_product,
-                )
-            ]
+    # _load_cart_items_with_products is called twice:
+    # 1st call: common preparation (should preserve original cart items)
+    # 2nd call: after add_items_to_db_cart (should reflect increased quantity)
+    _load_call_count = 0
 
-    session.refresh = mock_refresh
+    async def mock_load_cart(c, s, **kwargs):
+        nonlocal _load_call_count
+        _load_call_count += 1
+        if _load_call_count == 1:
+            # First call: common prep — keep original items (qty=1)
+            c.items = [MagicMock(product_id=1, quantity=1, product=mock_product)]
+        else:
+            # Subsequent calls: after adding, qty increases to 2
+            c.items = [MagicMock(product_id=1, quantity=2, product=mock_product)]
 
-    # Mock session.execute for _load_cart_items_with_products product query
-    mock_scalars = MagicMock()
-    mock_scalars.all.return_value = [mock_product]
-    mock_result = MagicMock()
-    mock_result.scalars.return_value = mock_scalars
-    session.execute = AsyncMock(return_value=mock_result)
+    session.execute = AsyncMock(return_value=MagicMock())
 
     mctx = MessageContext(
         session=session,
@@ -102,9 +99,15 @@ async def test_cart_tool_followed_by_conversational_tool():
         patch("app.whatsapp.extract_potential_items", return_value=["pizza"]),
         patch(
             "app.whatsapp.crud.find_relevant_products",
+            new_callable=AsyncMock,
             return_value=[
                 MagicMock(id=1, name="Pizza", price=30.0, is_available=True, bot_id=10)
             ],
+        ),
+        patch(
+            "app.whatsapp.crud.find_unavailable_products",
+            new_callable=AsyncMock,
+            return_value=[],
         ),
         patch(
             "app.whatsapp.crud.get_history_for_contact",
@@ -122,12 +125,20 @@ async def test_cart_tool_followed_by_conversational_tool():
             return_value="🛒 Carrinho: 1x Pizza",
         ),
         patch("app.whatsapp.clear_pending"),
+        patch(
+            "app.whatsapp._load_cart_items_with_products",
+            side_effect=mock_load_cart,
+        ),
     ):
         result = await _handle_shopping_intent(mctx, "ADD")
 
-    # The result should contain the conversational response (appended after cart action)
+    # After a cart tool succeeds, conversational follow-ups are intentionally
+    # skipped to prevent issues like confirmation questions causing quantity
+    # doubling when the user says "sim".
     assert result is not None
-    assert "Temos sobremesas também!" in result
+    assert "Adicionado" in result
+    # The conversational text should NOT appear (skipped after cart tool)
+    assert "Temos sobremesas também!" not in result
 
 
 @pytest.mark.asyncio
@@ -164,23 +175,17 @@ async def test_second_cart_tool_is_skipped():
 
     mock_product = MagicMock(id=1, name="Pizza", price=30.0)
 
-    async def mock_refresh(obj, attribute_names=None):
-        if attribute_names and "items" in attribute_names:
-            obj.items = [
-                MagicMock(
-                    product_id=1,
-                    quantity=1,
-                    product=mock_product,
-                )
-            ]
+    _load_call_count = 0
 
-    session.refresh = mock_refresh
+    async def mock_load_cart(c, s, **kwargs):
+        nonlocal _load_call_count
+        _load_call_count += 1
+        if _load_call_count == 1:
+            c.items = [MagicMock(product_id=1, quantity=1, product=mock_product)]
+        else:
+            c.items = [MagicMock(product_id=1, quantity=2, product=mock_product)]
 
-    mock_scalars = MagicMock()
-    mock_scalars.all.return_value = [mock_product]
-    mock_result = MagicMock()
-    mock_result.scalars.return_value = mock_scalars
-    session.execute = AsyncMock(return_value=mock_result)
+    session.execute = AsyncMock(return_value=MagicMock())
 
     mctx = MessageContext(
         session=session,
@@ -201,9 +206,15 @@ async def test_second_cart_tool_is_skipped():
         patch("app.whatsapp.extract_potential_items", return_value=["pizza"]),
         patch(
             "app.whatsapp.crud.find_relevant_products",
+            new_callable=AsyncMock,
             return_value=[
                 MagicMock(id=1, name="Pizza", price=30.0, is_available=True, bot_id=10)
             ],
+        ),
+        patch(
+            "app.whatsapp.crud.find_unavailable_products",
+            new_callable=AsyncMock,
+            return_value=[],
         ),
         patch(
             "app.whatsapp.crud.get_history_for_contact",
@@ -222,6 +233,10 @@ async def test_second_cart_tool_is_skipped():
         patch("app.whatsapp.crud.add_interaction_to_history", new_callable=AsyncMock),
         patch("app.whatsapp._build_cart_summary_message", return_value="🛒 Carrinho"),
         patch("app.whatsapp.clear_pending"),
+        patch(
+            "app.whatsapp._load_cart_items_with_products",
+            side_effect=mock_load_cart,
+        ),
     ):
         await _handle_shopping_intent(mctx, "ADD")
 
