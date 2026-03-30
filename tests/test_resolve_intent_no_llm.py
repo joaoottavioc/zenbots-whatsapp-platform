@@ -128,11 +128,15 @@ class TestAllIntentsWork:
     )
     async def test_moderate_confidence_intent_returned(self, intent):
         """Moderate confidence (between 75% and 100% of threshold) still returns intent.
-        Exception: FINISH_ORDER is demoted to ADD at moderate confidence."""
+        Exceptions: FINISH_ORDER demoted to ADD; ADD with high word-ratio
+        (conversational noise) demoted to GREETING_OR_QUESTION."""
+        # Use a food-like message for ADD so word-ratio stays low (≤ 0.5),
+        # and a generic message for other intents.
+        msg = "duas picanha tres coca cinco mignon" if intent == "ADD" else "test"
         with patch(
             PATCH_SEMANTIC, AsyncMock(return_value=(intent, 0.65, "test phrase"))
         ):
-            result = await resolve_intent("test", _make_cart(), [])
+            result = await resolve_intent(msg, _make_cart(), [])
         if intent == "FINISH_ORDER":
             assert result == "ADD"  # demoted at moderate confidence
         else:

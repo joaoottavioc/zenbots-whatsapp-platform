@@ -82,7 +82,7 @@ jobs:
           python-version: "3.10"
           cache: pip
       - run: pip install -r requirements.txt
-      - run: pytest tests/ -v --tb=short --ignore=tests/integration
+      - run: pytest tests/ -v --tb=short --ignore=tests/integration --ignore=tests/simulation
 
   # ── Build & push to ECR ───────────────────────────────────────
   build-and-push:

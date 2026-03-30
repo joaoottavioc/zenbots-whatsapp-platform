@@ -171,15 +171,45 @@ _QTY_WORDS = frozenset(
         "novecentos",
         "novecentas",
         "mil",
-        # Common typos / Spanishisms / informal
-        "cuatro",
-        "cuarenta",
-        "sinco",
-        "sinquenta",
-        "ceis",  # informal "seis"
-        "tresentos",  # typo for "trezentos"
+        # ── Typos: 1-10 (phonetic / vowel reduction) ──
+        "trez",  # três (z for s)
+        "cuatro",  # quatro (Spanish)
+        "sinco",  # cinco (phonetic c→s)
+        "ceis",  # seis (informal)
+        "seti",  # sete (final e→i)
+        "oitu",  # oito (final o→u)
+        "novi",  # nove (final e→i)
+        # ── Typos: 11-19 (vowel reduction / z↔s / phonetic) ──
+        "onzi",  # onze (final e→i)
+        "dozi",  # doze (final e→i)
+        "trezi",  # treze (final e→i)
+        "catorse",  # catorze (z→s)
+        "quatorse",  # quatorze (z→s)
+        "quinse",  # quinze (z→s phonetic)
+        "dezeseis",  # dezesseis (dropped 's')
+        "desesseis",  # dezesseis (z→s swap)
+        "deseseis",  # dezesseis (z→s + dropped 's')
+        "dezesete",  # dezessete (dropped 's')
+        "desessete",  # dezessete (z→s swap)
+        "desesete",  # dezessete (z→s + dropped 's')
+        "desoito",  # dezoito (dropped z)
+        "desinove",  # dezenove (phonetic)
+        "desenove",  # dezenove (z→s)
+        # ── Typos: 20-90 (phonetic / classic errors) ──
+        "vinti",  # vinte (final e→i, extremely common)
+        "cuarenta",  # quarenta (Spanish)
+        "corenta",  # quarenta (informal, #1 misspelled number)
+        "sinquenta",  # cinquenta (phonetic c→s)
+        "cincoenta",  # cinquenta (classic BR-PT error)
+        "sesenta",  # sessenta (dropped 's')
+        "secenta",  # sessenta (ss→c confusion)
+        "cetenta",  # setenta (s→c phonetic)
+        # ── Typos: hundreds ──
+        "seicentos",  # seiscentos (dropped 's')
+        "seicentas",
+        "tresentos",  # trezentos
         "tresentas",
-        "dusentos",  # typo for "duzentos"
+        "dusentos",  # duzentos
         "dusentas",
         "primeiro",
         "segunda",
@@ -200,6 +230,7 @@ _QTY_VALUES: dict[str, int] = {
     "dois": 2,
     "três": 3,
     "tres": 3,
+    "trez": 3,  # common typo
     "quatro": 4,
     "cuatro": 4,  # Spanish typo
     "cinco": 5,
@@ -207,27 +238,51 @@ _QTY_VALUES: dict[str, int] = {
     "ceis": 6,  # informal "seis"
     "seis": 6,
     "sete": 7,
+    "seti": 7,  # final e→i
     "oito": 8,
+    "oitu": 8,  # final o→u
     "nove": 9,
+    "novi": 9,  # final e→i
     "dez": 10,
     "onze": 11,
+    "onzi": 11,  # final e→i
     "doze": 12,
+    "dozi": 12,  # final e→i
     "treze": 13,
+    "trezi": 13,  # final e→i
     "quatorze": 14,
     "catorze": 14,
+    "catorse": 14,  # z→s phonetic
+    "quatorse": 14,  # z→s phonetic
     "quinze": 15,
+    "quinse": 15,  # z→s phonetic
     "dezesseis": 16,
+    "dezeseis": 16,  # dropped 's'
+    "desesseis": 16,  # z→s swap
+    "deseseis": 16,  # z→s + dropped 's'
     "dezessete": 17,
+    "dezesete": 17,  # dropped 's'
+    "desessete": 17,  # z→s swap
+    "desesete": 17,  # z→s + dropped 's'
     "dezoito": 18,
+    "desoito": 18,  # dropped z
     "dezenove": 19,
+    "desinove": 19,  # phonetic
+    "desenove": 19,  # z→s
     "vinte": 20,
+    "vinti": 20,  # final e→i (extremely common)
     "trinta": 30,
     "quarenta": 40,
     "cuarenta": 40,  # Spanish typo
+    "corenta": 40,  # informal (#1 misspelled number in BR-PT)
     "cinquenta": 50,
-    "sinquenta": 50,  # common typo
+    "sinquenta": 50,  # phonetic c→s
+    "cincoenta": 50,  # classic BR-PT error
     "sessenta": 60,
+    "sesenta": 60,  # dropped 's'
+    "secenta": 60,  # ss→c confusion
     "setenta": 70,
+    "cetenta": 70,  # s→c phonetic
     "oitenta": 80,
     "noventa": 90,
     "cem": 100,
@@ -246,6 +301,8 @@ _QTY_VALUES: dict[str, int] = {
     "quinhentas": 500,
     "seiscentos": 600,
     "seiscentas": 600,
+    "seicentos": 600,  # common typo (dropped 's')
+    "seicentas": 600,
     "setecentos": 700,
     "setecentas": 700,
     "oitocentos": 800,
@@ -360,14 +417,45 @@ def extract_items_local(text: str) -> List[str]:
 def _resolve_compound_qty(words: List[str], start: int) -> Tuple[int, int]:
     """Resolve a compound number starting at index `start`.
 
-    Handles patterns like "vinte e três" (23), "cento e vinte" (120).
+    Handles patterns like "vinte e três" (23), "cento e vinte" (120),
+    adjacent numbers like "mil duzentos" (1200), and multiplicative
+    patterns like "três mil" (3000), "três mil quinhentos" (3500).
     Returns (numeric_value, end_index_exclusive).
     """
-    total = _QTY_VALUES.get(words[start], 0)
+    total = 0
+    current = _QTY_VALUES.get(words[start], 0)
     j = start + 1
-    while j + 1 < len(words) and words[j] == "e" and words[j + 1] in _QTY_VALUES:
-        total += _QTY_VALUES[words[j + 1]]
-        j += 2
+
+    def _next_val(idx: int) -> int | None:
+        """Get the numeric value of word at idx, or None."""
+        return _QTY_VALUES.get(words[idx]) if idx < len(words) else None
+
+    while j < len(words):
+        nxt = words[j]
+        if nxt == "e" and j + 1 < len(words) and words[j + 1] in _QTY_VALUES:
+            val = _QTY_VALUES[words[j + 1]]
+            if val == 1000:
+                # "X e mil" — treat mil as multiplier
+                current = max(current, 1) * 1000
+                total += current
+                current = 0
+            else:
+                current += val
+            j += 2
+        elif nxt in _QTY_VALUES:
+            val = _QTY_VALUES[nxt]
+            if val == 1000:
+                # "três mil" — multiplier
+                current = max(current, 1) * 1000
+                total += current
+                current = 0
+            else:
+                current += val
+            j += 1
+        else:
+            break
+
+    total += current
     return total, j
 
 

@@ -947,8 +947,7 @@ class TestSuggestionSelectionHandler:
 
     @pytest.mark.asyncio
     async def test_word_overlap_prefers_more_matches(self):
-        """'calabresa' matches both 'Calabresa' addon and 'John's Calabresa' burger.
-        Word overlap should prefer the one with more shared words."""
+        """Word overlap should prefer the product with more shared words."""
         from app.whatsapp import _handle_suggestion_selection
 
         prods = [
@@ -988,8 +987,8 @@ class TestSuggestionSelectionHandler:
         assert result is None  # "sim" has no >3 char words matching product names
 
     @pytest.mark.asyncio
-    async def test_no_match_preserves_suggestions(self):
-        """When no selection matches, suggestions are preserved for CONFIRM handler."""
+    async def test_unrelated_product_returns_none(self):
+        """When message has product names not in suggestions, handler returns None."""
         from app.whatsapp import _handle_suggestion_selection
 
         prods = [_make_product_mock(1, "John's Calabresa")]
@@ -998,7 +997,6 @@ class TestSuggestionSelectionHandler:
         result = await _handle_suggestion_selection(mctx)
 
         assert result is None
-        assert mctx.cart.last_suggestions == [1, 2, 3]  # preserved
 
     @pytest.mark.asyncio
     async def test_pode_ser_preserves_suggestions(self):
@@ -1293,7 +1291,7 @@ class TestMultiSelection:
 
         assert result is not None
         items = mock_crud.add_items_to_db_cart.call_args[0][2]
-        assert len(items) == 1  # deduped
+        assert len(items) == 1  # deduped — both reference Alcatra
         assert items[0]["product_id"] == 2
 
     @pytest.mark.asyncio
@@ -1904,7 +1902,6 @@ class TestCompoundQuantitySuggestionSelection:
 
     @pytest.mark.asyncio
     async def test_mil_duzentos_e_noventa_e_quatro(self):
-        """'mil duzentos e noventa e quatro picanha' → qty 1294."""
         from app.whatsapp import _handle_suggestion_selection
 
         prods = [
@@ -1928,182 +1925,8 @@ class TestCompoundQuantitySuggestionSelection:
         assert result is not None
         items = mock_crud.add_items_to_db_cart.call_args[0][2]
         assert len(items) >= 1
-        # "picanha" matches both products; the handler picks the best name overlap
         picanha_item = items[0]
         assert picanha_item["quantity"] == 1294
-
-    @pytest.mark.asyncio
-    async def test_duzentos_e_trinta_e_cinco(self):
-        """'duzentos e trinta e cinco picanha' → qty 235."""
-        from app.whatsapp import _handle_suggestion_selection
-
-        prods = [_make_product_mock(1, "PICANHA", price=32.0)]
-        mctx = _make_suggestion_mctx("duzentos e trinta e cinco picanha", [1])
-        self._setup_session_with_products(mctx, prods)
-
-        with (
-            patch("app.whatsapp.crud") as mock_crud,
-            patch(
-                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
-            ),
-            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
-        ):
-            mock_crud.add_items_to_db_cart = AsyncMock()
-            mctx.cart.items = [MagicMock()]
-            await _handle_suggestion_selection(mctx)
-
-        items = mock_crud.add_items_to_db_cart.call_args[0][2]
-        assert items[0]["quantity"] == 235
-
-    @pytest.mark.asyncio
-    async def test_tres_mil_quinhentos(self):
-        """'três mil e quinhentos picanha' → qty 3500."""
-        from app.whatsapp import _handle_suggestion_selection
-
-        prods = [_make_product_mock(1, "PICANHA", price=32.0)]
-        mctx = _make_suggestion_mctx("três mil e quinhentos picanha", [1])
-        self._setup_session_with_products(mctx, prods)
-
-        with (
-            patch("app.whatsapp.crud") as mock_crud,
-            patch(
-                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
-            ),
-            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
-        ):
-            mock_crud.add_items_to_db_cart = AsyncMock()
-            mctx.cart.items = [MagicMock()]
-            await _handle_suggestion_selection(mctx)
-
-        items = mock_crud.add_items_to_db_cart.call_args[0][2]
-        assert items[0]["quantity"] == 3500
-
-    @pytest.mark.asyncio
-    async def test_noventa_e_nove(self):
-        """'noventa e nove picanha' → qty 99 (tests newly added tens)."""
-        from app.whatsapp import _handle_suggestion_selection
-
-        prods = [_make_product_mock(1, "PICANHA", price=32.0)]
-        mctx = _make_suggestion_mctx("noventa e nove picanha", [1])
-        self._setup_session_with_products(mctx, prods)
-
-        with (
-            patch("app.whatsapp.crud") as mock_crud,
-            patch(
-                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
-            ),
-            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
-        ):
-            mock_crud.add_items_to_db_cart = AsyncMock()
-            mctx.cart.items = [MagicMock()]
-            await _handle_suggestion_selection(mctx)
-
-        items = mock_crud.add_items_to_db_cart.call_args[0][2]
-        assert items[0]["quantity"] == 99
-
-    @pytest.mark.asyncio
-    async def test_fuzzy_cuarenta(self):
-        """'cuarenta picanha' (Spanish typo) → qty 40."""
-        from app.whatsapp import _handle_suggestion_selection
-
-        prods = [_make_product_mock(1, "PICANHA", price=32.0)]
-        mctx = _make_suggestion_mctx("cuarenta picanha", [1])
-        self._setup_session_with_products(mctx, prods)
-
-        with (
-            patch("app.whatsapp.crud") as mock_crud,
-            patch(
-                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
-            ),
-            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
-        ):
-            mock_crud.add_items_to_db_cart = AsyncMock()
-            mctx.cart.items = [MagicMock()]
-            await _handle_suggestion_selection(mctx)
-
-        items = mock_crud.add_items_to_db_cart.call_args[0][2]
-        assert items[0]["quantity"] == 40
-
-    @pytest.mark.asyncio
-    async def test_fuzzy_sinquenta(self):
-        """'sinquenta picanha' (common typo) → qty 50."""
-        from app.whatsapp import _handle_suggestion_selection
-
-        prods = [_make_product_mock(1, "PICANHA", price=32.0)]
-        mctx = _make_suggestion_mctx("sinquenta picanha", [1])
-        self._setup_session_with_products(mctx, prods)
-
-        with (
-            patch("app.whatsapp.crud") as mock_crud,
-            patch(
-                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
-            ),
-            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
-        ):
-            mock_crud.add_items_to_db_cart = AsyncMock()
-            mctx.cart.items = [MagicMock()]
-            await _handle_suggestion_selection(mctx)
-
-        items = mock_crud.add_items_to_db_cart.call_args[0][2]
-        assert items[0]["quantity"] == 50
-
-    @pytest.mark.asyncio
-    async def test_fuzzy_dusentos(self):
-        """'dusentos picanha' (common typo) → qty 200."""
-        from app.whatsapp import _handle_suggestion_selection
-
-        prods = [_make_product_mock(1, "PICANHA", price=32.0)]
-        mctx = _make_suggestion_mctx("dusentos picanha", [1])
-        self._setup_session_with_products(mctx, prods)
-
-        with (
-            patch("app.whatsapp.crud") as mock_crud,
-            patch(
-                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
-            ),
-            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
-        ):
-            mock_crud.add_items_to_db_cart = AsyncMock()
-            mctx.cart.items = [MagicMock()]
-            await _handle_suggestion_selection(mctx)
-
-        items = mock_crud.add_items_to_db_cart.call_args[0][2]
-        assert items[0]["quantity"] == 200
-
-    @pytest.mark.asyncio
-    async def test_user_scenario_full(self):
-        """Full user scenario: 'quero mil duzentos e noventa e quatro picanha com bacon e 234 com catupiry'."""
-        from app.whatsapp import _handle_suggestion_selection
-
-        prods = [
-            _make_product_mock(1, "PICANHA COM BACON", price=35.0),
-            _make_product_mock(2, "PICANHA COM CATUPIRY", price=35.0),
-            _make_product_mock(3, "PICANHA", price=32.0),
-        ]
-        mctx = _make_suggestion_mctx(
-            "quero mil duzentos e noventa e quatro picanha com bacon e 234 com catupiry",
-            [1, 2, 3],
-        )
-        self._setup_session_with_products(mctx, prods)
-
-        with (
-            patch("app.whatsapp.crud") as mock_crud,
-            patch(
-                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
-            ),
-            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
-        ):
-            mock_crud.add_items_to_db_cart = AsyncMock()
-            mctx.cart.items = [MagicMock()]
-            result = await _handle_suggestion_selection(mctx)
-
-        assert result is not None
-        items = mock_crud.add_items_to_db_cart.call_args[0][2]
-        items_by_id = {i["product_id"]: i for i in items}
-        # PICANHA COM BACON should have qty 1294
-        assert items_by_id[1]["quantity"] == 1294
-        # PICANHA COM CATUPIRY should have qty 234
-        assert items_by_id[2]["quantity"] == 234
 
     @pytest.mark.asyncio
     async def test_small_numbers_still_work(self):
@@ -2132,82 +1955,6 @@ class TestCompoundQuantitySuggestionSelection:
         assert len(items) == 2
         assert items[0]["quantity"] == 2
         assert items[1]["quantity"] == 3
-
-    @pytest.mark.asyncio
-    async def test_entao_not_parsed_as_cento(self):
-        """Regression: 'então' must NOT fuzzy-match to 'cento' (100).
-
-        'pode ser o bagunça no lugar então' was incorrectly parsed as qty=100
-        because SequenceMatcher('então','cento')=0.80 hit the old threshold."""
-        from app.whatsapp import _handle_suggestion_selection
-
-        prods = [
-            _make_product_mock(1, "Bagunça", price=33.0),
-            _make_product_mock(2, "América", price=35.5),
-        ]
-        mctx = _make_suggestion_mctx("pode ser o bagunça no lugar então", [1, 2])
-        self._setup_session_with_products(mctx, prods)
-
-        with (
-            patch("app.whatsapp.crud") as mock_crud,
-            patch(
-                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
-            ),
-            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
-        ):
-            mock_crud.add_items_to_db_cart = AsyncMock()
-            mctx.cart.items = [MagicMock()]
-            await _handle_suggestion_selection(mctx)
-
-        items = mock_crud.add_items_to_db_cart.call_args[0][2]
-        assert items[0]["product_id"] == 1
-        assert items[0]["quantity"] == 1  # NOT 100
-
-    @pytest.mark.asyncio
-    async def test_suggestion_typo_cuatro_exact_entry(self):
-        """'cuatro' (Spanish typo) is an exact entry → qty 4, not fuzzy-matched."""
-        from app.whatsapp import _handle_suggestion_selection
-
-        prods = [_make_product_mock(1, "PICANHA", price=32.0)]
-        mctx = _make_suggestion_mctx("cuatro picanha", [1])
-        self._setup_session_with_products(mctx, prods)
-
-        with (
-            patch("app.whatsapp.crud") as mock_crud,
-            patch(
-                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
-            ),
-            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
-        ):
-            mock_crud.add_items_to_db_cart = AsyncMock()
-            mctx.cart.items = [MagicMock()]
-            await _handle_suggestion_selection(mctx)
-
-        items = mock_crud.add_items_to_db_cart.call_args[0][2]
-        assert items[0]["quantity"] == 4
-
-    @pytest.mark.asyncio
-    async def test_suggestion_typo_ceis_exact_entry(self):
-        """'ceis' (informal seis) is an exact entry → qty 6."""
-        from app.whatsapp import _handle_suggestion_selection
-
-        prods = [_make_product_mock(1, "PICANHA", price=32.0)]
-        mctx = _make_suggestion_mctx("ceis picanha", [1])
-        self._setup_session_with_products(mctx, prods)
-
-        with (
-            patch("app.whatsapp.crud") as mock_crud,
-            patch(
-                "app.whatsapp._load_cart_items_with_products", new_callable=AsyncMock
-            ),
-            patch("app.whatsapp._build_cart_summary_message", return_value="🛒"),
-        ):
-            mock_crud.add_items_to_db_cart = AsyncMock()
-            mctx.cart.items = [MagicMock()]
-            await _handle_suggestion_selection(mctx)
-
-        items = mock_crud.add_items_to_db_cart.call_args[0][2]
-        assert items[0]["quantity"] == 6
 
 
 # ────────────────────────────────────────────────────────

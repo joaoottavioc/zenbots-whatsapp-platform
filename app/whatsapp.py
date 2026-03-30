@@ -164,7 +164,9 @@ async def _load_cart_items_with_products(
     from sqlalchemy.orm.attributes import set_committed_value
 
     # 1. Load cart items
-    result = await session.execute(select(CartItem).where(CartItem.cart_id == cart.id))
+    result = await session.execute(
+        select(CartItem).where(CartItem.cart_id == cart.id).order_by(CartItem.id)
+    )
     items = list(result.scalars().all())
     set_committed_value(cart, "items", items)
 
@@ -1292,6 +1294,144 @@ async def _handle_shopping_intent(
                 response_to_user = _build_cart_summary_message(cart, bot)
                 return response_to_user
 
+        # --- Programmatic cart ADD for multi-item orders ---
+        # When extract_items_with_quantities finds explicit qty+name pairs,
+        # match them directly against the product catalog. This is more
+        # reliable than the LLM for structured orders with typos.
+        if intent == "ADD" and _qty_pairs:
+            _real_pairs = [(q, n) for q, n in _qty_pairs if q > 1 or len(n.split()) > 1]
+            if _real_pairs:
+                # Load all available products for fuzzy matching
+                _all_prods_res = await session.execute(
+                    select(Product).where(
+                        Product.bot_id == bot.id,
+                        Product.is_available == True,  # noqa: E712
+                        Product.is_deleted == False,  # noqa: E712
+                    )
+                )
+                _all_prods = list(_all_prods_res.scalars().all())
+
+                if _all_prods:
+                    from difflib import SequenceMatcher as _ProdSM
+
+                    def _stem_word(w: str) -> str:
+                        if len(w) > 4 and w.endswith("s"):
+                            return w[:-1]
+                        return w
+
+                    def _norm_for_match(s: str) -> str:
+                        """Normalize for word-overlap matching: lowercase, strip
+                        apostrophes, replace hyphens with spaces, remove digits."""
+                        import re as _re
+
+                        s = s.lower().replace("'", "").replace("\u2019", "")
+                        s = s.replace("-", " ")
+                        s = _re.sub(r"\d+", "", s)
+                        return s.strip()
+
+                    def _fuzzy_word_overlap(
+                        words_a: set[str], words_b: set[str]
+                    ) -> int:
+                        """Count matching words with fuzzy tolerance for typos.
+                        Exact matches count, plus fuzzy matches (ratio >= 0.75)
+                        for words > 3 chars. Short words like 'com' are excluded."""
+                        score = 0
+                        _used_b = set()
+                        for wa in words_a:
+                            if len(wa) <= 3:
+                                continue
+                            if wa in words_b:
+                                score += 1
+                                _used_b.add(wa)
+                                continue
+                            # Fuzzy match for typos: "mignom"→"mignon", "chedar"→"cheddar"
+                            for wb in words_b:
+                                if wb in _used_b or len(wb) <= 3:
+                                    continue
+                                if _ProdSM(None, wa, wb).ratio() >= 0.75:
+                                    score += 1
+                                    _used_b.add(wb)
+                                    break
+                        return score
+
+                    def _match_product(
+                        item_name: str, exclude_ids: set[int]
+                    ) -> Product | None:
+                        name_norm = _norm_for_match(item_name)
+                        name_words = {
+                            _stem_word(w) for w in name_norm.split() if len(w) > 2
+                        }
+                        if not name_words:
+                            return None
+
+                        best, best_score = None, 0
+                        for p in _all_prods:
+                            if p.id in exclude_ids:
+                                continue
+                            p_norm = _norm_for_match(p.name)
+                            p_words = {
+                                _stem_word(w) for w in p_norm.split() if len(w) > 2
+                            }
+                            # Word overlap score with fuzzy typo tolerance
+                            overlap = _fuzzy_word_overlap(name_words, p_words)
+                            if overlap > best_score:
+                                best_score = overlap
+                                best = p
+                            elif overlap == best_score and overlap > 0 and best:
+                                # Tie-break: prefer higher string similarity
+                                new_sim = _ProdSM(None, name_norm, p_norm).ratio()
+                                old_sim = _ProdSM(
+                                    None, name_norm, best.name.lower()
+                                ).ratio()
+                                if new_sim > old_sim:
+                                    best = p
+                        return best if best_score >= 1 else None
+
+                    _prog_selections: list[tuple] = []
+                    _prog_seen: set[int] = set()
+                    _prog_unmatched: list[str] = []
+
+                    for qty, item_name in _real_pairs:
+                        matched = _match_product(item_name, _prog_seen)
+                        if matched:
+                            _prog_selections.append((matched, qty))
+                            _prog_seen.add(matched.id)
+                        elif item_name.strip() and len(item_name.strip()) >= 3:
+                            _prog_unmatched.append(item_name.strip())
+
+                    if _prog_selections:
+                        items_to_add = [
+                            {
+                                "product_id": p.id,
+                                "quantity": qty,
+                                "product_name": p.name,
+                            }
+                            for p, qty in _prog_selections
+                        ]
+                        skipped: list[str] = []
+                        await crud.add_items_to_db_cart(
+                            session,
+                            cart.id,
+                            items_to_add,
+                            bot_id=bot.id,
+                            skipped_items=skipped,
+                        )
+                        await _load_cart_items_with_products(cart, session)
+
+                        if cart.items:
+                            cart.state = CartState.SHOPPING
+                            clear_pending(cart)
+                            response_to_user = (
+                                _build_cart_summary_message(cart, bot, "✅")
+                                + "\n\nAdicionado! Mais alguma coisa ou *só isso* para finalizar? 😊"
+                            )
+                            if skipped:
+                                names = ", ".join(skipped)
+                                response_to_user += (
+                                    f"\n\n⚠️ Indisponível no momento: {names}"
+                                )
+                            return response_to_user
+
         _structured_query = rewrite_as_structured_order(_qty_pairs)
         found_products = await crud.find_relevant_products(
             session, bot.id, search_terms
@@ -2174,9 +2314,7 @@ async def _handle_suggestion_selection(mctx: MessageContext) -> str | None:
         cart.last_suggestions = None
         return None
 
-    # --- Multi-selection support ---
-    # Parse the message into parts (split on "e", ",", ";") and try to match
-    # each part against suggestions via ordinals, digits, or name overlap.
+    # --- Ordinal and name-matching helpers ---
     _ORDINALS = {
         "primeiro": 0,
         "primeira": 0,
@@ -2189,72 +2327,105 @@ async def _handle_suggestion_selection(mctx: MessageContext) -> str | None:
         "quinto": 4,
         "quinta": 4,
     }
-    _WRITTEN_QTY = {
-        "um": 1,
-        "uma": 1,
-        "dois": 2,
-        "duas": 2,
-        "três": 3,
-        "tres": 3,
-        "quatro": 4,
-        "cinco": 5,
-        "seis": 6,
-        "sete": 7,
-        "oito": 8,
-        "nove": 9,
-        "dez": 10,
-        "onze": 11,
-        "doze": 12,
-        "treze": 13,
-        "quatorze": 14,
-        "catorze": 14,
-        "quinze": 15,
-        "dezesseis": 16,
-        "dezessete": 17,
-        "dezoito": 18,
-        "dezenove": 19,
-        "vinte": 20,
-        "trinta": 30,
-        "quarenta": 40,
-        "cinquenta": 50,
-        "cem": 100,
-        "cento": 100,
-        "duzentos": 200,
-        "duzentas": 200,
-        "trezentos": 300,
-        "trezentas": 300,
-        "mil": 1000,
-        "sessenta": 60,
-        "setenta": 70,
-        "oitenta": 80,
-        "noventa": 90,
-        "quatrocentos": 400,
-        "quatrocentas": 400,
-        "quinhentos": 500,
-        "quinhentas": 500,
-        "seiscentos": 600,
-        "seiscentas": 600,
-        "setecentos": 700,
-        "setecentas": 700,
-        "oitocentos": 800,
-        "oitocentas": 800,
-        "novecentos": 900,
-        "novecentas": 900,
-        # Common typos / Spanishisms
-        "cuatro": 4,
-        "cuarenta": 40,
-        "sinco": 5,
-        "sinquenta": 50,
-        "ceis": 6,
-        "tresentos": 300,
-        "tresentas": 300,
-        "dusentos": 200,
-        "dusentas": 200,
-    }
+
+    def _stem(w: str) -> str:
+        if len(w) > 4 and w.endswith("s"):
+            return w[:-1]
+        return w
+
+    def _match_name_to_suggestion(
+        item_name: str,
+        exclude_ids: set[int] | None = None,
+    ) -> Product | None:
+        """Match an item name (from extraction) against suggestions by ordinal or name overlap."""
+        name_lower = item_name.lower().strip()
+        _exclude = exclude_ids or set()
+
+        # 1. Ordinal match: "primeiro" → suggestion[0]
+        for word, idx in _ORDINALS.items():
+            if word in name_lower and 0 <= idx < len(suggestions):
+                if suggestions[idx].id not in _exclude:
+                    return suggestions[idx]
+
+        # 2. Name overlap match (normalize hyphens for "coca cola" vs "Coca-Cola")
+        name_norm = name_lower.replace("'", "").replace("\u2019", "").replace("-", " ")
+        name_words = {_stem(w) for w in name_norm.split() if len(w) > 3}
+        if not name_words:
+            return None
+        best_match, best_score = None, 0
+        for p in suggestions:
+            if p.id in _exclude:
+                continue
+            p_norm = (
+                p.name.lower().replace("'", "").replace("\u2019", "").replace("-", " ")
+            )
+            p_words = {_stem(w) for w in p_norm.split() if len(w) > 3}
+            score = len(name_words & p_words)
+            if score > best_score:
+                best_score = score
+                best_match = p
+        return best_match if best_score >= 1 else None
+
+    # --- Primary path: robust parsing via extract_items_with_quantities ---
+    # Handles ordinals ("noventa e dois do primeiro e treze do segundo")
+    # and product-name orders ("quatro picanha com baco doze mignon com cheddar").
+    # Falls through to legacy path for simple selections ("2", "o primeiro", "sim").
+    qty_pairs = extract_items_with_quantities(text)
+    if qty_pairs:
+        selections: list[tuple] = []
+        seen_ids: set[int] = set()
+        unmatched_names: list[str] = []
+
+        for qty, item_name in qty_pairs:
+            matched = _match_name_to_suggestion(item_name, exclude_ids=seen_ids)
+            if matched:
+                selections.append((matched, qty))
+                seen_ids.add(matched.id)
+            elif qty > 1 and item_name.strip() and len(item_name.strip()) >= 3:
+                # Only route to shopping flow if there was an explicit quantity.
+                # Default qty=1 pairs (e.g. (1, "veja")) are noise.
+                unmatched_names.append(item_name.strip())
+
+        if selections:
+            items_to_add = [
+                {"product_id": p.id, "quantity": qty, "product_name": p.name}
+                for p, qty in selections
+            ]
+            skipped: list[str] = []
+            await crud.add_items_to_db_cart(
+                session,
+                cart.id,
+                items_to_add,
+                bot_id=bot.id,
+                skipped_items=skipped,
+            )
+            await _load_cart_items_with_products(cart, session)
+            cart.last_suggestions = None
+            clear_pending(cart)
+
+            if not cart.items:
+                names = ", ".join(f"*{p.name}*" for p, _ in selections)
+                return f"{names} não está disponível no momento. 😕 O que mais posso ajudar?"
+
+            cart.state = CartState.SHOPPING
+            response = (
+                _build_cart_summary_message(cart, bot, "✅")
+                + "\n\nAdicionado! Mais alguma coisa ou *só isso* para finalizar? 😊"
+            )
+            if skipped:
+                names = ", ".join(skipped)
+                response += f"\n\n⚠️ Indisponível no momento: {names}"
+
+            if unmatched_names:
+                return response, unmatched_names
+            return response
+
+    # --- Legacy path: simple selections ("2", "o primeiro", "1 e 3", "sim") ---
+    # extract_items_with_quantities returned empty — message has no qty+item pairs.
+    from app.item_extraction import _QTY_VALUES
 
     def _fuzzy_qty(word: str) -> int | None:
-        """Fuzzy lookup for quantity words. Handles typos like 'cuatro'→4, 'sincoenta'→50."""
-        val = _WRITTEN_QTY.get(word)
+        val = _QTY_VALUES.get(word)
         if val is not None:
             return val
         if len(word) < 4:
@@ -2262,7 +2433,7 @@ async def _handle_suggestion_selection(mctx: MessageContext) -> str | None:
         from difflib import SequenceMatcher
 
         best_val, best_ratio = None, 0.0
-        for key, v in _WRITTEN_QTY.items():
+        for key, v in _QTY_VALUES.items():
             if abs(len(key) - len(word)) > 3:
                 continue
             ratio = SequenceMatcher(None, word, key).ratio()
@@ -2272,8 +2443,6 @@ async def _handle_suggestion_selection(mctx: MessageContext) -> str | None:
         return best_val if best_ratio >= 0.85 else None
 
     def _parse_compound_qty(words: list[str]) -> int | None:
-        """Parse a compound Portuguese number like ['vinte', 'e', 'sete'] → 27.
-        Handles 'mil' as a multiplier: 'três mil' → 3000, 'mil duzentos' → 1200."""
         total = 0
         current = 0
         found_any = False
@@ -2285,12 +2454,10 @@ async def _handle_suggestion_selection(mctx: MessageContext) -> str | None:
                 continue
             found_any = True
             if val == 1000:
-                # "mil" multiplies what came before (or 1 if nothing), then flushes
                 current = max(current, 1) * 1000
                 total += current
                 current = 0
             elif val >= 100:
-                # Hundreds add to current group: "mil duzentos" → total=1000, current+=200
                 current += val
             else:
                 current += val
@@ -2298,20 +2465,16 @@ async def _handle_suggestion_selection(mctx: MessageContext) -> str | None:
         return total if found_any else None
 
     def _parse_qty_from_text(part_text: str) -> int:
-        """Extract quantity from a text fragment, supporting compound numbers."""
         words = part_text.lower().split()
-        # Try compound number first (handles "vinte e sete" → 27)
         compound = _parse_compound_qty(words)
         if compound is not None:
             return compound
-        # Fallback to digit match
         qty_digit = re.search(r"\b(\d{1,4})\b", part_text)
         if qty_digit:
             return int(qty_digit.group(1))
         return 1
 
     def _match_part(part: str) -> tuple | None:
-        """Try to match a message part to a suggestion. Returns (product, qty) or None."""
         part_lower = part.lower().strip()
         if not part_lower:
             return None
@@ -2329,47 +2492,29 @@ async def _handle_suggestion_selection(mctx: MessageContext) -> str | None:
             if 0 <= idx < len(suggestions):
                 return (suggestions[idx], 1)
 
-        # Try name overlap match (with basic plural normalization)
-        def _stem(w: str) -> str:
-            """Simple Portuguese plural normalization — strip trailing 's'."""
-            if len(w) > 4 and w.endswith("s"):
-                return w[:-1]
-            return w
-
+        # Try name overlap match
         part_norm = part_lower.replace("'", "").replace("\u2019", "")
         part_words = {_stem(w) for w in part_norm.split() if len(w) > 3}
         if part_words:
-            best_match, best_score = None, 0
-            for p in suggestions:
-                name_norm = p.name.lower().replace("'", "").replace("\u2019", "")
-                name_words = {_stem(w) for w in name_norm.split() if len(w) > 3}
-                score = len(part_words & name_words)
-                if score > best_score:
-                    best_score = score
-                    best_match = p
-            if best_score >= 1 and best_match:
-                return (best_match, _parse_qty_from_text(part_lower))
+            matched = _match_name_to_suggestion(part_lower)
+            if matched:
+                return (matched, _parse_qty_from_text(part_lower))
 
         return None
 
     # Merge compound numbers into digits before splitting so "vinte e sete
     # do primeiro" doesn't get split at the "e" between "vinte" and "sete".
-    # e.g. "vinte e sete do primeiro" → "27 do primeiro"
-    # Ordinals are excluded — they're item selectors, not quantities.
     def _merge_compound_numbers(txt: str) -> str:
         words = txt.lower().split()
         result = []
         i = 0
         while i < len(words):
             if _fuzzy_qty(words[i]) is not None:
-                # Start of a potential compound number
                 j = i
                 while j + 1 < len(words):
                     nxt = words[j + 1]
-                    # Adjacent qty word: "mil duzentos"
                     if _fuzzy_qty(nxt) is not None:
                         j += 1
-                    # "e" + qty word: "vinte e sete"
                     elif (
                         nxt == "e"
                         and j + 2 < len(words)
@@ -2379,13 +2524,11 @@ async def _handle_suggestion_selection(mctx: MessageContext) -> str | None:
                     else:
                         break
                 if j > i:
-                    # Compound number — merge into a single digit
                     qty_words = words[i : j + 1]
                     val = _parse_compound_qty(qty_words)
                     result.append(str(val) if val else words[i])
                     i = j + 1
                 else:
-                    # Single qty word — leave as-is for _parse_qty_from_text
                     result.append(words[i])
                     i += 1
             else:
@@ -2395,24 +2538,26 @@ async def _handle_suggestion_selection(mctx: MessageContext) -> str | None:
 
     _merged = _merge_compound_numbers(text)
     parts = re.split(r"\s*(?:\be\b|,|;)\s*", _merged, flags=re.IGNORECASE)
-    selections: list[tuple] = []  # [(product, quantity), ...]
-    seen_ids: set[int] = set()
+    selections_legacy: list[tuple] = []
+    seen_ids_legacy: set[int] = set()
 
     unmatched_parts: list[str] = []
     for part in parts:
         match = _match_part(part)
-        if match and match[0].id not in seen_ids:
-            selections.append(match)
-            seen_ids.add(match[0].id)
+        if match and match[0].id not in seen_ids_legacy:
+            selections_legacy.append(match)
+            seen_ids_legacy.add(match[0].id)
         elif part.strip():
             unmatched_parts.append(part.strip())
 
     # Fallback: if no parts matched but the whole message matches, use it
-    if not selections:
+    if not selections_legacy:
         whole_match = _match_part(text)
         if whole_match:
-            selections.append(whole_match)
-            unmatched_parts = []  # whole message matched, no leftovers
+            selections_legacy.append(whole_match)
+            unmatched_parts = []
+
+    selections = selections_legacy
 
     if not selections:
         return None
@@ -3451,6 +3596,44 @@ async def resolve_intent(text_body, cart, cart_items_for_intent, found_products=
                 thresh,
             )
             final_intent = "ADD"
+        elif router_intent == "ADD":
+            # Word-ratio guard: if most words survive extraction AND no
+            # qty+item pairs were found, the message is conversational noise.
+            # If extract_items_with_quantities finds pairs, the message
+            # contains "N product" patterns and is clearly an order.
+            _qty_pairs = extract_items_with_quantities(text_body)
+            # A real order has at least one explicit quantity (not default 1).
+            # Conversational messages produce only (1, "noise") default pairs.
+            _has_explicit_qty = any(q > 1 for q, _ in _qty_pairs)
+            if _has_explicit_qty:
+                logger.info(
+                    "[INTENT] moderate ADD confirmed by explicit qty: score=%.2f"
+                    " pairs=%s",
+                    router_score,
+                    [(q, n[:20]) for q, n in _qty_pairs],
+                )
+                final_intent = "ADD"
+            else:
+                _ext = extract_items_local(text_body)
+                _owc = len(text_body.split())
+                _ewc = sum(len(t.split()) for t in _ext)
+                _rat = _ewc / _owc if _owc > 0 else 1.0
+                if _rat > 0.5:
+                    logger.info(
+                        "[INTENT] moderate ADD overridden by word-ratio: score=%.2f"
+                        " ratio=%.2f → GREETING_OR_QUESTION",
+                        router_score,
+                        _rat,
+                    )
+                    final_intent = "GREETING_OR_QUESTION"
+                else:
+                    logger.info(
+                        "[INTENT] router moderate ADD confirmed by word-ratio:"
+                        " score=%.2f ratio=%.2f",
+                        router_score,
+                        _rat,
+                    )
+                    final_intent = "ADD"
         else:
             logger.info(
                 "[INTENT] router moderate: %s score=%.2f threshold=%.2f (no LLM fallback)",
