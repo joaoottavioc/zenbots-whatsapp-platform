@@ -1430,6 +1430,19 @@ async def _handle_shopping_intent(
                                 response_to_user += (
                                     f"\n\n⚠️ Indisponível no momento: {names}"
                                 )
+                            # Check unmatched items against unavailable products
+                            if _prog_unmatched:
+                                _unavail_hits = await crud.find_unavailable_products(
+                                    session, bot.id, _prog_unmatched
+                                )
+                                if _unavail_hits:
+                                    _unavail_names = ", ".join(
+                                        f"*{p.name}*" for p in _unavail_hits
+                                    )
+                                    _verb = (
+                                        "estão" if len(_unavail_hits) > 1 else "está"
+                                    )
+                                    response_to_user += f"\n\nPuxa, {_unavail_names} {_verb} em falta no momento. 😕"
                             return response_to_user
 
         _structured_query = rewrite_as_structured_order(_qty_pairs)
@@ -1684,6 +1697,24 @@ async def _handle_shopping_intent(
                         break
 
                 if tool_name == "add_items_to_cart":
+                    # Guardrail: block LLM from adding items when the
+                    # customer's message had no product references.
+                    # This prevents the LLM from proactively adding items
+                    # when the customer asked for suggestions, said something
+                    # conversational, etc.
+                    if not found_products and not _qty_pairs:
+                        _src = _full_menu or []
+                        _filtered = await _get_meal_suggestions(session, bot.id, _src)
+                        if _filtered:
+                            cart.last_suggestions = [p.id for p in _filtered]
+                            response_to_user = _format_product_suggestions_message(
+                                _filtered,
+                                "Posso te ajudar! Veja nossas opções:",
+                            )
+                        else:
+                            response_to_user = "O que você gostaria de pedir? 😊"
+                        break
+
                     items_arg = tool_args.get("items", [])
 
                     if not items_arg:
@@ -2786,6 +2817,67 @@ async def _process_contact_message_inner(
             await session.commit()
             return
 
+        # Suggestion selection returned None (no match). If the message
+        # has no product references and no other clear intent (show cart,
+        # finalize, etc.), the customer is likely indecisive
+        # ("nao sei o que decidir", "hmm", "tô em dúvida"). Re-show
+        # suggestions to keep the conversation alive.
+        _lower = text_body.lower()
+        # Don't re-show for messages with clear non-suggestion intent
+        _PASSTHROUGH_KEYWORDS = {
+            "pedido",
+            "carrinho",
+            "cart",
+            "finalizar",
+            "fechar",
+            "pagar",
+            "pagamento",
+            "pix",
+            "endereço",
+            "endereco",
+            "entrega",
+            "retirada",
+            "cancelar",
+            "limpar",
+            "obrigado",
+            "valeu",
+            "tchau",
+            "até",
+            "tirar",
+            "tira",
+            "remover",
+            "remove",
+        }
+        _has_passthrough = any(kw in _lower for kw in _PASSTHROUGH_KEYWORDS)
+        if not _has_passthrough:
+            _sug_ids = cart.last_suggestions
+            _sug_prods_result = await session.execute(
+                select(Product).where(Product.id.in_(_sug_ids))
+            )
+            _sug_prods = list(_sug_prods_result.scalars().all())
+            # Preserve original suggestion order
+            _id_order = {pid: i for i, pid in enumerate(_sug_ids)}
+            _sug_prods.sort(key=lambda p: _id_order.get(p.id, 999))
+            if _sug_prods:
+                _reshow_msg = _format_product_suggestions_message(
+                    _sug_prods,
+                    "Sem problemas! Dá uma olhada nas nossas sugestões:",
+                )
+                cart.last_activity_at = utcnow()
+                session.add(cart)
+                await session.flush()
+                await send_whatsapp_message(
+                    contact_number,
+                    _reshow_msg,
+                    token=current_token,
+                    phone_id=current_phone_id,
+                )
+                await crud.add_interaction_to_history(
+                    session, bot.id, contact_number, text_body, _reshow_msg
+                )
+                await session.commit()
+                return
+
     # A lógica de reset de estado continua a mesma, mas agora só será
     # acionada por intenções de compra genuínas.
     intents_that_resume_shopping = [
@@ -3100,30 +3192,47 @@ def _programmatic_cart_reduce(
     if not qty_pairs or not cart_items:
         return None
 
-    updates: list[tuple] = []
+    updates: dict[int, tuple] = {}  # cart_item.id → (cart_item, new_qty)
     response_parts: list[str] = []
 
+    def _norm(s: str) -> str:
+        """Normalize: lowercase, hyphens→spaces, strip digits."""
+        import re as _re
+
+        s = s.lower().replace("-", " ")
+        s = _re.sub(r"\d+\w*", "", s)  # remove "600ml", "2l", etc.
+        return s.strip()
+
+    def _word_overlap_score(req: str, product: str) -> float:
+        """Score match by counting shared significant words (len > 2).
+        Returns (overlap_count, seq_ratio) for tie-breaking."""
+        req_words = {w for w in req.split() if len(w) > 2}
+        prod_words = {w for w in product.split() if len(w) > 2}
+        if not req_words:
+            return 0.0
+        overlap = len(req_words & prod_words)
+        return overlap + SequenceMatcher(None, req, product).ratio() * 0.1
+
     for req_qty, req_name in qty_pairs:
-        req_lower = req_name.lower().strip()
+        req_lower = _norm(req_name)
         best_item = None
-        best_ratio = 0.0
+        best_score = 0.0
 
         for ci in cart_items:
-            pname = ci.product.name.lower()
-            # Exact substring match
-            if req_lower in pname or pname in req_lower:
-                best_item = ci
-                best_ratio = 1.0
-                break
-            # Fuzzy match
-            ratio = SequenceMatcher(None, req_lower, pname).ratio()
-            if ratio > best_ratio:
-                best_ratio = ratio
+            pname = _norm(ci.product.name)
+            score = _word_overlap_score(req_lower, pname)
+            if score > best_score:
+                best_score = score
                 best_item = ci
 
-        if best_item and best_ratio >= 0.6:
-            new_qty = max(0, best_item.quantity - req_qty)
-            updates.append((best_item, new_qty))
+        if best_item and best_score >= 1.0:
+            # If this cart item was already matched, stack the reduction
+            if best_item.id in updates:
+                _, prev_qty = updates[best_item.id]
+                new_qty = max(0, prev_qty - req_qty)
+            else:
+                new_qty = max(0, best_item.quantity - req_qty)
+            updates[best_item.id] = (best_item, new_qty)
             if new_qty == 0:
                 response_parts.append(f"Removido {best_item.product.name} do carrinho.")
             else:
@@ -3131,18 +3240,18 @@ def _programmatic_cart_reduce(
                     f"{best_item.product.name}: {best_item.quantity} → {new_qty}"
                 )
             logger.info(
-                "[REDUCE] %s: %d - %d = %d (match=%.2f)",
+                "[REDUCE] %s: %d - %d = %d (score=%.2f)",
                 best_item.product.name,
                 best_item.quantity,
                 req_qty,
                 new_qty,
-                best_ratio,
+                best_score,
             )
 
     if not updates:
         return None
 
-    return updates, response_parts
+    return list(updates.values()), response_parts
 
 
 def _build_cart_summary_message(cart: ShoppingCart, bot: Bot, emoji: str = "🛒") -> str:
