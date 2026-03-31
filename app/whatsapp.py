@@ -2852,7 +2852,10 @@ async def _process_contact_message_inner(
         if not _has_passthrough:
             _sug_ids = cart.last_suggestions
             _sug_prods_result = await session.execute(
-                select(Product).where(Product.id.in_(_sug_ids))
+                select(Product).where(
+                    Product.id.in_(_sug_ids),
+                    Product.is_deleted == False,  # noqa: E712
+                )
             )
             _sug_prods = list(_sug_prods_result.scalars().all())
             # Preserve original suggestion order
@@ -3196,11 +3199,12 @@ def _programmatic_cart_reduce(
     response_parts: list[str] = []
 
     def _norm(s: str) -> str:
-        """Normalize: lowercase, hyphens→spaces, strip digits."""
+        """Normalize: lowercase, hyphens→spaces, strip digits and punctuation."""
         import re as _re
 
         s = s.lower().replace("-", " ")
         s = _re.sub(r"\d+\w*", "", s)  # remove "600ml", "2l", etc.
+        s = _re.sub(r"[^\w\sáàâãéèêíìîóòôõúùûç]", " ", s)  # strip punctuation
         return s.strip()
 
     def _word_overlap_score(req: str, product: str) -> float:
