@@ -99,6 +99,12 @@ PROTOS: Dict[str, List[str]] = {
         "queria ver os vinhos",
         "o que tem de bom",
         "me sugere algo",
+        "tem dicas de pedidos",
+        "dicas de pedidos",
+        "sugestões de pedidos",
+        "me manda sugestões",
+        "o que sugere",
+        "o que tem pra pedir",
     ],
     "GREETING_OR_QUESTION": [
         "oi",

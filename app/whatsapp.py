@@ -2782,6 +2782,14 @@ async def _process_contact_message_inner(
     _is_removal = _REMOVE_KEYWORD_RE.search(text_body)
     if _is_removal and cart.last_suggestions:
         cart.last_suggestions = None
+    # Clear suggestions when the message is clearly a multi-item order
+    # (e.g., "8 alcatra e 3 coca cola"). Without this, the suggestion
+    # handler misinterprets digits as suggestion selections.
+    if cart.last_suggestions:
+        _order_pairs = extract_items_with_quantities(text_body)
+        _real_order_pairs = [(q, n) for q, n in _order_pairs if q > 1]
+        if len(_real_order_pairs) >= 2:
+            cart.last_suggestions = None
     if cart.state in [CartState.GREETING, CartState.SHOPPING] and cart.last_suggestions:
         sug_result = await _handle_suggestion_selection(mctx)
         if sug_result is not None:
@@ -2824,12 +2832,16 @@ async def _process_contact_message_inner(
         # suggestions to keep the conversation alive.
         _lower = text_body.lower()
         # Don't re-show for messages with clear non-suggestion intent
-        _PASSTHROUGH_KEYWORDS = {
-            "pedido",
-            "carrinho",
-            "cart",
+        # Phrases that signal clear non-suggestion intent.
+        # Use phrases (not single words) to avoid false positives
+        # like "tem dicas de pedidos?" matching "pedido".
+        _PASSTHROUGH_PHRASES = [
+            "meu pedido",
+            "meus pedidos",
+            "meu carrinho",
             "finalizar",
-            "fechar",
+            "fechar pedido",
+            "fechar o pedido",
             "pagar",
             "pagamento",
             "pix",
@@ -2842,14 +2854,25 @@ async def _process_contact_message_inner(
             "obrigado",
             "valeu",
             "tchau",
-            "até",
+            "até logo",
             "tirar",
-            "tira",
+            "tira ",
             "remover",
-            "remove",
-        }
-        _has_passthrough = any(kw in _lower for kw in _PASSTHROUGH_KEYWORDS)
-        if not _has_passthrough:
+            "remove ",
+            "qual o total",
+            "quanto deu",
+            "quanto ficou",
+        ]
+        _has_passthrough = any(p in _lower for p in _PASSTHROUGH_PHRASES)
+        # Also check for product references — if the message has explicit
+        # quantities (digits or written numbers > 1), it's an order, not
+        # indecision. Let it fall through to the shopping flow.
+        import regex as _sug_re
+
+        _has_digit = bool(_sug_re.search(r"\d", text_body))
+        _ext_pairs = extract_items_with_quantities(text_body) if not _has_digit else []
+        _has_product_ref = _has_digit or any(q > 1 for q, _ in _ext_pairs)
+        if not _has_passthrough and not _has_product_ref:
             _sug_ids = cart.last_suggestions
             _sug_prods_result = await session.execute(
                 select(Product).where(
@@ -3634,7 +3657,7 @@ _REMOVE_KEYWORD_RE = re.compile(
     re.IGNORECASE,
 )
 _ADD_KEYWORD_RE = re.compile(
-    r"(?:quero|manda|coloca|bota|adiciona|me\s+v[eê]|vou\s+querer|pode\s+mandar)"
+    r"(?:quero|manda(?:\s+ver)?|coloca|bota|adiciona|me\s+v[eê]|vou\s+querer|pode\s+mandar)"
     rf"\s+(?:{_ADD_QTY_WORDS}|\d+)\s*\(?[a-záàâãéèêíìîóòôõúùûç]",
     re.IGNORECASE,
 )
@@ -3662,6 +3685,27 @@ async def resolve_intent(text_body, cart, cart_items_for_intent, found_products=
     if _ADD_KEYWORD_RE.search(text_body):
         logger.info("[INTENT] pre-router ADD guard matched: %r", text_body[:80])
         final_intent = "ADD"
+        if in_checkout and final_intent in _CHECKOUT_INTENT_OVERRIDES:
+            final_intent = _CHECKOUT_INTENT_OVERRIDES[final_intent]
+        return final_intent
+
+    # 0d. Pre-router guard: "dicas/sugestões de pedido(s)" is REQUEST_SUGGESTION,
+    # not ORDER_REPEAT. The word "pedidos" shifts the embedding toward ORDER_REPEAT
+    # but the customer is asking for recommendations, not repeating a previous order.
+    _lower_body = text_body.lower()
+    _SUGGESTION_PHRASES = [
+        "dicas de pedido",
+        "sugestões de pedido",
+        "sugestão de pedido",
+        "dica de pedido",
+        "me manda sugest",
+        "manda sugest",
+        "tem sugest",
+        "quero sugest",
+    ]
+    if any(p in _lower_body for p in _SUGGESTION_PHRASES):
+        logger.info("[INTENT] pre-router SUGGESTION guard matched: %r", text_body[:80])
+        final_intent = "REQUEST_SUGGESTION"
         if in_checkout and final_intent in _CHECKOUT_INTENT_OVERRIDES:
             final_intent = _CHECKOUT_INTENT_OVERRIDES[final_intent]
         return final_intent
