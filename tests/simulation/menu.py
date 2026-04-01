@@ -161,6 +161,31 @@ PRODUCTS = [
         "keywords": "sorvete, bola, sobremesa, gelato",
         "is_available": True,
     },
+    # ── Short-name products (stress-test 3-char word matching) ──
+    {
+        "name": "Big Mix",
+        "price": 35.00,
+        "category": "Lanches Clássicos",
+        "description": "Pão, hambúrguer duplo, bacon, ovo, queijo, salada completa",
+        "keywords": "big, mix, duplo, completo",
+        "is_available": True,
+    },
+    {
+        "name": "Hot Dog",
+        "price": 15.00,
+        "category": "Lanches Clássicos",
+        "description": "Pão de hot dog, salsicha, purê, vinagrete, batata palha",
+        "keywords": "hot, dog, cachorro quente, salsicha",
+        "is_available": True,
+    },
+    {
+        "name": "Fit Wrap",
+        "price": 29.00,
+        "category": "Lanches Clássicos",
+        "description": "Wrap integral, frango grelhado, rúcula, tomate seco",
+        "keywords": "fit, wrap, integral, frango, light",
+        "is_available": True,
+    },
     # ── Unavailable (em falta) ──
     {
         "name": "X-Egg",

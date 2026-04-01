@@ -1440,28 +1440,47 @@ async def get_last_completed_order_items(
 
 
 async def cancel_expired_pix_orders(session: AsyncSession):
-    """Cancela pedidos PIX pendentes há mais de 15 minutos."""
+    """Cancela pedidos PIX pendentes há mais de 15 minutos.
+
+    Returns a list of dicts with contact/bot info for each canceled order,
+    so the caller can send WhatsApp notifications.
+    """
     limit_time = utcnow() - timedelta(minutes=15)
 
-    query = select(Order).where(
-        Order.status == OrderStatus.PENDING,
-        Order.payment_method == "pix",
-        Order.created_at < limit_time,
+    query = (
+        select(Order)
+        .where(
+            Order.status == OrderStatus.PENDING,
+            Order.payment_method == "pix",
+            Order.created_at < limit_time,
+        )
+        .options(
+            selectinload(Order.contact).selectinload(Contact.bot),
+        )
     )
 
     result = await session.execute(query)
     expired_orders = result.scalars().all()
 
-    count = 0
+    canceled_info: list[dict] = []
     for order in expired_orders:
         order.status = OrderStatus.CANCELED
         session.add(order)
-        count += 1
+        # Capture info before commit expires objects
+        if order.contact and order.contact.bot:
+            canceled_info.append(
+                {
+                    "order_id": order.id,
+                    "contact_phone": order.contact.phone_number,
+                    "bot_token": order.contact.bot.whatsapp_token,
+                    "bot_phone_id": order.contact.bot.phone_number_id,
+                }
+            )
         logger.info("Order #%s expired (PIX > 15min), auto-canceled", order.id)
 
-    if count > 0:
+    if canceled_info:
         await session.commit()
-    return count
+    return canceled_info
 
 
 # ────────────────────────────────────────────────────────────────

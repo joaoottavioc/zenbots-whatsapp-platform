@@ -198,6 +198,99 @@ def _payment_prompt(has_pix: bool) -> str:
     return "Como quer pagar?\n\n💳 *Cartão* (na entrega)\n💵 *Dinheiro*"
 
 
+async def _download_whatsapp_media(media_id: str, token: str) -> bytes:
+    """Download media from WhatsApp Cloud API (two-step: get URL, then download).
+
+    Args:
+        media_id: The media ID from the WhatsApp message payload.
+        token: Bot's WhatsApp access token.
+
+    Returns:
+        Raw audio bytes.
+
+    Raises:
+        httpx.HTTPStatusError: On download failure.
+    """
+    headers = {"Authorization": f"Bearer {token}"}
+    timeout = httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0)
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        # Step 1: Get download URL
+        meta_resp = await client.get(
+            f"https://graph.facebook.com/v20.0/{media_id}",
+            headers=headers,
+        )
+        meta_resp.raise_for_status()
+        download_url = meta_resp.json()["url"]
+
+        # Step 2: Download the audio binary
+        audio_resp = await client.get(download_url, headers=headers)
+        audio_resp.raise_for_status()
+        return audio_resp.content
+
+
+async def _build_whisper_prompt(session, bot) -> str:
+    """Build a Whisper conditioning prompt from the bot's product catalog.
+
+    Includes restaurant name, ordering phrases, product names (deduplicated),
+    and keywords. Limited to ~800 chars (~224 Whisper tokens).
+    """
+    products = await crud.get_products_by_bot_id(session, bot.id)
+    available = [
+        p for p in products if p.is_available and not getattr(p, "is_deleted", False)
+    ]
+
+    # 1. Restaurant name
+    parts: list[str] = []
+    if bot.restaurant_name:
+        parts.append(bot.restaurant_name)
+
+    # 2. Common ordering phrases
+    parts.extend(
+        [
+            "quero",
+            "me manda",
+            "pode mandar",
+            "vou querer",
+            "tira",
+            "sem",
+            "com extra",
+            "adicional",
+            "pedido",
+            "entrega",
+            "retirada",
+            "pix",
+            "dinheiro",
+        ]
+    )
+
+    # 3. Product names — deduplicated at word level, longest names first
+    seen_words: set[str] = set()
+    for p in sorted(available, key=lambda x: len(x.name), reverse=True):
+        for word in p.name.split():
+            w_lower = word.lower().strip(".,;:!?")
+            if w_lower not in seen_words and len(w_lower) > 2:
+                parts.append(word)
+                seen_words.add(w_lower)
+
+    # 4. Keywords from products (if not already covered by names)
+    for p in available:
+        if p.keywords:
+            for kw in p.keywords.split(","):
+                kw = kw.strip()
+                if kw.lower() not in seen_words and len(kw) > 2:
+                    parts.append(kw)
+                    seen_words.add(kw.lower())
+
+    prompt = ", ".join(parts)
+
+    # Truncate to ~800 chars (Whisper's ~224 token limit)
+    if len(prompt) > 800:
+        prompt = prompt[:800].rsplit(",", 1)[0]
+
+    return prompt
+
+
 async def _check_rate_limit(contact_number: str, phone_id: str = "") -> bool:
     """Returns True if the sender is rate-limited (caller should stop)."""
     if await is_spamming(
@@ -373,16 +466,23 @@ async def _send_welcome_with_menu(
         if contact.default_address_json:
             addr = contact.default_address_json.get("full_address", "")
             if addr:
-                greeting += f"\n📍 Endereço salvo: _{addr}_"
-        greeting += '\n\nDiga *"repetir pedido"* ou escolha algo novo no cardápio!'
+                # Collapse multi-line address to single line for clean formatting
+                addr_oneline = addr.replace("\n", ", ").strip(", ")
+                greeting += f"\n\n📍 Endereço salvo: {addr_oneline}"
+        greeting += (
+            "\n\nDiga *repetir pedido* para pedir o mesmo"
+            " ou escolha algo novo no cardápio!"
+            f"\n\n{example_text}"
+        )
     else:
-        greeting = f"Olá! Bem-vindo(a) ao *{restaurant}*! 😊"
+        greeting = (
+            f"Olá! Bem-vindo(a) ao *{restaurant}*! 😊"
+            "\n\nDá uma olhada no cardápio e me conta o que vai querer"
+            " — pode digitar ou mandar áudio!"
+            f"\n\n{example_text}"
+        )
 
-    response_to_user = (
-        f"{greeting}\n\n"
-        "Dá uma olhada no cardápio e me conta o que vai querer — pode digitar ou mandar áudio!\n\n"
-        f"{example_text}"
-    )
+    response_to_user = greeting
     menu_url = _presign_menu_url(bot.menu_url)
     media_type = None
     if menu_url:
@@ -453,7 +553,8 @@ async def _handle_delivery_method(mctx: MessageContext) -> str | None:
         if saved_addr:
             cart.pending_address = saved_addr
             cart.state = CartState.AWAITING_ADDRESS_CONFIRMATION
-            response = f"Entregar no endereço salvo?\n📍 _{saved_addr}_\n\nResponda *Sim* ou *Não* (para informar outro endereço)."
+            _addr_oneline = saved_addr.replace("\n", ", ").strip(", ")
+            response = f"Entregar no endereço salvo?\n\n📍 {_addr_oneline}\n\nResponda *Sim* ou *Não* (para informar outro endereço)."
         else:
             cart.state = CartState.AWAITING_CEP
             response = "Para a entrega, me informe seu *CEP* 📍"
@@ -626,8 +727,8 @@ async def _handle_number_complement(mctx: MessageContext) -> str | None:
     state = partial.get("state") or ""
 
     full_address = (
-        f"{street}, {number_complement}\n"
-        f"{neighborhood} - {city}/{state}\n"
+        f"{street}, {number_complement}, "
+        f"{neighborhood} - {city}/{state}, "
         f"CEP: {cep_display}"
     )
 
@@ -635,9 +736,7 @@ async def _handle_number_complement(mctx: MessageContext) -> str | None:
     cart.partial_address = None
     cart.state = CartState.AWAITING_ADDRESS_CONFIRMATION
 
-    response = (
-        f"Confirme seu endereço:\n\n🏠 *{full_address}*\n\nCorreto? *Sim* ou *Não*"
-    )
+    response = f"Confirme seu endereço:\n\n📍 {full_address}\n\nCorreto? *Sim* ou *Não*"
 
     cart.last_activity_at = utcnow()
     session.add(cart)
@@ -924,7 +1023,8 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
                         _delivery_method == DeliveryMethod.DELIVERY
                         and _customer_address
                     ):
-                        owner_msg += f"\n📍 {_customer_address}"
+                        _addr_line = _customer_address.replace("\n", ", ").strip(", ")
+                        owner_msg += f"\n📍 {_addr_line}"
                     owner_phone_formatted = (
                         _owner_phone
                         if _owner_phone.startswith("55")
@@ -1093,9 +1193,14 @@ async def _handle_finish_order(mctx: MessageContext, intent: str | None) -> str 
         logger.info("Address and name already saved, skipping to payment")
         cart.state = CartState.AWAITING_PAYMENT_METHOD
         has_pix = await _bot_has_pix(bot, session)
+        _addr_display = (
+            cart.customer_address.replace("\n", ", ").strip(", ")
+            if cart.customer_address
+            else ""
+        )
         response = (
             f"Seus dados já estão salvos! 😊\n\n"
-            f"🏠 *{cart.customer_address}*\n"
+            f"📍 {_addr_display}\n"
             f"👤 *{cart.contact.name}*\n\n"
             f"{_payment_prompt(has_pix)}"
         )
@@ -1106,9 +1211,14 @@ async def _handle_finish_order(mctx: MessageContext, intent: str | None) -> str 
     elif cart.pending_address:
         logger.info("Resuming flow: awaiting address confirmation")
         cart.state = CartState.AWAITING_ADDRESS_CONFIRMATION
+        _pending_display = (
+            cart.pending_address.replace("\n", ", ").strip(", ")
+            if cart.pending_address
+            else ""
+        )
         response = (
             f"Vamos retomar! Confirme o endereço de entrega:\n\n"
-            f"🏠 *{cart.pending_address}*\n\n"
+            f"📍 {_pending_display}\n\n"
             f"Está correto? Responda *Sim* ou *Não*."
         )
     elif cart.partial_address:
@@ -1334,11 +1444,11 @@ async def _handle_shopping_intent(
                     ) -> int:
                         """Count matching words with fuzzy tolerance for typos.
                         Exact matches count, plus fuzzy matches (ratio >= 0.75)
-                        for words > 3 chars. Short words like 'com' are excluded."""
+                        for words > 2 chars. Only 1-2 char words excluded."""
                         score = 0
                         _used_b = set()
                         for wa in words_a:
-                            if len(wa) <= 3:
+                            if len(wa) <= 2:
                                 continue
                             if wa in words_b:
                                 score += 1
@@ -1346,7 +1456,7 @@ async def _handle_shopping_intent(
                                 continue
                             # Fuzzy match for typos: "mignom"→"mignon", "chedar"→"cheddar"
                             for wb in words_b:
-                                if wb in _used_b or len(wb) <= 3:
+                                if wb in _used_b or len(wb) <= 2:
                                     continue
                                 if _ProdSM(None, wa, wb).ratio() >= 0.75:
                                     score += 1
@@ -1830,7 +1940,7 @@ async def _handle_shopping_intent(
                                 )
                             await _load_cart_items_with_products(cart, session)
                             response_to_user = (
-                                _build_cart_summary_message(cart, bot, "❌")
+                                _build_cart_summary_message(cart, bot, "🔄")
                                 + "\n\nAlgo mais?"
                             )
 
@@ -2924,14 +3034,27 @@ async def _process_contact_message_inner(
         CartState.AWAITING_CUSTOMER_NAME,
     ]
 
+    _MIN_CHECKOUT_BREAK_SCORE = 0.80
     if intent in intents_that_resume_shopping and cart.state in finalizing_states:
-        logger.info(
-            "Customer resumed shopping (intent=%s), resetting state from %s to GREETING",
-            intent,
-            cart.state,
-        )
-        cart.state = CartState.GREETING
-        await session.flush()
+        if _last_router_score >= _MIN_CHECKOUT_BREAK_SCORE:
+            logger.info(
+                "Customer resumed shopping (intent=%s score=%.2f), "
+                "resetting state from %s to GREETING",
+                intent,
+                _last_router_score,
+                cart.state,
+            )
+            cart.state = CartState.GREETING
+            await session.flush()
+        else:
+            logger.info(
+                "Ignoring low-confidence shopping intent during checkout: "
+                "intent=%s score=%.2f state=%s (threshold=%.2f)",
+                intent,
+                _last_router_score,
+                cart.state,
+                _MIN_CHECKOUT_BREAK_SCORE,
+            )
 
     # Checkout FSM: dispatch to state handlers
     checkout_result = await _handle_delivery_method(mctx)
@@ -3112,8 +3235,18 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
 
             message_data = value["messages"][0]
             contact_number = message_data["from"]
-            text_body = message_data.get("text", {}).get("body", "")
             message_id = message_data["id"]
+            msg_type = message_data.get("type", "text")
+
+            # Extract text body (for text messages) or media_id (for audio)
+            _audio_media_id: str | None = None
+            if msg_type in ("audio", "voice"):
+                _audio_media_id = message_data.get("audio", {}).get(
+                    "id"
+                ) or message_data.get("voice", {}).get("id")
+                text_body = ""  # Will be replaced by transcript
+            else:
+                text_body = message_data.get("text", {}).get("body", "")
 
             incoming_phone_id = value["metadata"]["phone_number_id"]
             bot_display_phone = value["metadata"]["display_phone_number"]
@@ -3122,7 +3255,8 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
             if await _check_rate_limit(contact_number, phone_id=incoming_phone_id):
                 return
             logger.info(
-                "Message received from %s to phone_id %s",
+                "Message received (%s) from %s to phone_id %s",
+                msg_type,
                 mask_phone(contact_number),
                 incoming_phone_id,
             )
@@ -3140,6 +3274,39 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
 
             current_token = decrypt_value(bot.whatsapp_token)
             current_phone_id = bot.phone_number_id
+
+            # --- Audio transcription (after bot is found, need token for media download) ---
+            if _audio_media_id:
+                from app.openai_client import transcribe_audio
+
+                try:
+                    _audio_bytes = await _download_whatsapp_media(
+                        _audio_media_id, current_token
+                    )
+                    _whisper_prompt = await _build_whisper_prompt(session, bot)
+                    text_body = await transcribe_audio(
+                        _audio_bytes, prompt=_whisper_prompt, bot_id=bot.id
+                    )
+                except Exception as e:
+                    logger.error("Audio transcription failed: %s", e)
+                    text_body = ""
+
+                if not text_body or len(text_body.strip()) < 2:
+                    await send_whatsapp_message(
+                        to=contact_number,
+                        message=(
+                            "Não consegui entender o áudio. 😕 "
+                            "Pode tentar enviar novamente ou digitar o pedido?"
+                        ),
+                        token=current_token,
+                        phone_id=current_phone_id,
+                    )
+                    return
+
+                logger.info(
+                    "[AUDIO] Transcribed: %s",
+                    text_body[:100],
+                )
 
             # Gate: Deduplication
             if await _handle_dedup(
@@ -3510,7 +3677,7 @@ async def _execute_pending_action(
         await _load_cart_items_with_products(cart, session)
         clear_pending(cart)
         # --- CORREÇÃO APLICADA ---
-        return _build_cart_summary_message(cart, bot, "❌") + "\n\nAlgo mais?"
+        return _build_cart_summary_message(cart, bot, "🔄") + "\n\nAlgo mais?"
 
     if tool == "answer_with_found_products":
         names = args.get("product_names", [])
@@ -3657,13 +3824,21 @@ _REMOVE_KEYWORD_RE = re.compile(
     re.IGNORECASE,
 )
 _ADD_KEYWORD_RE = re.compile(
-    r"(?:quero|manda(?:\s+ver)?|coloca|bota|adiciona|me\s+v[eê]|vou\s+querer|pode\s+mandar)"
-    rf"\s+(?:{_ADD_QTY_WORDS}|\d+)\s*\(?[a-záàâãéèêíìîóòôõúùûç]",
+    r"(?:quero(?:\s+pedir)?|manda(?:\s+ver)?|coloca|bota|adiciona|me\s+v[eê]|vou\s+querer|pode\s+mandar)"
+    rf"(?:\s+\w{{1,5}}){{0,2}}\s+(?:{_ADD_QTY_WORDS}|\d+)\s*\(?[a-záàâãéèêíìîóòôõúùûç]",
     re.IGNORECASE,
 )
 
 
+# Score from the last resolve_intent call. Used by the checkout guard
+# to block low-confidence shopping intents from breaking checkout flow.
+_last_router_score: float = 0.0
+
+
 async def resolve_intent(text_body, cart, cart_items_for_intent, found_products=None):
+    global _last_router_score
+    _last_router_score = 0.0
+
     # 0. Cart-state-aware override: during checkout, some intents are reinterpreted
     cart_state = getattr(cart, "state", None)
     in_checkout = cart_state in _CHECKOUT_STATES
@@ -3673,6 +3848,7 @@ async def resolve_intent(text_body, cart, cart_items_for_intent, found_products=
     # but the router misclassifies it as ADD because product names shift the embedding.
     if _REMOVE_KEYWORD_RE.search(text_body):
         logger.info("[INTENT] pre-router REMOVE guard matched: %r", text_body[:80])
+        _last_router_score = 1.0
         final_intent = "MODIFY"
         if in_checkout and final_intent in _CHECKOUT_INTENT_OVERRIDES:
             final_intent = _CHECKOUT_INTENT_OVERRIDES[final_intent]
@@ -3684,6 +3860,7 @@ async def resolve_intent(text_body, cart, cart_items_for_intent, found_products=
     # shift the embedding away from short ADD prototypes.
     if _ADD_KEYWORD_RE.search(text_body):
         logger.info("[INTENT] pre-router ADD guard matched: %r", text_body[:80])
+        _last_router_score = 1.0
         final_intent = "ADD"
         if in_checkout and final_intent in _CHECKOUT_INTENT_OVERRIDES:
             final_intent = _CHECKOUT_INTENT_OVERRIDES[final_intent]
@@ -3705,6 +3882,7 @@ async def resolve_intent(text_body, cart, cart_items_for_intent, found_products=
     ]
     if any(p in _lower_body for p in _SUGGESTION_PHRASES):
         logger.info("[INTENT] pre-router SUGGESTION guard matched: %r", text_body[:80])
+        _last_router_score = 1.0
         final_intent = "REQUEST_SUGGESTION"
         if in_checkout and final_intent in _CHECKOUT_INTENT_OVERRIDES:
             final_intent = _CHECKOUT_INTENT_OVERRIDES[final_intent]
@@ -3715,6 +3893,7 @@ async def resolve_intent(text_body, cart, cart_items_for_intent, found_products=
     try:
         r_intent, r_score, matched = await semantic_intent(text_body)
         router_intent, router_score = r_intent, r_score
+        _last_router_score = router_score
         logger.info("[ROUTER] intent=%s score=%.2f", router_intent, router_score)
     except Exception as e:
         logger.error("[ROUTER] semantic intent failed: %s", e)

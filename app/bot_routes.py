@@ -710,7 +710,7 @@ async def update_order_status(
             if is_delivery
             else None
         ),
-        "canceled": "❌ Infelizmente seu pedido foi cancelado. Entre em contato para mais informações.",
+        "canceled": "Seu pedido foi cancelado. 😕 Se tiver dúvidas, entre em contato com o restaurante.",
     }
 
     notify_msg = STATUS_MESSAGES.get(incoming_status)
@@ -878,10 +878,17 @@ async def update_whatsapp_profile_picture(
 
         if not profile_data.get("success"):
             logger.error("Profile picture update failed: %s", profile_data)
-            raise HTTPException(
-                status_code=502,
-                detail="Falha ao atualizar foto de perfil.",
-            )
+            # Extract user-friendly error from Meta API when available
+            _meta_error = profile_data.get("error", {})
+            _error_sub = _meta_error.get("error_subcode", 0)
+            if _error_sub == 3441013:
+                detail = (
+                    "A imagem é muito pequena. "
+                    "Envie uma imagem JPG com pelo menos 192x192 pixels."
+                )
+            else:
+                detail = "Falha ao atualizar foto de perfil."
+            raise HTTPException(status_code=502, detail=detail)
 
     logger.info("WhatsApp profile picture updated for bot #%s", bot_id)
     return {"status": "updated", "bot_id": bot_id}

@@ -22,6 +22,91 @@ client_openai_api = OpenAI(
     timeout=120.0,
 )
 
+# --- Cliente Groq (Whisper STT para áudio do WhatsApp) ---
+_groq_api_key = os.getenv("GROQ_API_KEY")
+_groq_client: OpenAI | None = (
+    OpenAI(
+        api_key=_groq_api_key,
+        base_url="https://api.groq.com/openai/v1",
+        timeout=30.0,
+    )
+    if _groq_api_key
+    else None
+)
+
+
+async def transcribe_audio(
+    audio_bytes: bytes,
+    prompt: str = "",
+    bot_id: int | None = None,
+) -> str:
+    """Transcribe audio bytes via Groq Whisper (primary) or OpenAI Whisper (fallback).
+
+    Args:
+        audio_bytes: Raw audio data (OGG/Opus from WhatsApp).
+        prompt: Conditioning prompt with restaurant vocabulary to boost accuracy.
+        bot_id: For cost tracking via monitoring.
+
+    Returns:
+        Transcribed text, or empty string on failure.
+    """
+    start = time.perf_counter_ns()
+    transcript = ""
+    provider = "groq_whisper"
+
+    # Primary: Groq Whisper Large v3 Turbo
+    if _groq_client:
+        try:
+            result = await asyncio.to_thread(
+                _groq_client.audio.transcriptions.create,
+                file=("audio.ogg", audio_bytes),
+                model="whisper-large-v3-turbo",
+                language="pt",
+                prompt=prompt[:800] if prompt else "",
+            )
+            transcript = (result.text or "").strip()
+        except Exception as e:
+            logger.warning("Groq Whisper failed, falling back to OpenAI: %s", e)
+            provider = "openai_whisper"
+
+    # Fallback: OpenAI Whisper
+    if not transcript:
+        try:
+            provider = "openai_whisper"
+            result = await asyncio.to_thread(
+                client_openai_api.audio.transcriptions.create,
+                file=("audio.ogg", audio_bytes),
+                model="whisper-1",
+                language="pt",
+                prompt=prompt[:800] if prompt else "",
+            )
+            transcript = (result.text or "").strip()
+        except Exception as e:
+            logger.error("OpenAI Whisper fallback also failed: %s", e)
+
+    duration_ms = (time.perf_counter_ns() - start) // 1_000_000
+
+    try:
+        await record_llm_usage(
+            bot_id=bot_id,
+            operation="transcribe_audio",
+            model=provider,
+            usage=None,
+            duration_ms=duration_ms,
+            success=bool(transcript),
+        )
+    except Exception:
+        pass  # Don't fail the transcription if monitoring fails
+
+    logger.info(
+        "[STT] provider=%s duration=%dms transcript_len=%d prompt_len=%d",
+        provider,
+        duration_ms,
+        len(transcript),
+        len(prompt),
+    )
+    return transcript
+
 
 async def get_extraction_response(
     messages: List[Dict], model: str = "gpt-4o-mini"

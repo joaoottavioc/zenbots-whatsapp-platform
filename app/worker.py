@@ -16,9 +16,29 @@ logger = logging.getLogger(__name__)
 
 async def run_cancel_expired_pix_orders(ctx):
     async with async_session() as session:
-        count = await cancel_expired_pix_orders(session)
-        if count:
-            logger.info("Cron: canceled %d expired PIX orders", count)
+        canceled = await cancel_expired_pix_orders(session)
+        if canceled:
+            logger.info("Cron: canceled %d expired PIX orders", len(canceled))
+            from app.whatsapp import send_whatsapp_message
+            from app.encryption import decrypt_value
+
+            for info in canceled:
+                try:
+                    await send_whatsapp_message(
+                        to=info["contact_phone"],
+                        message=(
+                            "Seu código PIX expirou. 😕 "
+                            "Se ainda quiser pedir, é só mandar uma mensagem!"
+                        ),
+                        token=decrypt_value(info["bot_token"]),
+                        phone_id=info["bot_phone_id"],
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Failed to notify customer about expired PIX order #%s: %s",
+                        info["order_id"],
+                        e,
+                    )
 
 
 async def run_cleanup_conversation_history(ctx):
