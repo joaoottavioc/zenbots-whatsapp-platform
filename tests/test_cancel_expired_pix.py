@@ -54,9 +54,9 @@ class TestCancelExpiredPixOrders:
             order2,
         ]
 
-        count = await cancel_expired_pix_orders(session)
+        canceled = await cancel_expired_pix_orders(session)
 
-        assert count == 2
+        assert len(canceled) == 2
         assert order1.status == OrderStatus.CANCELED
         assert order2.status == OrderStatus.CANCELED
         session.commit.assert_awaited_once()
@@ -68,9 +68,9 @@ class TestCancelExpiredPixOrders:
         session = _make_session()
         session.execute.return_value.scalars.return_value.all.return_value = []
 
-        count = await cancel_expired_pix_orders(session)
+        canceled = await cancel_expired_pix_orders(session)
 
-        assert count == 0
+        assert canceled == []
         session.commit.assert_not_awaited()
 
     def test_cron_jobs_configured(self):
