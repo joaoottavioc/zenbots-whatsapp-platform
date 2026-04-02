@@ -758,6 +758,43 @@ async def _handle_address_confirmation(
     if cart.state != CartState.AWAITING_ADDRESS_CONFIRMATION:
         return None
 
+    # When intent classification was skipped (checkout context-aware guard),
+    # resolve CONFIRM/NEGATE locally from the message text.
+    if intent is None:
+        _lower = mctx.text_body.lower().strip()
+        _CONFIRM_WORDS = {
+            "sim",
+            "s",
+            "isso",
+            "correto",
+            "certo",
+            "ok",
+            "yes",
+            "aham",
+            "positivo",
+            "confirmo",
+            "isso mesmo",
+        }
+        _NEGATE_WORDS = {
+            "nao",
+            "não",
+            "n",
+            "no",
+            "errado",
+            "incorreto",
+            "nope",
+            "negativo",
+            "trocar",
+        }
+        if _lower in _CONFIRM_WORDS or _lower.startswith("sim"):
+            intent = "CONFIRM"
+        elif (
+            _lower in _NEGATE_WORDS
+            or _lower.startswith("nao")
+            or _lower.startswith("não")
+        ):
+            intent = "NEGATE"
+
     if intent == "CONFIRM":
         final_address = cart.pending_address
         await crud.save_address_to_cart(session, cart.id, final_address)
@@ -2631,7 +2668,10 @@ async def _handle_suggestion_selection(mctx: MessageContext) -> str | None:
         if digit_match:
             idx = int(digit_match.group(1)) - 1
             if 0 <= idx < len(suggestions):
-                return (suggestions[idx], 1)
+                # Extract quantity from text before the digit
+                before = part_lower[: digit_match.start()]
+                qty = _parse_qty_from_text(before) if before.strip() else 1
+                return (suggestions[idx], qty)
 
         # Try name overlap match
         part_norm = part_lower.replace("'", "").replace("\u2019", "")
@@ -2859,16 +2899,20 @@ async def _process_contact_message_inner(
     # ▼▼▼ INÍCIO DA NOVA LÓGICA DE RESET DE ESTADO ▼▼▼
     # Se o cliente realizar uma ação de compra enquanto estivermos finalizando,
     # o bot entende que ele voltou a "fazer o pedido"
-    if cart.state in [
+    _CHECKOUT_SKIP_STATES = {
         CartState.AWAITING_CEP,
         CartState.AWAITING_NUMBER_COMPLEMENT,
+        CartState.AWAITING_ADDRESS_CONFIRMATION,
         CartState.AWAITING_CUSTOMER_NAME,
-    ] and not is_likely_shopping_intent(text_body):
+        CartState.AWAITING_PAYMENT_METHOD,
+        CartState.AWAITING_DELIVERY_METHOD,
+    }
+    if cart.state in _CHECKOUT_SKIP_STATES and not is_likely_shopping_intent(text_body):
         logger.info(
             "State %s detected, message not a shopping intent, skipping classification",
             cart.state,
         )
-        intent = None  # Definimos a intenção como None para pular a lógica de reset
+        intent = None  # Skip classification — let checkout handler parse the message
     else:
         # Caso contrário, executamos a classificação de intenção normalmente
         await _load_cart_items_with_products(cart, session)

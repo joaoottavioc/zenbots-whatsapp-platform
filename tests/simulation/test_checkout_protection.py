@@ -1,10 +1,10 @@
 """
 Simulation tests: checkout flow protection.
 
-Tests that low-confidence shopping intents during checkout states
-do NOT break the checkout flow. The protection applies to states in
-finalizing_states: AWAITING_CEP, AWAITING_NUMBER_COMPLEMENT,
-AWAITING_ADDRESS_CONFIRMATION, AWAITING_CUSTOMER_NAME.
+Tests that during checkout states, the semantic router is skipped
+for non-shopping messages. This prevents misclassification of
+checkout inputs (sim/não, CEP, address, name, payment method) as
+shopping intents that would destroy the checkout flow.
 
 Run with: docker compose exec backend pytest tests/simulation/test_checkout_protection.py -v
 """
@@ -102,4 +102,58 @@ class TestCheckoutProtection:
         cart = await sim_context.get_cart_items()
         assert_cart_has(cart, [("Picanha com bacon", 1)])
         # Response should ask for payment method
+        assert response is not None
+
+    @pytest.mark.asyncio
+    async def test_address_confirmation_nao_works(self, sim_context):
+        """'não' during address confirmation should negate without router."""
+        await sim_context.send("oi")
+        await sim_context.send("quero 1 batata frita")
+        await sim_context.send("finalizar")
+        await sim_context.send("entrega")
+        await sim_context.send("04674225")
+        await sim_context.send("100")
+
+        # At AWAITING_ADDRESS_CONFIRMATION — say "não"
+        response = await sim_context.send("não")
+
+        # Should ask for CEP again (negation), not show suggestions
+        cart = await sim_context.get_cart_items()
+        assert_cart_has(cart, [("Batata frita", 1)])
+        assert response is not None
+        assert "cep" in response.lower() or "CEP" in response
+
+    @pytest.mark.asyncio
+    async def test_delivery_method_not_misclassified(self, sim_context):
+        """'entrega' during AWAITING_DELIVERY_METHOD should work without router."""
+        await sim_context.send("oi")
+        await sim_context.send("quero 2 onion rings")
+
+        # Trigger checkout
+        await sim_context.send("só isso")
+
+        # Now at AWAITING_DELIVERY_METHOD — "entrega" is keyword-matched
+        response = await sim_context.send("entrega")
+
+        cart = await sim_context.get_cart_items()
+        assert_cart_has(cart, [("Onion rings", 2)])
+        assert response is not None
+
+    @pytest.mark.asyncio
+    async def test_payment_method_during_checkout(self, sim_context):
+        """'pix' during AWAITING_PAYMENT_METHOD should not be misclassified."""
+        await sim_context.send("oi")
+        await sim_context.send("quero 1 x-burger")
+        await sim_context.send("finalizar")
+        await sim_context.send("retirada")
+
+        # Should be at payment method — respond with payment
+        # (pickup skips address flow, goes straight to name then payment)
+        # Send name first
+        await sim_context.send("Maria")
+
+        # Now at AWAITING_PAYMENT_METHOD — "dinheiro"
+        response = await sim_context.send("dinheiro")
+
+        # Should process payment, not classify as shopping intent
         assert response is not None

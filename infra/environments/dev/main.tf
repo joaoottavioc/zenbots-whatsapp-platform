@@ -146,6 +146,7 @@ module "ssm_parameters" {
     "email/from"                = "Email sender address"
     "email/starttls"            = "SMTP STARTTLS flag"
     "email/use_credentials"     = "SMTP use credentials flag"
+    "groq/api_key"              = "Groq API key for Whisper STT"
   }
 }
 
@@ -243,6 +244,7 @@ module "ecs" {
     { name = "MP_CLIENT_SECRET", valueFrom = module.ssm_parameters.parameter_arns["mercadopago/client_secret"] },
     { name = "MP_ADMIN_ACCESS_TOKEN", valueFrom = module.ssm_parameters.parameter_arns["mercadopago/admin_token"] },
     { name = "GOOGLE_MAPS_API_KEY", valueFrom = module.ssm_parameters.parameter_arns["google/maps_api_key"] },
+    { name = "GROQ_API_KEY", valueFrom = module.ssm_parameters.parameter_arns["groq/api_key"] },
   ]
 
   # Migrations
