@@ -109,6 +109,17 @@ _STOP = frozenset(
         "vamos",
         "dia",
         "noite",
+        # Remove verbs — prevent leaking into extracted item names
+        "tira",
+        "tire",
+        "tiro",
+        "tirar",
+        "retira",
+        "retire",
+        "retirar",
+        "remove",
+        "remover",
+        "remova",
     }
 )
 
@@ -489,6 +500,14 @@ def extract_items_with_quantities(text: str) -> List[Tuple[int, str]]:
         digit_match = re.match(r"^(\d+)$", word)
 
         if word in _QTY_VALUES:
+            # If we already have an explicit digit qty and no item words yet,
+            # this number-word is likely part of the product name
+            # (e.g., "2 quatro queijos" → qty=2, item="quatro queijos").
+            if current_qty is not None and not current_words and digit_match is None:
+                current_words.append(word)
+                i += 1
+                continue
+
             # Flush previous item if any
             if current_words:
                 item = _clean_item_words(current_words)

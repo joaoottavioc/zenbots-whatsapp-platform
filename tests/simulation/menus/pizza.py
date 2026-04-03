@@ -1,0 +1,155 @@
+"""Pizzaria Bella Napoli — Pizza restaurant menu for simulation tests."""
+
+RESTAURANT_NAME = "Pizzaria Bella Napoli"
+
+PRODUCTS = [
+    # ── Pizzas Tradicionais ──
+    {
+        "name": "Margherita",
+        "price": 49.90,
+        "category": "Pizzas Tradicionais",
+        "description": "Molho de tomate, muçarela de búfala, tomate fresco e manjericão",
+        "keywords": "margherita, búfala, manjericão, tradicional",
+        "is_available": True,
+    },
+    {
+        "name": "Calabresa",
+        "price": 44.90,
+        "category": "Pizzas Tradicionais",
+        "description": "Calabresa fatiada, cebola, azeitona e orégano",
+        "keywords": "calabresa, cebola, azeitona",
+        "is_available": True,
+    },
+    {
+        "name": "Portuguesa",
+        "price": 48.90,
+        "category": "Pizzas Tradicionais",
+        "description": "Presunto, ovos, cebola, azeitona, ervilha e muçarela",
+        "keywords": "portuguesa, presunto, ovo",
+        "is_available": True,
+    },
+    {
+        "name": "Quatro Queijos",
+        "price": 52.90,
+        "category": "Pizzas Tradicionais",
+        "description": "Muçarela, provolone, catupiry e gorgonzola",
+        "keywords": "quatro queijos, gorgonzola, catupiry",
+        "is_available": True,
+    },
+    {
+        "name": "Frango com Catupiry",
+        "price": 47.90,
+        "category": "Pizzas Tradicionais",
+        "description": "Frango desfiado com catupiry e milho",
+        "keywords": "frango, catupiry, milho",
+        "is_available": True,
+    },
+    {
+        "name": "Napolitana",
+        "price": 46.90,
+        "category": "Pizzas Tradicionais",
+        "description": "Molho de tomate, muçarela, tomate fatiado, parmesão e manjericão",
+        "keywords": "napolitana, parmesão, tomate",
+        "is_available": True,
+    },
+    # ── Pizzas Especiais ──
+    {
+        "name": "Costela ao Barbecue",
+        "price": 59.90,
+        "category": "Pizzas Especiais",
+        "description": "Costela desfiada, cebola caramelizada, muçarela e molho barbecue",
+        "keywords": "costela, barbecue, cebola caramelizada",
+        "is_available": True,
+    },
+    {
+        "name": "Pepperoni",
+        "price": 54.90,
+        "category": "Pizzas Especiais",
+        "description": "Pepperoni importado, muçarela e orégano",
+        "keywords": "pepperoni, importado",
+        "is_available": True,
+    },
+    {
+        "name": "Parma com Rúcula",
+        "price": 58.90,
+        "category": "Pizzas Especiais",
+        "description": "Presunto parma, rúcula, tomate seco e lascas de parmesão",
+        "keywords": "parma, rúcula, tomate seco",
+        "is_available": True,
+    },
+    {
+        "name": "Camarão",
+        "price": 64.90,
+        "category": "Pizzas Especiais",
+        "description": "Camarão refogado com alho, catupiry e muçarela",
+        "keywords": "camarão, alho, catupiry",
+        "is_available": True,
+    },
+    # ── Pizzas Doces ──
+    {
+        "name": "Chocolate com Morango",
+        "price": 49.90,
+        "category": "Pizzas Doces",
+        "description": "Chocolate ao leite com morangos frescos",
+        "keywords": "chocolate, morango, doce",
+        "is_available": True,
+    },
+    {
+        "name": "Romeu e Julieta",
+        "price": 44.90,
+        "category": "Pizzas Doces",
+        "description": "Goiabada cremosa com queijo muçarela",
+        "keywords": "romeu, julieta, goiabada, queijo",
+        "is_available": True,
+    },
+    # ── Bebidas ──
+    {
+        "name": "Refrigerante 2L",
+        "price": 14.00,
+        "category": "Bebidas",
+        "description": "Coca-Cola, Guaraná ou Fanta 2 litros",
+        "keywords": "refrigerante, dois litros, coca",
+        "is_available": True,
+    },
+    {
+        "name": "Suco Natural",
+        "price": 14.90,
+        "category": "Bebidas",
+        "description": "Suco natural de laranja ou limonada 500ml",
+        "keywords": "suco, natural, laranja",
+        "is_available": True,
+    },
+    # ── Unavailable ──
+    {
+        "name": "Calabresa Especial",
+        "price": 52.90,
+        "category": "Pizzas Especiais",
+        "description": "Calabresa com cheddar, cebola caramelizada e bacon",
+        "keywords": "calabresa, especial, cheddar",
+        "is_available": False,
+    },
+    {
+        "name": "Camarão Especial",
+        "price": 72.90,
+        "category": "Pizzas Especiais",
+        "description": "Camarão com catupiry e alcaparras",
+        "keywords": "camarão, especial, alcaparras",
+        "is_available": False,
+    },
+]
+
+TEST_SCENARIOS = {
+    "add_single_msg": "quero uma calabresa",
+    "add_single_expected": [("Calabresa", 1)],
+    "add_multi_msg": "quero 2 margherita e 1 pepperoni",
+    "add_multi_expected": [("Margherita", 2), ("Pepperoni", 1)],
+    "unavailable_msg": "quero uma calabresa especial e uma portuguesa",
+    "unavailable_available": "Portuguesa",
+    "unavailable_name": "Calabresa Especial",
+    "remove_add_msg": "quero 2 quatro queijos",
+    "remove_add_expected": ("Quatro Queijos", 2),
+    "remove_msg": "tira a quatro queijos",
+    "suggestion_msg": "quais sabores tem?",
+    "checkout_product_msg": "quero 1 frango com catupiry",
+    "checkout_product_expected": ("Frango com Catupiry", 1),
+}

@@ -1422,8 +1422,25 @@ async def _handle_shopping_intent(
         # --- Programmatic cart reduction for "tire/tira N X" ---
         # Small LLMs (phi3:mini) struggle with subtraction; handle it directly.
         if intent == "MODIFY" and _qty_pairs and cart.items:
+            # Detect full removal: "tira o X" without explicit quantity.
+            # A standalone digit (not part of a size like "500g", "300ml")
+            # means explicit qty. No standalone digit = remove ALL.
+            import re as _re_mod
+
+            _has_explicit_qty = bool(
+                _re_mod.search(
+                    r"(?<![a-záàâãéèêíìîóòôõúùûç])\d+(?!\s*(?:ml|l|g|kg|un|pç|pecas|peças))\b",
+                    text_body,
+                    _re_mod.IGNORECASE,
+                )
+            ) or any(q != 1 for q, _ in _qty_pairs)
+            _full_removal = not _has_explicit_qty
+
             _reduce_result = _programmatic_cart_reduce(
-                _qty_pairs, cart.items, text_body
+                _qty_pairs,
+                cart.items,
+                text_body,
+                full_removal=_full_removal,
             )
             if _reduce_result:
                 _updates, _response_parts = _reduce_result
@@ -1447,6 +1464,14 @@ async def _handle_shopping_intent(
         # reliable than the LLM for structured orders with typos.
         if intent == "ADD" and _qty_pairs:
             _real_pairs = [(q, n) for q, n in _qty_pairs if q > 1 or len(n.split()) > 1]
+            # Track single-word qty=1 items that _real_pairs filters out.
+            # These still need unavailable detection even though they skip
+            # programmatic matching.
+            _filtered_out_items = [
+                n
+                for q, n in _qty_pairs
+                if q == 1 and len(n.split()) == 1 and len(n) >= 3
+            ]
             if _real_pairs:
                 # Load all available products for fuzzy matching
                 _all_prods_res = await session.execute(
@@ -1465,6 +1490,16 @@ async def _handle_shopping_intent(
                         if len(w) > 4 and w.endswith("s"):
                             return w[:-1]
                         return w
+
+                    def _extract_size_token(s: str) -> str | None:
+                        """Extract numeric size like '300ml', '500g', '1kg'."""
+                        import re as _re
+
+                        m = _re.search(
+                            r"(\d+\s*(?:ml|l|g|kg|un|pç|pecas|peças))\b",
+                            s.lower(),
+                        )
+                        return m.group(1).replace(" ", "") if m else None
 
                     def _norm_for_match(s: str) -> str:
                         """Normalize for word-overlap matching: lowercase, strip
@@ -1511,9 +1546,16 @@ async def _handle_shopping_intent(
                         if not name_words:
                             return None
 
+                        req_size = _extract_size_token(item_name)
+
                         best, best_score = None, 0
                         for p in _all_prods:
                             if p.id in exclude_ids:
+                                continue
+                            # Size constraint: if user specified 300ml,
+                            # reject products with a different size (500ml)
+                            prod_size = _extract_size_token(p.name)
+                            if req_size and prod_size and req_size != prod_size:
                                 continue
                             p_norm = _norm_for_match(p.name)
                             p_words = {
@@ -1521,6 +1563,9 @@ async def _handle_shopping_intent(
                             }
                             # Word overlap score with fuzzy typo tolerance
                             overlap = _fuzzy_word_overlap(name_words, p_words)
+                            # Boost when size tokens match exactly
+                            if req_size and prod_size and req_size == prod_size:
+                                overlap += 0.5
                             if overlap > best_score:
                                 best_score = overlap
                                 best = p
@@ -1536,7 +1581,7 @@ async def _handle_shopping_intent(
 
                     _prog_selections: list[tuple] = []
                     _prog_seen: set[int] = set()
-                    _prog_unmatched: list[str] = []
+                    _prog_unmatched: list[str] = list(_filtered_out_items)
 
                     for qty, item_name in _real_pairs:
                         matched = _match_product(item_name, _prog_seen)
@@ -3418,12 +3463,17 @@ def _programmatic_cart_reduce(
     qty_pairs: list[tuple[int, str]],
     cart_items: list,
     text_body: str,
+    full_removal: bool = False,
 ) -> tuple[list[tuple], list[str]] | None:
     """Programmatically reduce cart quantities for 'tire/tira N X' patterns.
+
+    When full_removal=True (no explicit quantity in a remove message),
+    "tira o X" removes ALL of X instead of just 1.
 
     Returns list of (cart_item, new_quantity) tuples and response parts,
     or None if no matches found.
     """
+    import re as _re
     from difflib import SequenceMatcher
 
     if not qty_pairs or not cart_items:
@@ -3432,13 +3482,35 @@ def _programmatic_cart_reduce(
     updates: dict[int, tuple] = {}  # cart_item.id → (cart_item, new_qty)
     response_parts: list[str] = []
 
-    def _norm(s: str) -> str:
-        """Normalize: lowercase, hyphens→spaces, strip digits and punctuation."""
-        import re as _re
+    # ── Remove verb words that leak into extracted item names ──
+    _REMOVE_VERBS = {
+        "tira",
+        "tire",
+        "tiro",
+        "tirar",
+        "remove",
+        "remover",
+        "retira",
+        "retirar",
+        "retiro",
+    }
 
+    def _extract_size_token(s: str) -> str | None:
+        """Extract numeric size token like '300ml', '500g', '1kg', '2l'."""
+        m = _re.search(r"(\d+\s*(?:ml|l|g|kg|un|pç|pecas|peças))\b", s.lower())
+        return m.group(1).replace(" ", "") if m else None
+
+    def _norm(s: str) -> str:
+        """Normalize: lowercase, hyphens to spaces, strip punctuation.
+        Preserves digits attached to units (300ml) for size matching."""
         s = s.lower().replace("-", " ")
-        s = _re.sub(r"\d+\w*", "", s)  # remove "600ml", "2l", etc.
         s = _re.sub(r"[^\w\sáàâãéèêíìîóòôõúùûç]", " ", s)  # strip punctuation
+        return s.strip()
+
+    def _norm_words(s: str) -> str:
+        """Normalize for word overlap: strips digits entirely."""
+        s = _norm(s)
+        s = _re.sub(r"\d+\w*", "", s)
         return s.strip()
 
     def _word_overlap_score(req: str, product: str) -> float:
@@ -3452,20 +3524,38 @@ def _programmatic_cart_reduce(
         return overlap + SequenceMatcher(None, req, product).ratio() * 0.1
 
     for req_qty, req_name in qty_pairs:
-        req_lower = _norm(req_name)
+        # Strip remove verbs from item name
+        req_clean = " ".join(
+            w for w in req_name.lower().split() if w not in _REMOVE_VERBS
+        )
+        req_lower = _norm_words(req_clean)
+        req_size = _extract_size_token(req_name)
+
         best_item = None
         best_score = 0.0
 
         for ci in cart_items:
-            pname = _norm(ci.product.name)
+            prod_size = _extract_size_token(ci.product.name)
+            # Hard reject: user specified a size that doesn't match
+            if req_size and prod_size and req_size != prod_size:
+                continue
+
+            pname = _norm_words(ci.product.name)
             score = _word_overlap_score(req_lower, pname)
+
+            # Boost score when size tokens match exactly
+            if req_size and prod_size and req_size == prod_size:
+                score += 0.5
+
             if score > best_score:
                 best_score = score
                 best_item = ci
 
         if best_item and best_score >= 1.0:
-            # If this cart item was already matched, stack the reduction
-            if best_item.id in updates:
+            if full_removal:
+                # "tira o X" without explicit qty → remove all
+                new_qty = 0
+            elif best_item.id in updates:
                 _, prev_qty = updates[best_item.id]
                 new_qty = max(0, prev_qty - req_qty)
             else:
@@ -3475,15 +3565,16 @@ def _programmatic_cart_reduce(
                 response_parts.append(f"Removido {best_item.product.name} do carrinho.")
             else:
                 response_parts.append(
-                    f"{best_item.product.name}: {best_item.quantity} → {new_qty}"
+                    f"{best_item.product.name}: {best_item.quantity} \u2192 {new_qty}"
                 )
             logger.info(
-                "[REDUCE] %s: %d - %d = %d (score=%.2f)",
+                "[REDUCE] %s: %d - %s = %d (score=%.2f, full_removal=%s)",
                 best_item.product.name,
                 best_item.quantity,
-                req_qty,
+                "ALL" if full_removal else str(req_qty),
                 new_qty,
                 best_score,
+                full_removal,
             )
 
     if not updates:
@@ -3864,7 +3955,11 @@ _ADD_QTY_WORDS = (
 _REMOVE_KEYWORD_RE = re.compile(
     r"(?:(?:pode|por\s+favor|favor|quero|preciso|d[aá]\s+pra|tem\s+como)\s+)?"
     r"(?:tire|tira|tirar|retira|retire|retirar|remov[ea]|remove|remover)"
-    rf"\s+(?:{_ADD_QTY_WORDS}|\d+)\s*\(?[a-záàâãéèêíìîóòôõúùûç]",
+    r"\s+(?:"
+    rf"(?:{_ADD_QTY_WORDS}|\d+)\s*\(?[a-záàâãéèêíìîóòôõúùûç]"
+    r"|"
+    r"(?:o|a|os|as|todo|toda|todos|todas)\s+[a-záàâãéèêíìîóòôõúùûç]"
+    r")",
     re.IGNORECASE,
 )
 _ADD_KEYWORD_RE = re.compile(

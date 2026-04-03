@@ -1,0 +1,163 @@
+"""Açaí da Barra — Açaí shop menu for simulation tests."""
+
+RESTAURANT_NAME = "Açaí da Barra"
+
+PRODUCTS = [
+    # ── Açaí no Copo ──
+    {
+        "name": "Açaí 300ml",
+        "price": 16.90,
+        "category": "Açaí no Copo",
+        "description": "Açaí batido cremoso no copo 300ml com até 3 acompanhamentos",
+        "keywords": "açaí, copo, pequeno, cremoso",
+        "is_available": True,
+    },
+    {
+        "name": "Açaí 500ml",
+        "price": 22.90,
+        "category": "Açaí no Copo",
+        "description": "Açaí batido cremoso no copo 500ml com até 4 acompanhamentos",
+        "keywords": "açaí, copo, médio, cremoso",
+        "is_available": True,
+    },
+    {
+        "name": "Açaí 700ml",
+        "price": 28.90,
+        "category": "Açaí no Copo",
+        "description": "Açaí batido cremoso no copo 700ml com até 5 acompanhamentos",
+        "keywords": "açaí, copo, grande, cremoso",
+        "is_available": True,
+    },
+    {
+        "name": "Açaí 1 Litro",
+        "price": 36.90,
+        "category": "Açaí no Copo",
+        "description": "Açaí batido cremoso 1 litro com até 6 acompanhamentos",
+        "keywords": "açaí, litro, família, cremoso",
+        "is_available": True,
+    },
+    # ── Açaí na Tigela ──
+    {
+        "name": "Tigela Tropical",
+        "price": 26.90,
+        "category": "Açaí na Tigela",
+        "description": "Açaí 400ml com granola, banana, morango e mel",
+        "keywords": "tigela, tropical, granola, banana, morango",
+        "is_available": True,
+    },
+    {
+        "name": "Tigela Fitness",
+        "price": 29.90,
+        "category": "Açaí na Tigela",
+        "description": "Açaí 400ml com whey protein, banana, granola e pasta de amendoim",
+        "keywords": "tigela, fitness, whey, proteína",
+        "is_available": True,
+    },
+    {
+        "name": "Tigela Nutella",
+        "price": 31.90,
+        "category": "Açaí na Tigela",
+        "description": "Açaí 400ml com Nutella, morango, granola e leite condensado",
+        "keywords": "tigela, nutella, morango",
+        "is_available": True,
+    },
+    {
+        "name": "Tigela Amazônia",
+        "price": 28.90,
+        "category": "Açaí na Tigela",
+        "description": "Açaí 400ml com cupuaçu, castanha do Pará e guaraná em pó",
+        "keywords": "tigela, amazônia, cupuaçu, castanha",
+        "is_available": True,
+    },
+    # ── Adicionais ──
+    {
+        "name": "Granola",
+        "price": 3.00,
+        "category": "Adicionais",
+        "description": "Porção extra de granola crocante",
+        "keywords": "granola, adicional, extra",
+        "is_available": True,
+    },
+    {
+        "name": "Leite Condensado",
+        "price": 3.00,
+        "category": "Adicionais",
+        "description": "Porção extra de leite condensado",
+        "keywords": "leite condensado, adicional",
+        "is_available": True,
+    },
+    {
+        "name": "Nutella",
+        "price": 5.00,
+        "category": "Adicionais",
+        "description": "Porção extra de Nutella",
+        "keywords": "nutella, adicional, extra",
+        "is_available": True,
+    },
+    {
+        "name": "Paçoca",
+        "price": 3.00,
+        "category": "Adicionais",
+        "description": "Paçoca triturada por cima",
+        "keywords": "paçoca, triturada, adicional",
+        "is_available": True,
+    },
+    {
+        "name": "Banana Fatiada",
+        "price": 2.50,
+        "category": "Adicionais",
+        "description": "Banana fatiada fresca",
+        "keywords": "banana, fatiada, fruta",
+        "is_available": True,
+    },
+    # ── Bebidas ──
+    {
+        "name": "Água de Coco",
+        "price": 8.00,
+        "category": "Bebidas",
+        "description": "Água de coco natural 300ml",
+        "keywords": "água, coco, natural",
+        "is_available": True,
+    },
+    {
+        "name": "Suco Detox",
+        "price": 14.90,
+        "category": "Bebidas",
+        "description": "Suco verde com couve, limão, gengibre e maçã 300ml",
+        "keywords": "suco, detox, verde, couve",
+        "is_available": True,
+    },
+    # ── Unavailable ──
+    {
+        "name": "Tigela Tropical Especial",
+        "price": 34.90,
+        "category": "Açaí na Tigela",
+        "description": "Tigela tropical com açaí premium e frutas extras",
+        "keywords": "tigela, tropical, especial, premium",
+        "is_available": False,
+    },
+    {
+        "name": "Açaí 1 Litro Premium",
+        "price": 44.90,
+        "category": "Açaí no Copo",
+        "description": "Açaí premium orgânico 1 litro",
+        "keywords": "açaí, litro, premium, orgânico",
+        "is_available": False,
+    },
+]
+
+TEST_SCENARIOS = {
+    "add_single_msg": "quero uma tigela tropical",
+    "add_single_expected": [("Tigela Tropical", 1)],
+    "add_multi_msg": "quero 2 açaí 500ml e 1 tigela nutella",
+    "add_multi_expected": [("Açaí 500ml", 2), ("Tigela Nutella", 1)],
+    "unavailable_msg": "quero uma tigela tropical especial e uma tigela fitness",
+    "unavailable_available": "Tigela Fitness",
+    "unavailable_name": "Tigela Tropical Especial",
+    "remove_add_msg": "quero 3 açaí 300ml",
+    "remove_add_expected": ("Açaí 300ml", 3),
+    "remove_msg": "tira o açaí 300ml",
+    "suggestion_msg": "o que tem pra pedir?",
+    "checkout_product_msg": "quero 1 tigela amazônia",
+    "checkout_product_expected": ("Tigela Amazônia", 1),
+}
