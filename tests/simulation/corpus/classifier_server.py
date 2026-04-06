@@ -9,7 +9,6 @@ Open: http://localhost:8888
 
 import json
 import os
-import re
 from datetime import date
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
@@ -135,11 +134,11 @@ def main():
     port = 8888
     server = HTTPServer(("0.0.0.0", port), Handler)
     manifest = load_manifest()
-    print(f"Menu Classifier Server")
+    print("Menu Classifier Server")
     print(f"  URL:      http://localhost:{port}")
     print(f"  Images:   {IMAGES_DIR}")
     print(f"  Corpus:   {len(manifest)} images already saved")
-    print(f"\n  Ctrl+C to stop.\n")
+    print("\n  Ctrl+C to stop.\n")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
