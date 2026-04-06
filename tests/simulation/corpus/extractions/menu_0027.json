@@ -1,0 +1,131 @@
+{
+  "products": [
+    {
+      "name": "Água c/ Gás",
+      "description": "",
+      "price": 4.0,
+      "category": "Bebidas",
+      "id": 4718,
+      "bot_id": 706,
+      "is_available": true
+    },
+    {
+      "name": "Aqua Mineral",
+      "description": "",
+      "price": 4.0,
+      "category": "Bebidas",
+      "id": 4717,
+      "bot_id": 706,
+      "is_available": true
+    },
+    {
+      "name": "Becks",
+      "description": "",
+      "price": 8.0,
+      "category": "Bebidas",
+      "id": 4726,
+      "bot_id": 706,
+      "is_available": true
+    },
+    {
+      "name": "Chá da casa c/ limão",
+      "description": "",
+      "price": 5.5,
+      "category": "Bebidas",
+      "id": 4721,
+      "bot_id": 706,
+      "is_available": true
+    },
+    {
+      "name": "Coca-Cola",
+      "description": "",
+      "price": 6.0,
+      "category": "Bebidas",
+      "id": 4719,
+      "bot_id": 706,
+      "is_available": true
+    },
+    {
+      "name": "Coca-Cola Zero",
+      "description": "",
+      "price": 6.0,
+      "category": "Bebidas",
+      "id": 4720,
+      "bot_id": 706,
+      "is_available": true
+    },
+    {
+      "name": "Colorado Ribeirão",
+      "description": "",
+      "price": 9.0,
+      "category": "Bebidas",
+      "id": 4727,
+      "bot_id": 706,
+      "is_available": true
+    },
+    {
+      "name": "Goose IPA",
+      "description": "",
+      "price": 16.0,
+      "category": "Bebidas",
+      "id": 4728,
+      "bot_id": 706,
+      "is_available": true
+    },
+    {
+      "name": "Goose Midway",
+      "description": "",
+      "price": 16.0,
+      "category": "Bebidas",
+      "id": 4729,
+      "bot_id": 706,
+      "is_available": true
+    },
+    {
+      "name": "Guaraná Antártica",
+      "description": "",
+      "price": 6.0,
+      "category": "Bebidas",
+      "id": 4722,
+      "bot_id": 706,
+      "is_available": true
+    },
+    {
+      "name": "Guaraná Antártica Diet",
+      "description": "",
+      "price": 6.0,
+      "category": "Bebidas",
+      "id": 4723,
+      "bot_id": 706,
+      "is_available": true
+    },
+    {
+      "name": "Refresco do Chavito",
+      "description": "",
+      "price": 5.5,
+      "category": "Bebidas",
+      "id": 4724,
+      "bot_id": 706,
+      "is_available": true
+    },
+    {
+      "name": "Stella Artois",
+      "description": "",
+      "price": 9.0,
+      "category": "Bebidas",
+      "id": 4730,
+      "bot_id": 706,
+      "is_available": true
+    },
+    {
+      "name": "Suco Prats (Laranja, Uva e Laranja com Acerola)",
+      "description": "",
+      "price": 6.0,
+      "category": "Bebidas",
+      "id": 4725,
+      "bot_id": 706,
+      "is_available": true
+    }
+  ],
+  "category": "outros"
+}

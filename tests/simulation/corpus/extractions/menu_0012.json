@@ -1,0 +1,185 @@
+{
+  "products": [
+    {
+      "name": "Açaí na Tigela 300g",
+      "description": "",
+      "price": 8.0,
+      "category": "Bebidas",
+      "id": 4480,
+      "bot_id": 691,
+      "is_available": true
+    },
+    {
+      "name": "Suco de Abacaxi",
+      "description": "",
+      "price": 7.0,
+      "category": "Bebidas",
+      "id": 4479,
+      "bot_id": 691,
+      "is_available": true
+    },
+    {
+      "name": "Suco de Laranja",
+      "description": "",
+      "price": 7.0,
+      "category": "Bebidas",
+      "id": 4477,
+      "bot_id": 691,
+      "is_available": true
+    },
+    {
+      "name": "Suco de Limão",
+      "description": "",
+      "price": 7.0,
+      "category": "Bebidas",
+      "id": 4478,
+      "bot_id": 691,
+      "is_available": true
+    },
+    {
+      "name": "Suco do Vale Lata",
+      "description": "",
+      "price": 7.0,
+      "category": "Bebidas",
+      "id": 4475,
+      "bot_id": 691,
+      "is_available": true
+    },
+    {
+      "name": "Suco do Vale Litro",
+      "description": "",
+      "price": 10.0,
+      "category": "Bebidas",
+      "id": 4476,
+      "bot_id": 691,
+      "is_available": true
+    },
+    {
+      "name": "Creme",
+      "description": "",
+      "price": 6.0,
+      "category": "Cremes",
+      "id": 4485,
+      "bot_id": 691,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa",
+      "description": "Pastel de calabresa",
+      "price": 8.0,
+      "category": "Pastéis",
+      "id": 4470,
+      "bot_id": 691,
+      "is_available": true
+    },
+    {
+      "name": "Frango",
+      "description": "Pastel de frango",
+      "price": 8.0,
+      "category": "Pastéis",
+      "id": 4471,
+      "bot_id": 691,
+      "is_available": true
+    },
+    {
+      "name": "Mini Pastel",
+      "description": "Mini pastel de 3 recheios",
+      "price": 6.0,
+      "category": "Pastéis",
+      "id": 4474,
+      "bot_id": 691,
+      "is_available": true
+    },
+    {
+      "name": "Pizza",
+      "description": "Pastel de pizza",
+      "price": 8.0,
+      "category": "Pastéis",
+      "id": 4473,
+      "bot_id": 691,
+      "is_available": true
+    },
+    {
+      "name": "Queijo",
+      "description": "Pastel de queijo",
+      "price": 8.0,
+      "category": "Pastéis",
+      "id": 4472,
+      "bot_id": 691,
+      "is_available": true
+    },
+    {
+      "name": "Suco Copo 400ml",
+      "description": "",
+      "price": 5.5,
+      "category": "Sucos",
+      "id": 4486,
+      "bot_id": 691,
+      "is_available": true
+    },
+    {
+      "name": "Suco de Abacaxi com Hortelã",
+      "description": "",
+      "price": 6.0,
+      "category": "Sucos",
+      "id": 4489,
+      "bot_id": 691,
+      "is_available": true
+    },
+    {
+      "name": "Suco de Maracujá",
+      "description": "",
+      "price": 6.0,
+      "category": "Sucos",
+      "id": 4488,
+      "bot_id": 691,
+      "is_available": true
+    },
+    {
+      "name": "Suco de Morango",
+      "description": "",
+      "price": 6.0,
+      "category": "Sucos",
+      "id": 4487,
+      "bot_id": 691,
+      "is_available": true
+    },
+    {
+      "name": "Vitamina de Abacate",
+      "description": "",
+      "price": 6.0,
+      "category": "Vitaminas",
+      "id": 4484,
+      "bot_id": 691,
+      "is_available": true
+    },
+    {
+      "name": "Vitamina de Banana",
+      "description": "",
+      "price": 5.0,
+      "category": "Vitaminas",
+      "id": 4483,
+      "bot_id": 691,
+      "is_available": true
+    },
+    {
+      "name": "Vitamina de Mamão",
+      "description": "",
+      "price": 6.0,
+      "category": "Vitaminas",
+      "id": 4481,
+      "bot_id": 691,
+      "is_available": true
+    },
+    {
+      "name": "Vitamina de Morango",
+      "description": "",
+      "price": 6.0,
+      "category": "Vitaminas",
+      "id": 4482,
+      "bot_id": 691,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

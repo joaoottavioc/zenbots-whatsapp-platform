@@ -1,0 +1,113 @@
+{
+  "products": [
+    {
+      "name": "ALEMANHA",
+      "description": "Pão, Filé, Bacon, Muçarela, Tomate e Alface",
+      "price": 17.5,
+      "category": "Sanduíches",
+      "id": 4318,
+      "bot_id": 680,
+      "is_available": true
+    },
+    {
+      "name": "BIG ESPECIAL FILÉ",
+      "description": "Pão, Filé, Hambúrguer, Bacon, Presunto, Muçarela, Ovo, Milho, Tomate e Alface",
+      "price": 22.0,
+      "category": "Sanduíches",
+      "id": 4316,
+      "bot_id": 680,
+      "is_available": true
+    },
+    {
+      "name": "BIG ESPECIAL FRANGO",
+      "description": "Pão, Frango, Hambúrguer, Bacon, Presunto, Muçarela, Ovo, Milho, Tomate e Alface",
+      "price": 18.5,
+      "category": "Sanduíches",
+      "id": 4322,
+      "bot_id": 680,
+      "is_available": true
+    },
+    {
+      "name": "BIG ESPECIAL HAMB. DE PICANHA",
+      "description": "3 Hambúrgueres (270g), Bacon, Presunto, Muçarela, Ovo, Catupiry e Alface",
+      "price": 21.0,
+      "category": "Sanduíches",
+      "id": 4325,
+      "bot_id": 680,
+      "is_available": true
+    },
+    {
+      "name": "BIG ESPECIAL HAMBÚRGUER",
+      "description": "Pão, 1 Hambúrguer, Bacon, Creme de Cheddar e Alface",
+      "price": 15.0,
+      "category": "Sanduíches",
+      "id": 4326,
+      "bot_id": 680,
+      "is_available": true
+    },
+    {
+      "name": "BIG ESPECIAL LOMBO",
+      "description": "Pão, Lombo, Hambúrguer, Bacon, Presunto, Muçarela, Ovo, Milho, Tomate e Alface",
+      "price": 20.0,
+      "category": "Sanduíches",
+      "id": 4319,
+      "bot_id": 680,
+      "is_available": true
+    },
+    {
+      "name": "ESPANHA",
+      "description": "Pão, Lombo, Muçarela, Tomate e Alface",
+      "price": 16.0,
+      "category": "Sanduíches",
+      "id": 4321,
+      "bot_id": 680,
+      "is_available": true
+    },
+    {
+      "name": "HAMBÚRGUER",
+      "description": "Pão, 1 Hambúrguer, Muçarela e Alface",
+      "price": 10.0,
+      "category": "Sanduíches",
+      "id": 4327,
+      "bot_id": 680,
+      "is_available": true
+    },
+    {
+      "name": "INGLATERRA",
+      "description": "Pão, Frango, Presunto, Muçarela, Tomate e Alface",
+      "price": 15.0,
+      "category": "Sanduíches",
+      "id": 4324,
+      "bot_id": 680,
+      "is_available": true
+    },
+    {
+      "name": "ITÁLIA",
+      "description": "Pão, Frango, Bacon, Presunto, Muçarela, Ovo, Tomate e Alface",
+      "price": 16.5,
+      "category": "Sanduíches",
+      "id": 4323,
+      "bot_id": 680,
+      "is_available": true
+    },
+    {
+      "name": "SUÉCIA",
+      "description": "Pão, Filé, Bacon, Presunto, Muçarela, Cebola, Milho e Alface",
+      "price": 19.5,
+      "category": "Sanduíches",
+      "id": 4317,
+      "bot_id": 680,
+      "is_available": true
+    },
+    {
+      "name": "SUÍÇA",
+      "description": "Pão, Lombo, Bacon, Muçarela, Cebola, Milho e Alface",
+      "price": 17.0,
+      "category": "Sanduíches",
+      "id": 4320,
+      "bot_id": 680,
+      "is_available": true
+    }
+  ],
+  "category": "hamburgueria"
+}

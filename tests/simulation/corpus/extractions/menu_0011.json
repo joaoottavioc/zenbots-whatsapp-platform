@@ -1,0 +1,257 @@
+{
+  "products": [
+    {
+      "name": "ÁGUA MINERAL",
+      "description": "Água mineral",
+      "price": 4.0,
+      "category": "Bebidas",
+      "id": 4447,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "ÁGUA MINERAL COM GÁS",
+      "description": "Água mineral com gás",
+      "price": 4.0,
+      "category": "Bebidas",
+      "id": 4448,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "FRAPPE DE MORANGO",
+      "description": "Frappe de morango",
+      "price": 13.9,
+      "category": "Bebidas",
+      "id": 4444,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "FRAPPE DE VANILLA",
+      "description": "Frappe de baunilha",
+      "price": 13.9,
+      "category": "Bebidas",
+      "id": 4445,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "FROZEN CAPUCINO",
+      "description": "Capuccino gelado",
+      "price": 13.9,
+      "category": "Bebidas",
+      "id": 4442,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "FROZEN CHOCOLATE",
+      "description": "Chocolate gelado",
+      "price": 13.9,
+      "category": "Bebidas",
+      "id": 4443,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "REFRI LATA",
+      "description": "Refrigerante em lata",
+      "price": 6.0,
+      "category": "Bebidas",
+      "id": 4446,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "SODA ITALIANA",
+      "description": "Soda italiana",
+      "price": 9.9,
+      "category": "Bebidas",
+      "id": 4449,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "CAPUCCINO CROCANTE",
+      "description": "Café capuccino crocante",
+      "price": 13.0,
+      "category": "Cafés",
+      "id": 4461,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "CAPUCCINO ITALIANO",
+      "description": "Café capuccino italiano",
+      "price": 10.0,
+      "category": "Cafés",
+      "id": 4453,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "CAPUCCINO NUTELLA",
+      "description": "Café capuccino com nutella",
+      "price": 10.0,
+      "category": "Cafés",
+      "id": 4454,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "CAPUCCINO PAÇOCA",
+      "description": "Café capuccino com paçoca",
+      "price": 10.0,
+      "category": "Cafés",
+      "id": 4455,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "CAPUCCINO TRADICIONAL",
+      "description": "Café capuccino tradicional",
+      "price": 8.0,
+      "category": "Cafés",
+      "id": 4452,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "CHOCOLATE QUENTE TIPO EUROPA",
+      "description": "Chocolate quente tipo Europa",
+      "price": 12.0,
+      "category": "Cafés",
+      "id": 4459,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "CHOCOLATE TRADICIONAL",
+      "description": "Chocolate quente tradicional",
+      "price": 10.0,
+      "category": "Cafés",
+      "id": 4458,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "EXPRESSO CURTO",
+      "description": "Café expresso curto",
+      "price": 4.0,
+      "category": "Cafés",
+      "id": 4450,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "EXPRESSO DUPLO",
+      "description": "Café expresso duplo",
+      "price": 8.0,
+      "category": "Cafés",
+      "id": 4451,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "MACHIATO",
+      "description": "Machiato (expresso com leite)",
+      "price": 12.5,
+      "category": "Cafés",
+      "id": 4460,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "MOCCACINO DE CHOCOLATE",
+      "description": "Moccacino com chocolate",
+      "price": 10.0,
+      "category": "Cafés",
+      "id": 4457,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "MOCCACINO DE DOCE LEITE",
+      "description": "Moccacino com doce de leite",
+      "price": 10.0,
+      "category": "Cafés",
+      "id": 4456,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "BOLO NO POTE",
+      "description": "Bolo servido no pote",
+      "price": 9.0,
+      "category": "Sobremesas",
+      "id": 4464,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "BOMBOM DE MORANGO",
+      "description": "Bombom de morango",
+      "price": 6.0,
+      "category": "Sobremesas",
+      "id": 4467,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "BROWNIE RECHEADO",
+      "description": "Brownie recheado",
+      "price": 7.9,
+      "category": "Sobremesas",
+      "id": 4468,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "CHESS CAKE",
+      "description": "Bolo tipo chess cake",
+      "price": 9.0,
+      "category": "Sobremesas",
+      "id": 4463,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "COOKIES",
+      "description": "Biscoitos cookies",
+      "price": 9.0,
+      "category": "Sobremesas",
+      "id": 4466,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "PUDIM",
+      "description": "Pudim",
+      "price": 7.0,
+      "category": "Sobremesas",
+      "id": 4469,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "TAÇA TENTAÇÃO",
+      "description": "Sobremesa taça tentação",
+      "price": 14.9,
+      "category": "Sobremesas",
+      "id": 4462,
+      "bot_id": 690,
+      "is_available": true
+    },
+    {
+      "name": "TORTA DE LIMÃO",
+      "description": "Torta de limão",
+      "price": 9.0,
+      "category": "Sobremesas",
+      "id": 4465,
+      "bot_id": 690,
+      "is_available": true
+    }
+  ],
+  "category": "doceria"
+}

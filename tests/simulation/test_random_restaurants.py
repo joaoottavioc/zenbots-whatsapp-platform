@@ -66,18 +66,28 @@ class RandSimContext:
 
     def _build_payload(self, text_body: str) -> dict:
         return {
-            "entry": [{"changes": [{"value": {
-                "metadata": {
-                    "phone_number_id": self.phone_number_id,
-                    "display_phone_number": self.contact_phone,
-                },
-                "messages": [{
-                    "from": self.contact_phone,
-                    "id": f"wamid.rd{uuid.uuid4().hex[:12]}",
-                    "text": {"body": text_body},
-                    "type": "text",
-                }],
-            }}]}],
+            "entry": [
+                {
+                    "changes": [
+                        {
+                            "value": {
+                                "metadata": {
+                                    "phone_number_id": self.phone_number_id,
+                                    "display_phone_number": self.contact_phone,
+                                },
+                                "messages": [
+                                    {
+                                        "from": self.contact_phone,
+                                        "id": f"wamid.rd{uuid.uuid4().hex[:12]}",
+                                        "text": {"body": text_body},
+                                        "type": "text",
+                                    }
+                                ],
+                            }
+                        }
+                    ]
+                }
+            ],
         }
 
     async def send(self, text_body: str) -> str | None:
@@ -127,11 +137,15 @@ class RandSimContext:
             if not cart:
                 return []
             ir = await fresh.execute(
-                select(CartItem).where(CartItem.cart_id == cart.id).order_by(CartItem.id)
+                select(CartItem)
+                .where(CartItem.cart_id == cart.id)
+                .order_by(CartItem.id)
             )
             result = []
             for item in ir.scalars().all():
-                pr = await fresh.execute(select(Product).where(Product.id == item.product_id))
+                pr = await fresh.execute(
+                    select(Product).where(Product.id == item.product_id)
+                )
                 prod = pr.scalars().first()
                 if prod:
                     result.append((prod.name, item.quantity))
@@ -146,7 +160,9 @@ class RandSimContext:
 @pytest_asyncio.fixture
 async def db_check():
     if not _LABELS:
-        pytest.skip("No test data. Run: python -m tests.simulation.random_restaurant_runner")
+        pytest.skip(
+            "No test data. Run: python -m tests.simulation.random_restaurant_runner"
+        )
     try:
         async with async_session() as session:
             await session.execute(text("SELECT 1"))
@@ -175,7 +191,9 @@ if not _LABELS:
 
 class TestRandAddSingle:
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("label", _LABELS, ids=lambda x: _TEST_DATA.get(x, {}).get("name", x))
+    @pytest.mark.parametrize(
+        "label", _LABELS, ids=lambda x: _TEST_DATA.get(x, {}).get("name", x)
+    )
     async def test_add_single(self, db_check, label):
         c = await _ctx(label)
         sc = _sc(label)
@@ -191,7 +209,9 @@ class TestRandAddSingle:
 
 class TestRandAddMulti:
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("label", _LABELS, ids=lambda x: _TEST_DATA.get(x, {}).get("name", x))
+    @pytest.mark.parametrize(
+        "label", _LABELS, ids=lambda x: _TEST_DATA.get(x, {}).get("name", x)
+    )
     async def test_add_multi(self, db_check, label):
         c = await _ctx(label)
         sc = _sc(label)
@@ -199,7 +219,9 @@ class TestRandAddMulti:
         await c.send(sc["add_multi_msg"])
         cart = await c.get_cart_items()
         expected = sc["add_multi_expected"]
-        assert len(cart) >= len(expected), f"Expected >= {len(expected)} items, got {cart}"
+        assert len(cart) >= len(expected), (
+            f"Expected >= {len(expected)} items, got {cart}"
+        )
         for exp_name, exp_qty in expected:
             found = [(n, q) for n, q in cart if exp_name.lower() in n.lower()]
             assert found, f"'{exp_name}' not in cart: {cart}"
@@ -208,7 +230,9 @@ class TestRandAddMulti:
 
 class TestRandUnavailable:
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("label", _LABELS, ids=lambda x: _TEST_DATA.get(x, {}).get("name", x))
+    @pytest.mark.parametrize(
+        "label", _LABELS, ids=lambda x: _TEST_DATA.get(x, {}).get("name", x)
+    )
     async def test_unavailable(self, db_check, label):
         sc = _sc(label)
         if not sc.get("unavailable_msg"):
@@ -225,14 +249,23 @@ class TestRandUnavailable:
         assert not bad, f"'{unavail}' should NOT be in cart: {cart}"
         assert response is not None
         rl = response.lower()
-        assert any(w in rl for w in ("falta", "indisponivel", "indisponível", "disponivel", "disponível")), (
-            f"No em falta: {response[:200]}"
-        )
+        assert any(
+            w in rl
+            for w in (
+                "falta",
+                "indisponivel",
+                "indisponível",
+                "disponivel",
+                "disponível",
+            )
+        ), f"No em falta: {response[:200]}"
 
 
 class TestRandRemove:
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("label", _LABELS, ids=lambda x: _TEST_DATA.get(x, {}).get("name", x))
+    @pytest.mark.parametrize(
+        "label", _LABELS, ids=lambda x: _TEST_DATA.get(x, {}).get("name", x)
+    )
     async def test_remove(self, db_check, label):
         c = await _ctx(label)
         sc = _sc(label)
@@ -250,7 +283,9 @@ class TestRandRemove:
 
 class TestRandSuggestions:
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("label", _LABELS, ids=lambda x: _TEST_DATA.get(x, {}).get("name", x))
+    @pytest.mark.parametrize(
+        "label", _LABELS, ids=lambda x: _TEST_DATA.get(x, {}).get("name", x)
+    )
     async def test_suggestions(self, db_check, label):
         c = await _ctx(label)
         sc = _sc(label)
@@ -263,7 +298,9 @@ class TestRandSuggestions:
 
 class TestRandCheckout:
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("label", _LABELS, ids=lambda x: _TEST_DATA.get(x, {}).get("name", x))
+    @pytest.mark.parametrize(
+        "label", _LABELS, ids=lambda x: _TEST_DATA.get(x, {}).get("name", x)
+    )
     async def test_checkout_protection(self, db_check, label):
         c = await _ctx(label)
         sc = _sc(label)
@@ -280,10 +317,99 @@ class TestRandCheckout:
 
 class TestRandGreeting:
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("label", _LABELS, ids=lambda x: _TEST_DATA.get(x, {}).get("name", x))
+    @pytest.mark.parametrize(
+        "label", _LABELS, ids=lambda x: _TEST_DATA.get(x, {}).get("name", x)
+    )
     async def test_greeting(self, db_check, label):
+        sc = _sc(label)
         c = await _ctx(label)
-        response = await c.send("oi, boa noite")
+        msg = sc.get("greeting_msg", "oi, boa noite")
+        response = await c.send(msg)
         cart = await c.get_cart_items()
         assert len(cart) == 0, f"Greeting added to cart: {cart}"
         assert response is not None
+
+
+class TestRandAbbreviation:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "label", _LABELS, ids=lambda x: _TEST_DATA.get(x, {}).get("name", x)
+    )
+    async def test_abbreviation(self, db_check, label):
+        """Order by abbreviated product name — should match the full product."""
+        sc = _sc(label)
+        if not sc.get("abbreviation_msg"):
+            pytest.skip("No abbreviation scenario")
+        c = await _ctx(label)
+        await c.send("oi")
+        await c.send(sc["abbreviation_msg"])
+        cart = await c.get_cart_items()
+        exp_name = sc["abbreviation_product"]
+        assert len(cart) >= 1, f"Abbreviation didn't add anything: {cart}"
+        found = [n for n, q in cart if exp_name.lower() in n.lower()]
+        assert found, f"'{exp_name}' not in cart (ordered by abbreviation): {cart}"
+
+
+class TestRandDoubleAdd:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "label", _LABELS, ids=lambda x: _TEST_DATA.get(x, {}).get("name", x)
+    )
+    async def test_double_add(self, db_check, label):
+        """Adding the same product twice should increase quantity, not duplicate."""
+        sc = _sc(label)
+        if not sc.get("double_add_msg_1"):
+            pytest.skip("No double add scenario")
+        c = await _ctx(label)
+        await c.send("oi")
+        await c.send(sc["double_add_msg_1"])
+        cart1 = await c.get_cart_items()
+        exp_name = sc["double_add_product"]
+        found1 = [(n, q) for n, q in cart1 if exp_name.lower() in n.lower()]
+        assert found1, f"First add failed: '{exp_name}' not in cart: {cart1}"
+
+        await c.send(sc["double_add_msg_2"])
+        cart2 = await c.get_cart_items()
+        found2 = [(n, q) for n, q in cart2 if exp_name.lower() in n.lower()]
+        assert found2, f"Second add lost product: '{exp_name}' not in cart: {cart2}"
+        assert found2[0][1] >= 2, f"Qty didn't increase: {found2}"
+
+
+class TestRandQuestion:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "label", _LABELS, ids=lambda x: _TEST_DATA.get(x, {}).get("name", x)
+    )
+    async def test_question_no_cart(self, db_check, label):
+        """Asking a question about a product should NOT add it to cart."""
+        sc = _sc(label)
+        if not sc.get("question_msg"):
+            pytest.skip("No question scenario")
+        c = await _ctx(label)
+        await c.send("oi")
+        await c.send(sc["question_msg"])
+        cart = await c.get_cart_items()
+        assert len(cart) == 0, f"Question added to cart: {cart}"
+
+
+class TestRandAddRemove:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "label", _LABELS, ids=lambda x: _TEST_DATA.get(x, {}).get("name", x)
+    )
+    async def test_add_then_remove(self, db_check, label):
+        """Add a product then remove it — cart should be empty."""
+        sc = _sc(label)
+        if not sc.get("add_remove_add_msg"):
+            pytest.skip("No add-remove scenario")
+        c = await _ctx(label)
+        await c.send("oi")
+        await c.send(sc["add_remove_add_msg"])
+        cart1 = await c.get_cart_items()
+        exp_name = sc["add_remove_product"]
+        assert len(cart1) >= 1, f"Add failed: {cart1}"
+
+        await c.send(sc["add_remove_remove_msg"])
+        cart2 = await c.get_cart_items()
+        still = [n for n, q in cart2 if exp_name.lower() in n.lower()]
+        assert not still, f"'{exp_name}' still in cart after remove: {cart2}"

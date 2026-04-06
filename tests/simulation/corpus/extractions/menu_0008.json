@@ -1,0 +1,122 @@
+{
+  "products": [
+    {
+      "name": "Brócolis",
+      "description": "Brócolis na manteiga, muçarela, bacon, orégano, alho crocante e catupiry.",
+      "price": 20.0,
+      "category": "Crepes Salgados",
+      "id": 4397,
+      "bot_id": 687,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa",
+      "description": "Calabresa, muçarela, cebola, alho crocante e um biquinho.",
+      "price": 21.0,
+      "category": "Crepes Salgados",
+      "id": 4398,
+      "bot_id": 687,
+      "is_available": true
+    },
+    {
+      "name": "Carne Seca",
+      "description": "Carne seca, muçarela, cebola, tomate, orégano, catupiry.",
+      "price": 26.0,
+      "category": "Crepes Salgados",
+      "id": 4409,
+      "bot_id": 687,
+      "is_available": true
+    },
+    {
+      "name": "Dog",
+      "description": "Salsicha, muçarela, tomate, cebola, bacon, milho, batata palha e um biquinho.",
+      "price": 19.0,
+      "category": "Crepes Salgados",
+      "id": 4399,
+      "bot_id": 687,
+      "is_available": true
+    },
+    {
+      "name": "Filé Mignon",
+      "description": "Filé mignon em cubos, muçarela, tomate, cebola, orégano, catupiry.",
+      "price": 28.0,
+      "category": "Crepes Salgados",
+      "id": 4403,
+      "bot_id": 687,
+      "is_available": true
+    },
+    {
+      "name": "Frango / Bacon",
+      "description": "Frango desfiado, muçarela, cebola, orégano.",
+      "price": 21.0,
+      "category": "Crepes Salgados",
+      "id": 4400,
+      "bot_id": 687,
+      "is_available": true
+    },
+    {
+      "name": "Frango / Brócolis",
+      "description": "Frango desfiado, muçarela, brócolis, orégano.",
+      "price": 22.0,
+      "category": "Crepes Salgados",
+      "id": 4401,
+      "bot_id": 687,
+      "is_available": true
+    },
+    {
+      "name": "Frango / Catupiry",
+      "description": "Frango desfiado, muçarela, catupiry.",
+      "price": 20.0,
+      "category": "Crepes Salgados",
+      "id": 4402,
+      "bot_id": 687,
+      "is_available": true
+    },
+    {
+      "name": "Lombo",
+      "description": "Lombo defumado, muçarela, tomate, cebola, orégano, catupiry.",
+      "price": 19.0,
+      "category": "Crepes Salgados",
+      "id": 4404,
+      "bot_id": 687,
+      "is_available": true
+    },
+    {
+      "name": "Palmito",
+      "description": "Palmito, muçarela, bacon, azeitona, orégano.",
+      "price": 21.0,
+      "category": "Crepes Salgados",
+      "id": 4407,
+      "bot_id": 687,
+      "is_available": true
+    },
+    {
+      "name": "Pizza",
+      "description": "Presunto ralado, muçarela, tomate, cebola, orégano.",
+      "price": 18.0,
+      "category": "Crepes Salgados",
+      "id": 4405,
+      "bot_id": 687,
+      "is_available": true
+    },
+    {
+      "name": "Portuguesa",
+      "description": "Presunto, muçarela, palmito, ervilha, tomate, cebola, orégano.",
+      "price": 21.0,
+      "category": "Crepes Salgados",
+      "id": 4406,
+      "bot_id": 687,
+      "is_available": true
+    },
+    {
+      "name": "Quatro Queijos",
+      "description": "Muçarela, provolone, gorgonzola, parmesão.",
+      "price": 21.0,
+      "category": "Crepes Salgados",
+      "id": 4408,
+      "bot_id": 687,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

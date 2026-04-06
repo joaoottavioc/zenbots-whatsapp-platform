@@ -1,0 +1,95 @@
+{
+  "products": [
+    {
+      "name": "Carne do Sol e Queijo",
+      "description": "Carne do Sol e Queijo",
+      "price": 3.5,
+      "category": "Pastéis",
+      "id": 4395,
+      "bot_id": 686,
+      "is_available": true
+    },
+    {
+      "name": "Carne Moída e Queijo",
+      "description": "Queijo e Carne Moída",
+      "price": 3.0,
+      "category": "Pastéis",
+      "id": 4391,
+      "bot_id": 686,
+      "is_available": true
+    },
+    {
+      "name": "Frango, Camarão e Queijo",
+      "description": "Frango, Camarão e Queijo",
+      "price": 3.5,
+      "category": "Pastéis",
+      "id": 4394,
+      "bot_id": 686,
+      "is_available": true
+    },
+    {
+      "name": "Frango com Catupiry",
+      "description": "Frango e Catupiry",
+      "price": 3.0,
+      "category": "Pastéis",
+      "id": 4393,
+      "bot_id": 686,
+      "is_available": true
+    },
+    {
+      "name": "Frango com Queijo",
+      "description": "Frango e Queijo",
+      "price": 3.0,
+      "category": "Pastéis",
+      "id": 4392,
+      "bot_id": 686,
+      "is_available": true
+    },
+    {
+      "name": "Mistão",
+      "description": "Queijo, Presunto, Carne e Frango",
+      "price": 3.0,
+      "category": "Pastéis",
+      "id": 4396,
+      "bot_id": 686,
+      "is_available": true
+    },
+    {
+      "name": "Misto",
+      "description": "Queijo e Presunto",
+      "price": 3.0,
+      "category": "Pastéis",
+      "id": 4388,
+      "bot_id": 686,
+      "is_available": true
+    },
+    {
+      "name": "Pizza",
+      "description": "Queijo, Presunto, Calabresa e Orégano",
+      "price": 3.0,
+      "category": "Pastéis",
+      "id": 4389,
+      "bot_id": 686,
+      "is_available": true
+    },
+    {
+      "name": "Queijo",
+      "description": "Queijo",
+      "price": 3.0,
+      "category": "Pastéis",
+      "id": 4387,
+      "bot_id": 686,
+      "is_available": true
+    },
+    {
+      "name": "Queijo com Salsicha",
+      "description": "Queijo e Salsicha",
+      "price": 3.0,
+      "category": "Pastéis",
+      "id": 4390,
+      "bot_id": 686,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

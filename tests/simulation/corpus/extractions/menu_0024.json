@@ -1,0 +1,176 @@
+{
+  "products": [
+    {
+      "name": "Caipirinha de Limão",
+      "description": "",
+      "price": 14.5,
+      "category": "Caipirinha e Caipiroska",
+      "id": 4671,
+      "bot_id": 703,
+      "is_available": true
+    },
+    {
+      "name": "Caipiroska de Limão",
+      "description": "",
+      "price": 17.3,
+      "category": "Caipirinha e Caipiroska",
+      "id": 4672,
+      "bot_id": 703,
+      "is_available": true
+    },
+    {
+      "name": "Brahma",
+      "description": "",
+      "price": 11.0,
+      "category": "Cervejas",
+      "id": 4665,
+      "bot_id": 703,
+      "is_available": true
+    },
+    {
+      "name": "Eisenbahn",
+      "description": "",
+      "price": 12.8,
+      "category": "Cervejas",
+      "id": 4667,
+      "bot_id": 703,
+      "is_available": true
+    },
+    {
+      "name": "Império",
+      "description": "",
+      "price": 12.5,
+      "category": "Cervejas",
+      "id": 4666,
+      "bot_id": 703,
+      "is_available": true
+    },
+    {
+      "name": "Itaipava Premium",
+      "description": "",
+      "price": 12.0,
+      "category": "Cervejas",
+      "id": 4664,
+      "bot_id": 703,
+      "is_available": true
+    },
+    {
+      "name": "Original",
+      "description": "",
+      "price": 12.5,
+      "category": "Cervejas",
+      "id": 4662,
+      "bot_id": 703,
+      "is_available": true
+    },
+    {
+      "name": "Stella Artois",
+      "description": "",
+      "price": 12.9,
+      "category": "Cervejas",
+      "id": 4663,
+      "bot_id": 703,
+      "is_available": true
+    },
+    {
+      "name": "Cerveja sem álcool",
+      "description": "",
+      "price": 7.0,
+      "category": "Cervejas Long Neck",
+      "id": 4670,
+      "bot_id": 703,
+      "is_available": true
+    },
+    {
+      "name": "Heineken",
+      "description": "",
+      "price": 8.5,
+      "category": "Cervejas Long Neck",
+      "id": 4668,
+      "bot_id": 703,
+      "is_available": true
+    },
+    {
+      "name": "Malzbier",
+      "description": "",
+      "price": 7.0,
+      "category": "Cervejas Long Neck",
+      "id": 4669,
+      "bot_id": 703,
+      "is_available": true
+    },
+    {
+      "name": "Abacaxi",
+      "description": "",
+      "price": 6.0,
+      "category": "Sucos",
+      "id": 4676,
+      "bot_id": 703,
+      "is_available": true
+    },
+    {
+      "name": "Abacaxi com Hortelã",
+      "description": "",
+      "price": 6.6,
+      "category": "Sucos",
+      "id": 4675,
+      "bot_id": 703,
+      "is_available": true
+    },
+    {
+      "name": "Acerola",
+      "description": "",
+      "price": 5.9,
+      "category": "Sucos",
+      "id": 4674,
+      "bot_id": 703,
+      "is_available": true
+    },
+    {
+      "name": "Laranja",
+      "description": "",
+      "price": 5.9,
+      "category": "Sucos",
+      "id": 4673,
+      "bot_id": 703,
+      "is_available": true
+    },
+    {
+      "name": "Limão",
+      "description": "",
+      "price": 7.3,
+      "category": "Sucos",
+      "id": 4680,
+      "bot_id": 703,
+      "is_available": true
+    },
+    {
+      "name": "Limonada Suíça",
+      "description": "",
+      "price": 8.5,
+      "category": "Sucos",
+      "id": 4679,
+      "bot_id": 703,
+      "is_available": true
+    },
+    {
+      "name": "Maracujá",
+      "description": "",
+      "price": 5.9,
+      "category": "Sucos",
+      "id": 4677,
+      "bot_id": 703,
+      "is_available": true
+    },
+    {
+      "name": "Morangos",
+      "description": "",
+      "price": 5.9,
+      "category": "Sucos",
+      "id": 4678,
+      "bot_id": 703,
+      "is_available": true
+    }
+  ],
+  "category": "outros"
+}

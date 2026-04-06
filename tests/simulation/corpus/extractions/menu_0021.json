@@ -1,0 +1,167 @@
+{
+  "products": [
+    {
+      "name": "Bolinho de Salmão",
+      "description": "Bolinho de salmão frito servidos com molho tártaro",
+      "price": 19.0,
+      "category": "Entradas",
+      "id": 4613,
+      "bot_id": 700,
+      "is_available": true
+    },
+    {
+      "name": "Eurofiladinho",
+      "description": "Massa fina crocante recheada com carne",
+      "price": 29.9,
+      "category": "Entradas",
+      "id": 4612,
+      "bot_id": 700,
+      "is_available": true
+    },
+    {
+      "name": "Gengibre",
+      "description": "",
+      "price": 9.9,
+      "category": "Entradas",
+      "id": 4617,
+      "bot_id": 700,
+      "is_available": true
+    },
+    {
+      "name": "Gyoza",
+      "description": "(Individual)",
+      "price": 9.9,
+      "category": "Entradas",
+      "id": 4615,
+      "bot_id": 700,
+      "is_available": true
+    },
+    {
+      "name": "Harumaki Carne",
+      "description": "01 und",
+      "price": 8.5,
+      "category": "Entradas",
+      "id": 4611,
+      "bot_id": 700,
+      "is_available": true
+    },
+    {
+      "name": "Harumaki Queijo",
+      "description": "01 und",
+      "price": 8.5,
+      "category": "Entradas",
+      "id": 4610,
+      "bot_id": 700,
+      "is_available": true
+    },
+    {
+      "name": "Kani Queijo",
+      "description": "10 und",
+      "price": 29.9,
+      "category": "Entradas",
+      "id": 4609,
+      "bot_id": 700,
+      "is_available": true
+    },
+    {
+      "name": "Missoshiru",
+      "description": "Sopa de soja com pequenos pedaços de tofu salpicada de cebolinha",
+      "price": 9.9,
+      "category": "Entradas",
+      "id": 4614,
+      "bot_id": 700,
+      "is_available": true
+    },
+    {
+      "name": "Nacho",
+      "description": "Massa fina crocante com recheio de salada, cebolinhas crocantes e batata palha",
+      "price": 29.9,
+      "category": "Entradas",
+      "id": 4608,
+      "bot_id": 700,
+      "is_available": true
+    },
+    {
+      "name": "Sunomono",
+      "description": "(Individual)",
+      "price": 9.9,
+      "category": "Entradas",
+      "id": 4616,
+      "bot_id": 700,
+      "is_available": true
+    },
+    {
+      "name": "Carpaccio",
+      "description": "(Porção)",
+      "price": 39.9,
+      "category": "Porções",
+      "id": 4624,
+      "bot_id": 700,
+      "is_available": true
+    },
+    {
+      "name": "Ceviche",
+      "description": "(Porção)",
+      "price": 32.9,
+      "category": "Porções",
+      "id": 4620,
+      "bot_id": 700,
+      "is_available": true
+    },
+    {
+      "name": "Salmão Flambado",
+      "description": "(Porção)",
+      "price": 39.9,
+      "category": "Porções",
+      "id": 4619,
+      "bot_id": 700,
+      "is_available": true
+    },
+    {
+      "name": "Sasake de Peixe Branco",
+      "description": "(Porção)",
+      "price": 32.9,
+      "category": "Porções",
+      "id": 4623,
+      "bot_id": 700,
+      "is_available": true
+    },
+    {
+      "name": "Sasake Polvo",
+      "description": "(Porção)",
+      "price": 39.9,
+      "category": "Porções",
+      "id": 4621,
+      "bot_id": 700,
+      "is_available": true
+    },
+    {
+      "name": "Sasake Salmão",
+      "description": "Sashimi de salmão regado ao molho de limão",
+      "price": 39.9,
+      "category": "Porções",
+      "id": 4622,
+      "bot_id": 700,
+      "is_available": true
+    },
+    {
+      "name": "Shimeji",
+      "description": "(Porção)",
+      "price": 39.9,
+      "category": "Porções",
+      "id": 4618,
+      "bot_id": 700,
+      "is_available": true
+    },
+    {
+      "name": "Tartake",
+      "description": "(18 und)",
+      "price": 39.9,
+      "category": "Porções",
+      "id": 4625,
+      "bot_id": 700,
+      "is_available": true
+    }
+  ],
+  "category": "sushi"
+}

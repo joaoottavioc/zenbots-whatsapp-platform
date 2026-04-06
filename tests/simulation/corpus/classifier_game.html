@@ -251,15 +251,18 @@ async function acceptImage() {
       history.push({action: 'accept', cursor: cursor});
       showToast(`✅ #${totalAccepted} saved (${data.size_kb}KB)`, 'accept');
     } else {
-      // Download failed — auto skip
-      totalSkipped++;
-      levelSkipped++;
-      history.push({action: 'skip', cursor: cursor});
-      showToast('⚠️ Download failed, skipped', 'skip');
+      // Download failed — silently skip, don't count
+      cursor++;
+      busy = false;
+      showToast('⏭ Download failed, next...', 'skip');
+      showImage();
+      return;
     }
   } catch(e) {
-    showToast('⚠️ Server error', 'skip');
+    cursor++;
     busy = false;
+    showToast('⏭ Error, next...', 'skip');
+    showImage();
     return;
   }
 
@@ -312,7 +315,7 @@ function undoLast() {
 }
 
 function checkLevelEnd() {
-  if (levelAccepted + levelSkipped >= LEVEL_SIZE) {
+  if (levelAccepted >= LEVEL_SIZE) {
     // Show level complete overlay
     document.getElementById('levelNum').textContent = level;
     document.getElementById('lvlAccepted').textContent = levelAccepted;

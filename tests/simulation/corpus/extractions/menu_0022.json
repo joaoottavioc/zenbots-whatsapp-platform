@@ -1,0 +1,302 @@
+{
+  "products": [
+    {
+      "name": "Água de Coco 1L",
+      "description": "",
+      "price": 12.99,
+      "category": "Água e Refrigerantes",
+      "id": 4651,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Água de Coco 200 ml",
+      "description": "",
+      "price": 6.99,
+      "category": "Água e Refrigerantes",
+      "id": 4650,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Água Mineral com Gás",
+      "description": "",
+      "price": 6.99,
+      "category": "Água e Refrigerantes",
+      "id": 4648,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Água Mineral sem Gás",
+      "description": "",
+      "price": 6.99,
+      "category": "Água e Refrigerantes",
+      "id": 4649,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Coca-Cola 1L",
+      "description": "",
+      "price": 12.99,
+      "category": "Água e Refrigerantes",
+      "id": 4655,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Coca-Cola Lata",
+      "description": "",
+      "price": 6.99,
+      "category": "Água e Refrigerantes",
+      "id": 4654,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Fanta Laranja 1L",
+      "description": "",
+      "price": 12.99,
+      "category": "Água e Refrigerantes",
+      "id": 4657,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Fanta Laranja Lata",
+      "description": "",
+      "price": 6.99,
+      "category": "Água e Refrigerantes",
+      "id": 4656,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Guaraná Antártica 1L",
+      "description": "",
+      "price": 12.99,
+      "category": "Água e Refrigerantes",
+      "id": 4653,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Guaraná Antártica Lata",
+      "description": "",
+      "price": 6.99,
+      "category": "Água e Refrigerantes",
+      "id": 4652,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "H2O Limão",
+      "description": "",
+      "price": 6.99,
+      "category": "Água e Refrigerantes",
+      "id": 4658,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Camarão à Parmegiana",
+      "description": "",
+      "price": 19.99,
+      "category": "Camarão & Peixe",
+      "id": 4634,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Camarão Calabresa",
+      "description": "",
+      "price": 19.99,
+      "category": "Camarão & Peixe",
+      "id": 4637,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Camarão da Gringa",
+      "description": "",
+      "price": 19.99,
+      "category": "Camarão & Peixe",
+      "id": 4636,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Camarão Internacional",
+      "description": "",
+      "price": 19.99,
+      "category": "Camarão & Peixe",
+      "id": 4635,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Camarão Quatro Queijos",
+      "description": "",
+      "price": 19.99,
+      "category": "Camarão & Peixe",
+      "id": 4638,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Peixe ao Molho de Camarão",
+      "description": "",
+      "price": 12.99,
+      "category": "Camarão & Peixe",
+      "id": 4641,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Peixe Frito",
+      "description": "",
+      "price": 19.99,
+      "category": "Camarão & Peixe",
+      "id": 4640,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Stragoni de Camarão",
+      "description": "",
+      "price": 19.99,
+      "category": "Camarão & Peixe",
+      "id": 4639,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Feijoada Completa",
+      "description": "",
+      "price": 19.99,
+      "category": "Pratos Principais",
+      "id": 4633,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Filé à Parmegiana",
+      "description": "",
+      "price": 19.99,
+      "category": "Pratos Principais",
+      "id": 4626,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Filé de Frango",
+      "description": "",
+      "price": 19.99,
+      "category": "Pratos Principais",
+      "id": 4631,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Filé de Moho Madere",
+      "description": "",
+      "price": 19.99,
+      "category": "Pratos Principais",
+      "id": 4630,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Frango de Sal Nativo",
+      "description": "",
+      "price": 10.99,
+      "category": "Pratos Principais",
+      "id": 4628,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Lasanha de Bolonhesa",
+      "description": "",
+      "price": 19.99,
+      "category": "Pratos Principais",
+      "id": 4632,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Mistão de Carne",
+      "description": "",
+      "price": 19.99,
+      "category": "Pratos Principais",
+      "id": 4627,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Stragoni de Carne",
+      "description": "",
+      "price": 19.99,
+      "category": "Pratos Principais",
+      "id": 4629,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Pudim Lito 150 ml",
+      "description": "",
+      "price": 4.99,
+      "category": "Sobremesas",
+      "id": 4642,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Pudim Lito 300 ml",
+      "description": "",
+      "price": 8.99,
+      "category": "Sobremesas",
+      "id": 4643,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Café Expresso",
+      "description": "",
+      "price": 5.5,
+      "category": "Sucos & Café",
+      "id": 4647,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Café Limo",
+      "description": "",
+      "price": 4.5,
+      "category": "Sucos & Café",
+      "id": 4646,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Coro Laranja",
+      "description": "",
+      "price": 4.99,
+      "category": "Sucos & Café",
+      "id": 4644,
+      "bot_id": 701,
+      "is_available": true
+    },
+    {
+      "name": "Jarra Laranja 1L",
+      "description": "",
+      "price": 12.99,
+      "category": "Sucos & Café",
+      "id": 4645,
+      "bot_id": 701,
+      "is_available": true
+    }
+  ],
+  "category": "marmitaria"
+}

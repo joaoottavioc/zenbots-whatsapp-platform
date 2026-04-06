@@ -57,7 +57,9 @@ ALL_MENUS = [
 
 _multi_setup_done = False
 _multi_setup_skipped = False
-_bots: dict[str, dict] = {}  # label -> {"bot_id": int, "user_id": int, "phone_number_id": str, "menu_module": module}
+_bots: dict[
+    str, dict
+] = {}  # label -> {"bot_id": int, "user_id": int, "phone_number_id": str, "menu_module": module}
 
 
 async def _ensure_multi_test_data():
@@ -357,9 +359,7 @@ class TestMultiRestaurantAddSingle:
         expected = scenarios["add_single_expected"]
         assert len(cart) >= 1, f"[{label}] Expected at least 1 item, got {cart}"
         for exp_name, exp_qty in expected:
-            found = [
-                (n, q) for n, q in cart if exp_name.lower() in n.lower()
-            ]
+            found = [(n, q) for n, q in cart if exp_name.lower() in n.lower()]
             assert found, f"[{label}] Expected '{exp_name}' in cart, got {cart}"
             assert found[0][1] == exp_qty, (
                 f"[{label}] Expected qty={exp_qty} for '{exp_name}', got {found[0][1]}"
@@ -384,9 +384,7 @@ class TestMultiRestaurantAddMulti:
             f"[{label}] Expected at least {len(expected)} items, got {cart}"
         )
         for exp_name, exp_qty in expected:
-            found = [
-                (n, q) for n, q in cart if exp_name.lower() in n.lower()
-            ]
+            found = [(n, q) for n, q in cart if exp_name.lower() in n.lower()]
             assert found, f"[{label}] Expected '{exp_name}' in cart, got {cart}"
             assert found[0][1] == exp_qty, (
                 f"[{label}] Expected qty={exp_qty} for '{exp_name}', got {found[0][1]}"
@@ -411,9 +409,7 @@ class TestMultiRestaurantUnavailable:
 
         # Available product should be in cart
         found = [n for n, q in cart if available_name.lower() in n.lower()]
-        assert found, (
-            f"[{label}] Expected '{available_name}' in cart, got {cart}"
-        )
+        assert found, f"[{label}] Expected '{available_name}' in cart, got {cart}"
 
         # Unavailable product should NOT be in cart
         unavail_in_cart = [n for n, q in cart if unavailable_name.lower() in n.lower()]
@@ -424,9 +420,11 @@ class TestMultiRestaurantUnavailable:
         # Response should mention em falta
         assert response is not None, f"[{label}] Expected a response"
         response_lower = response.lower()
-        assert "falta" in response_lower or "indisponível" in response_lower or "disponível" in response_lower, (
-            f"[{label}] Expected 'em falta' mention in response: {response[:200]}"
-        )
+        assert (
+            "falta" in response_lower
+            or "indisponível" in response_lower
+            or "disponível" in response_lower
+        ), f"[{label}] Expected 'em falta' mention in response: {response[:200]}"
 
 
 class TestMultiRestaurantRemove:
@@ -500,9 +498,7 @@ class TestMultiRestaurantCheckoutProtection:
         cart = await ctx.get_cart_items()
         exp_name, exp_qty = scenarios["checkout_product_expected"]
         found = [n for n, q in cart if exp_name.lower() in n.lower()]
-        assert found, (
-            f"[{label}] Checkout destroyed! '{exp_name}' not in cart: {cart}"
-        )
+        assert found, f"[{label}] Checkout destroyed! '{exp_name}' not in cart: {cart}"
 
 
 class TestMultiRestaurantGreeting:
@@ -516,7 +512,5 @@ class TestMultiRestaurantGreeting:
         response = await ctx.send("oi, boa noite")
 
         cart = await ctx.get_cart_items()
-        assert len(cart) == 0, (
-            f"[{label}] Greeting should NOT add to cart, got {cart}"
-        )
+        assert len(cart) == 0, f"[{label}] Greeting should NOT add to cart, got {cart}"
         assert response is not None, f"[{label}] Expected a greeting response"

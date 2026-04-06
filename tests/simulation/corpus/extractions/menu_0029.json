@@ -1,0 +1,167 @@
+{
+  "products": [
+    {
+      "name": "Água",
+      "description": "",
+      "price": 10.0,
+      "category": "Bebidas",
+      "id": 4748,
+      "bot_id": 708,
+      "is_available": true
+    },
+    {
+      "name": "Cerveja",
+      "description": "",
+      "price": 12.0,
+      "category": "Bebidas",
+      "id": 4751,
+      "bot_id": 708,
+      "is_available": true
+    },
+    {
+      "name": "Chopp",
+      "description": "",
+      "price": 12.0,
+      "category": "Bebidas",
+      "id": 4752,
+      "bot_id": 708,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante",
+      "description": "",
+      "price": 10.0,
+      "category": "Bebidas",
+      "id": 4750,
+      "bot_id": 708,
+      "is_available": true
+    },
+    {
+      "name": "Suco",
+      "description": "",
+      "price": 10.0,
+      "category": "Bebidas",
+      "id": 4749,
+      "bot_id": 708,
+      "is_available": true
+    },
+    {
+      "name": "Baconese",
+      "description": "",
+      "price": 5.0,
+      "category": "Molhos da Casa",
+      "id": 4747,
+      "bot_id": 708,
+      "is_available": true
+    },
+    {
+      "name": "Maionese de cenoura",
+      "description": "",
+      "price": 5.0,
+      "category": "Molhos da Casa",
+      "id": 4743,
+      "bot_id": 708,
+      "is_available": true
+    },
+    {
+      "name": "Maionese de ervas",
+      "description": "",
+      "price": 5.0,
+      "category": "Molhos da Casa",
+      "id": 4744,
+      "bot_id": 708,
+      "is_available": true
+    },
+    {
+      "name": "Molho de alho",
+      "description": "",
+      "price": 5.0,
+      "category": "Molhos da Casa",
+      "id": 4746,
+      "bot_id": 708,
+      "is_available": true
+    },
+    {
+      "name": "Pimenta agri-doce",
+      "description": "",
+      "price": 5.0,
+      "category": "Molhos da Casa",
+      "id": 4745,
+      "bot_id": 708,
+      "is_available": true
+    },
+    {
+      "name": "Americano c/ Catupiry",
+      "description": "",
+      "price": 12.0,
+      "category": "Os Favoritos",
+      "id": 4742,
+      "bot_id": 708,
+      "is_available": true
+    },
+    {
+      "name": "Bacon",
+      "description": "",
+      "price": 12.0,
+      "category": "Os Favoritos",
+      "id": 4736,
+      "bot_id": 708,
+      "is_available": true
+    },
+    {
+      "name": "Bacon c/ Catupiry",
+      "description": "",
+      "price": 12.0,
+      "category": "Os Favoritos",
+      "id": 4737,
+      "bot_id": 708,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa c/ Catupiry",
+      "description": "",
+      "price": 12.0,
+      "category": "Os Favoritos",
+      "id": 4738,
+      "bot_id": 708,
+      "is_available": true
+    },
+    {
+      "name": "Carne Seca c/ Catupiry",
+      "description": "",
+      "price": 12.0,
+      "category": "Os Favoritos",
+      "id": 4741,
+      "bot_id": 708,
+      "is_available": true
+    },
+    {
+      "name": "Costela c/ Catupiry",
+      "description": "",
+      "price": 12.0,
+      "category": "Os Favoritos",
+      "id": 4739,
+      "bot_id": 708,
+      "is_available": true
+    },
+    {
+      "name": "Frango c/ Catupiry",
+      "description": "",
+      "price": 12.0,
+      "category": "Os Favoritos",
+      "id": 4740,
+      "bot_id": 708,
+      "is_available": true
+    },
+    {
+      "name": "Tradicional",
+      "description": "",
+      "price": 10.0,
+      "category": "Os Favoritos",
+      "id": 4735,
+      "bot_id": 708,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

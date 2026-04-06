@@ -1,0 +1,149 @@
+{
+  "products": [
+    {
+      "name": "Banana",
+      "description": "",
+      "price": 40.0,
+      "category": "Pizzas Doces",
+      "id": 4367,
+      "bot_id": 682,
+      "is_available": true
+    },
+    {
+      "name": "Brigadeiro",
+      "description": "",
+      "price": 40.0,
+      "category": "Pizzas Doces",
+      "id": 4368,
+      "bot_id": 682,
+      "is_available": true
+    },
+    {
+      "name": "Broto",
+      "description": "",
+      "price": 25.0,
+      "category": "Pizzas Doces",
+      "id": 4369,
+      "bot_id": 682,
+      "is_available": true
+    },
+    {
+      "name": "4 Queijos",
+      "description": "(Muçarela, queijo prato, provolone e catupiry)",
+      "price": 45.0,
+      "category": "Pizzas Salgadas",
+      "id": 4356,
+      "bot_id": 682,
+      "is_available": true
+    },
+    {
+      "name": "Baiana",
+      "description": "(Calabresa, cebola e pimenta)",
+      "price": 27.0,
+      "category": "Pizzas Salgadas",
+      "id": 4363,
+      "bot_id": 682,
+      "is_available": true
+    },
+    {
+      "name": "Brócolis c/ bacon",
+      "description": "(Muçarela, bacon e brócolis)",
+      "price": 35.0,
+      "category": "Pizzas Salgadas",
+      "id": 4357,
+      "bot_id": 682,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa",
+      "description": "(Calabresa, cebola e pimenta)",
+      "price": 27.0,
+      "category": "Pizzas Salgadas",
+      "id": 4362,
+      "bot_id": 682,
+      "is_available": true
+    },
+    {
+      "name": "Carijó",
+      "description": "(Frango, milho e catupiry)",
+      "price": 45.0,
+      "category": "Pizzas Salgadas",
+      "id": 4360,
+      "bot_id": 682,
+      "is_available": true
+    },
+    {
+      "name": "Frango com Catupiry",
+      "description": "",
+      "price": 45.0,
+      "category": "Pizzas Salgadas",
+      "id": 4361,
+      "bot_id": 682,
+      "is_available": true
+    },
+    {
+      "name": "Lombo c/ Catupiry",
+      "description": "",
+      "price": 45.0,
+      "category": "Pizzas Salgadas",
+      "id": 4359,
+      "bot_id": 682,
+      "is_available": true
+    },
+    {
+      "name": "Margarita",
+      "description": "(Mussarela e manjericão)",
+      "price": 26.0,
+      "category": "Pizzas Salgadas",
+      "id": 4365,
+      "bot_id": 682,
+      "is_available": true
+    },
+    {
+      "name": "Mista",
+      "description": "(Presunto, muçarela e tomate)",
+      "price": 30.0,
+      "category": "Pizzas Salgadas",
+      "id": 4366,
+      "bot_id": 682,
+      "is_available": true
+    },
+    {
+      "name": "Muçarela",
+      "description": "",
+      "price": 20.0,
+      "category": "Pizzas Salgadas",
+      "id": 4354,
+      "bot_id": 682,
+      "is_available": true
+    },
+    {
+      "name": "Portuguesa",
+      "description": "(Presunto, muçarela e azeitona)",
+      "price": 35.0,
+      "category": "Pizzas Salgadas",
+      "id": 4364,
+      "bot_id": 682,
+      "is_available": true
+    },
+    {
+      "name": "Salame",
+      "description": "(Salame, muçarela e cebola)",
+      "price": 40.0,
+      "category": "Pizzas Salgadas",
+      "id": 4355,
+      "bot_id": 682,
+      "is_available": true
+    },
+    {
+      "name": "Vegetariana",
+      "description": "(Muçarela, champignon, milho, brócolis e azeitona)",
+      "price": 45.0,
+      "category": "Pizzas Salgadas",
+      "id": 4358,
+      "bot_id": 682,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

@@ -1,0 +1,104 @@
+{
+  "products": [
+    {
+      "name": "Escondidinho de Camarão",
+      "description": "Camarão, batatas, queijo, acompanhamentos.",
+      "price": 82.9,
+      "category": "Pratos Principais",
+      "id": 4377,
+      "bot_id": 685,
+      "is_available": true
+    },
+    {
+      "name": "Escondidinho de Carne Seca",
+      "description": "Carne seca, batatas, queijo, acompanhamentos.",
+      "price": 79.9,
+      "category": "Pratos Principais",
+      "id": 4378,
+      "bot_id": 685,
+      "is_available": true
+    },
+    {
+      "name": "Feijoada Diuna",
+      "description": "Feijoada com carnes, acompanhamentos.",
+      "price": 179.9,
+      "category": "Pratos Principais",
+      "id": 4379,
+      "bot_id": 685,
+      "is_available": true
+    },
+    {
+      "name": "Filé de Frango à Parmegiana",
+      "description": "Filé de frango, queijo, molho, acompanhamentos.",
+      "price": 54.9,
+      "category": "Pratos Principais",
+      "id": 4382,
+      "bot_id": 685,
+      "is_available": true
+    },
+    {
+      "name": "Filé Mignon à Parmegiana",
+      "description": "Filé mignon, queijo, molho, acompanhamentos.",
+      "price": 99.9,
+      "category": "Pratos Principais",
+      "id": 4381,
+      "bot_id": 685,
+      "is_available": true
+    },
+    {
+      "name": "Fricassê de Frango",
+      "description": "Frango desfiado, creme de leite, batata palha, queijo, acompanhamentos.",
+      "price": 84.9,
+      "category": "Pratos Principais",
+      "id": 4376,
+      "bot_id": 685,
+      "is_available": true
+    },
+    {
+      "name": "Picanha Grelhada",
+      "description": "Picanha grelhada, acompanhamentos.",
+      "price": 150.9,
+      "category": "Pratos Principais",
+      "id": 4383,
+      "bot_id": 685,
+      "is_available": true
+    },
+    {
+      "name": "Rabo de Galo",
+      "description": "Prato com carne de rabo, acompanhamentos.",
+      "price": 79.9,
+      "category": "Pratos Principais",
+      "id": 4380,
+      "bot_id": 685,
+      "is_available": true
+    },
+    {
+      "name": "Steak Diuna",
+      "description": "Steak, acompanhamentos.",
+      "price": 99.9,
+      "category": "Pratos Principais",
+      "id": 4384,
+      "bot_id": 685,
+      "is_available": true
+    },
+    {
+      "name": "Tilápia Diuna",
+      "description": "Tilápia, acompanhamentos.",
+      "price": 82.9,
+      "category": "Pratos Principais",
+      "id": 4385,
+      "bot_id": 685,
+      "is_available": true
+    },
+    {
+      "name": "Tilápia Grelhada",
+      "description": "Tilápia grelhada, acompanhamentos.",
+      "price": 82.9,
+      "category": "Pratos Principais",
+      "id": 4386,
+      "bot_id": 685,
+      "is_available": true
+    }
+  ],
+  "category": "marmitaria"
+}

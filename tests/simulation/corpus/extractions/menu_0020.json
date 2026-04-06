@@ -1,0 +1,68 @@
+{
+  "products": [
+    {
+      "name": "Nathan's Chicago Dog",
+      "description": "Nathan's World Famous 100% All Beef Hot Dog, Chopped Onions and Tomatoes, Pickles, Green Relish, Sport Pepper, Mustard and Celery Salt, includes potato chips",
+      "price": 5.95,
+      "category": "Lanches",
+      "id": 4602,
+      "bot_id": 699,
+      "is_available": true
+    },
+    {
+      "name": "Nathan's Chili & Cheese Dog",
+      "description": "Nathan's World Famous 100% All Beef Hot Dog, Spicy Chili and Cheddar Cheese, includes potato chips",
+      "price": 5.95,
+      "category": "Lanches",
+      "id": 4603,
+      "bot_id": 699,
+      "is_available": true
+    },
+    {
+      "name": "Nathan's Dog",
+      "description": "Choice of: Cheese, Onions, Relish, Ketchup or Mustard, includes chips",
+      "price": 5.5,
+      "category": "Lanches",
+      "id": 4607,
+      "bot_id": 699,
+      "is_available": true
+    },
+    {
+      "name": "Nathan's New York Dog",
+      "description": "Nathan's World Famous 100% All Beef Hot Dog, Sauerkraut, Spicy Brown Mustard, includes potato chips",
+      "price": 5.95,
+      "category": "Lanches",
+      "id": 4601,
+      "bot_id": 699,
+      "is_available": true
+    },
+    {
+      "name": "Nathan's Reuben Dog",
+      "description": "Nathan's World Famous 100% All Beef Hot Dog, Sauerkraut, Nathan's World Famous Cheese",
+      "price": 5.95,
+      "category": "Lanches",
+      "id": 4606,
+      "bot_id": 699,
+      "is_available": true
+    },
+    {
+      "name": "Nathan's Salsa Dog",
+      "description": "Nathan's World Famous 100% All Beef Hot Dog, Homemade Salsa and Cheddar Cheese, includes potato chips",
+      "price": 5.95,
+      "category": "Lanches",
+      "id": 4604,
+      "bot_id": 699,
+      "is_available": true
+    },
+    {
+      "name": "Nathan's Tex Mex Dog",
+      "description": "Nathan's World Famous 100% All Beef Hot Dog, Jalapeno Peppers, Spicy Chili",
+      "price": 5.95,
+      "category": "Lanches",
+      "id": 4605,
+      "bot_id": 699,
+      "is_available": true
+    }
+  ],
+  "category": "lanchonete"
+}

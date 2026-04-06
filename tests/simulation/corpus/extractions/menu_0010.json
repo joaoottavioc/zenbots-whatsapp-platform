@@ -1,0 +1,95 @@
+{
+  "products": [
+    {
+      "name": "Toppings (cada)",
+      "description": "+R$2 cada",
+      "price": 2.0,
+      "category": "Adicionais",
+      "id": 4441,
+      "bot_id": 689,
+      "is_available": true
+    },
+    {
+      "name": "Cascão 1 bola",
+      "description": "",
+      "price": 5.0,
+      "category": "Cascão",
+      "id": 4435,
+      "bot_id": 689,
+      "is_available": true
+    },
+    {
+      "name": "Cascão 2 bolas",
+      "description": "",
+      "price": 8.0,
+      "category": "Cascão",
+      "id": 4436,
+      "bot_id": 689,
+      "is_available": true
+    },
+    {
+      "name": "Cascão 3 bolas",
+      "description": "",
+      "price": 10.0,
+      "category": "Cascão",
+      "id": 4437,
+      "bot_id": 689,
+      "is_available": true
+    },
+    {
+      "name": "Casquinha 1 bola",
+      "description": "",
+      "price": 2.0,
+      "category": "Casquinhas",
+      "id": 4432,
+      "bot_id": 689,
+      "is_available": true
+    },
+    {
+      "name": "Casquinha 2 bolas",
+      "description": "",
+      "price": 5.0,
+      "category": "Casquinhas",
+      "id": 4433,
+      "bot_id": 689,
+      "is_available": true
+    },
+    {
+      "name": "Casquinha 3 bolas",
+      "description": "",
+      "price": 8.0,
+      "category": "Casquinhas",
+      "id": 4434,
+      "bot_id": 689,
+      "is_available": true
+    },
+    {
+      "name": "Milkshake 1 bola",
+      "description": "",
+      "price": 5.0,
+      "category": "Milkshake",
+      "id": 4438,
+      "bot_id": 689,
+      "is_available": true
+    },
+    {
+      "name": "Milkshake 2 bolas",
+      "description": "",
+      "price": 8.0,
+      "category": "Milkshake",
+      "id": 4439,
+      "bot_id": 689,
+      "is_available": true
+    },
+    {
+      "name": "Milkshake 3 bolas",
+      "description": "",
+      "price": 10.0,
+      "category": "Milkshake",
+      "id": 4440,
+      "bot_id": 689,
+      "is_available": true
+    }
+  ],
+  "category": "outros"
+}

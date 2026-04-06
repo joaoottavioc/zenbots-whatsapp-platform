@@ -1,0 +1,239 @@
+{
+  "products": [
+    {
+      "name": "Calabresa",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis de Calabresa",
+      "id": 4336,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa C/Catupiry",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis de Calabresa",
+      "id": 4338,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa C/Cheddar",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis de Calabresa",
+      "id": 4339,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa C/Queijo",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis de Calabresa",
+      "id": 4337,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Carne",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis de Carne",
+      "id": 4328,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Carne C/ Catupiry",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis de Carne",
+      "id": 4330,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Carne C/Cheddar",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis de Carne",
+      "id": 4331,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Carne C/Queijo",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis de Carne",
+      "id": 4329,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Carne de Sol",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis de Carne de Sol",
+      "id": 4340,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Carne de Sol C/Catupiry",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis de Carne de Sol",
+      "id": 4342,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Carne de Sol C/Cheddar",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis de Carne de Sol",
+      "id": 4343,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Carne de Sol C/Queijo",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis de Carne de Sol",
+      "id": 4341,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Frango",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis de Frango",
+      "id": 4332,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Frango C/Catupiry",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis de Frango",
+      "id": 4334,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Frango C/Cheddar",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis de Frango",
+      "id": 4335,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Frango C/Queijo",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis de Frango",
+      "id": 4333,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Napalito",
+      "description": "Queijo, Tomate",
+      "price": 8.0,
+      "category": "Pastéis de Queijo",
+      "id": 4348,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Presunto",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis de Queijo",
+      "id": 4346,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Presunto C/Queijo",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis de Queijo",
+      "id": 4347,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Queijo",
+      "description": "Queijo/Presunto",
+      "price": 8.0,
+      "category": "Pastéis de Queijo",
+      "id": 4344,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Queijo C/Presunto",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis de Queijo",
+      "id": 4345,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Banana Real",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis Doces",
+      "id": 4349,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Banana Real C/Queijo",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis Doces",
+      "id": 4350,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Chocolate Preto C/Banana",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis Doces",
+      "id": 4353,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Doce de Leite",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis Doces",
+      "id": 4352,
+      "bot_id": 681,
+      "is_available": true
+    },
+    {
+      "name": "Romeu e Julieta C/Goiabada",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis Doces",
+      "id": 4351,
+      "bot_id": 681,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

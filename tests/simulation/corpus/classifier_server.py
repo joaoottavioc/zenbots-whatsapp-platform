@@ -50,13 +50,18 @@ class Handler(SimpleHTTPRequestHandler):
             # Download image — use DDG proxy URL directly (original Bing URLs get blocked)
             try:
                 resp = httpx.get(
-                    image_url, timeout=25, follow_redirects=True,
-                    headers={"User-Agent": "Mozilla/5.0"}
+                    image_url,
+                    timeout=25,
+                    follow_redirects=True,
+                    headers={"User-Agent": "Mozilla/5.0"},
                 )
                 if resp.status_code != 200 or len(resp.content) < 2000:
-                    self._json(422, {
-                        "error": f"status={resp.status_code}, size={len(resp.content)}"
-                    })
+                    self._json(
+                        422,
+                        {
+                            "error": f"status={resp.status_code}, size={len(resp.content)}"
+                        },
+                    )
                     return
             except Exception as e:
                 self._json(422, {"error": str(e)})
@@ -99,7 +104,9 @@ class Handler(SimpleHTTPRequestHandler):
             size_kb = len(resp.content) // 1024
             print(f"  [{n}] {image_id} — {size_kb}KB — {alt[:40]}")
 
-            self._json(200, {"id": image_id, "file": filename, "size_kb": size_kb, "total": n})
+            self._json(
+                200, {"id": image_id, "file": filename, "size_kb": size_kb, "total": n}
+            )
             return
 
         elif self.path == "/api/stats":

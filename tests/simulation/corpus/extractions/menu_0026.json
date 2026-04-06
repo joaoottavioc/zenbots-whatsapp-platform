@@ -1,0 +1,212 @@
+{
+  "products": [
+    {
+      "name": "Frango na chapa",
+      "description": "(arroz, feijão, farofa e fritas)",
+      "price": 75.0,
+      "category": "Aves",
+      "id": 4702,
+      "bot_id": 705,
+      "is_available": true
+    },
+    {
+      "name": "Galinha pintadinha",
+      "description": "(arroz, feijão, farofa e fritas)",
+      "price": 75.0,
+      "category": "Aves",
+      "id": 4703,
+      "bot_id": 705,
+      "is_available": true
+    },
+    {
+      "name": "Água 500ml",
+      "description": "",
+      "price": 5.0,
+      "category": "Bebidas",
+      "id": 4712,
+      "bot_id": 705,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante 1L",
+      "description": "",
+      "price": 10.0,
+      "category": "Bebidas",
+      "id": 4715,
+      "bot_id": 705,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante 268ml",
+      "description": "",
+      "price": 5.0,
+      "category": "Bebidas",
+      "id": 4714,
+      "bot_id": 705,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante K5",
+      "description": "",
+      "price": 5.0,
+      "category": "Bebidas",
+      "id": 4716,
+      "bot_id": 705,
+      "is_available": true
+    },
+    {
+      "name": "Suco de Laranja",
+      "description": "",
+      "price": 10.0,
+      "category": "Bebidas",
+      "id": 4713,
+      "bot_id": 705,
+      "is_available": true
+    },
+    {
+      "name": "Filé de peixe",
+      "description": "(arroz, molho de tomate, salada, fritas e farofa)",
+      "price": 75.0,
+      "category": "Carnes",
+      "id": 4701,
+      "bot_id": 705,
+      "is_available": true
+    },
+    {
+      "name": "Filé de tilápia",
+      "description": "(arroz, molho branco, couve, banana e farofa)",
+      "price": 75.0,
+      "category": "Carnes",
+      "id": 4700,
+      "bot_id": 705,
+      "is_available": true
+    },
+    {
+      "name": "Camarão a milanesa",
+      "description": "(camarão empanado, arroz, feijão e farofa)",
+      "price": 75.0,
+      "category": "Mariscos",
+      "id": 4699,
+      "bot_id": 705,
+      "is_available": true
+    },
+    {
+      "name": "Camarão a moda da casa",
+      "description": "(gosto de camarão, arroz, feijão, legumes e ovo)",
+      "price": 75.0,
+      "category": "Mariscos",
+      "id": 4697,
+      "bot_id": 705,
+      "is_available": true
+    },
+    {
+      "name": "Camarão Miúdo",
+      "description": "(molho de tomate, arroz, feijão e farofa)",
+      "price": 75.0,
+      "category": "Mariscos",
+      "id": 4698,
+      "bot_id": 705,
+      "is_available": true
+    },
+    {
+      "name": "Arroz com marisco",
+      "description": "",
+      "price": 75.0,
+      "category": "Pratos Principais",
+      "id": 4708,
+      "bot_id": 705,
+      "is_available": true
+    },
+    {
+      "name": "Arroz na chapa",
+      "description": "(arroz, feijão, farofa e fritas)",
+      "price": 75.0,
+      "category": "Pratos Principais",
+      "id": 4709,
+      "bot_id": 705,
+      "is_available": true
+    },
+    {
+      "name": "Caldeirada a moda da casa",
+      "description": "(gosto de peixe, arroz, feijão, legumes e ovo)",
+      "price": 75.0,
+      "category": "Pratos Principais",
+      "id": 4694,
+      "bot_id": 705,
+      "is_available": true
+    },
+    {
+      "name": "Peixe a milanesa",
+      "description": "(filé de peixe, molho de tomate, arroz, legumes e ovo)",
+      "price": 75.0,
+      "category": "Pratos Principais",
+      "id": 4695,
+      "bot_id": 705,
+      "is_available": true
+    },
+    {
+      "name": "Peixe e delícias",
+      "description": "(filé de peixe, molho de camarão, arroz, legumes e ovo)",
+      "price": 75.0,
+      "category": "Pratos Principais",
+      "id": 4696,
+      "bot_id": 705,
+      "is_available": true
+    },
+    {
+      "name": "Cupcake",
+      "description": "",
+      "price": 5.0,
+      "category": "Sobremesas",
+      "id": 4711,
+      "bot_id": 705,
+      "is_available": true
+    },
+    {
+      "name": "Pudim",
+      "description": "",
+      "price": 5.0,
+      "category": "Sobremesas",
+      "id": 4710,
+      "bot_id": 705,
+      "is_available": true
+    },
+    {
+      "name": "Caldeirada Rota do Chape",
+      "description": "(peixe, camarão, calabresa, arroz, feijão e farofa)",
+      "price": 100.0,
+      "category": "Sugestão do Chefe Especial",
+      "id": 4706,
+      "bot_id": 705,
+      "is_available": true
+    },
+    {
+      "name": "Chapa Mista",
+      "description": "(de frango, filé de carne, peixe, camarão e calabresa)",
+      "price": 100.0,
+      "category": "Sugestão do Chefe Especial",
+      "id": 4704,
+      "bot_id": 705,
+      "is_available": true
+    },
+    {
+      "name": "Mista a milanesa",
+      "description": "(frango, peixe e carne)",
+      "price": 100.0,
+      "category": "Sugestão do Chefe Especial",
+      "id": 4705,
+      "bot_id": 705,
+      "is_available": true
+    },
+    {
+      "name": "Peixe na chapa",
+      "description": "(peixe, camarão, arroz e farofa)",
+      "price": 100.0,
+      "category": "Sugestão do Chefe Especial",
+      "id": 4707,
+      "bot_id": 705,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

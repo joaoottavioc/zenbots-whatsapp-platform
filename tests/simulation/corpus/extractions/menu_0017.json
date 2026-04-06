@@ -1,0 +1,122 @@
+{
+  "products": [
+    {
+      "name": "Abacaxi",
+      "description": "",
+      "price": 2.0,
+      "category": "Acompanhamentos",
+      "id": 4562,
+      "bot_id": 696,
+      "is_available": true
+    },
+    {
+      "name": "Banana",
+      "description": "",
+      "price": 1.5,
+      "category": "Acompanhamentos",
+      "id": 4559,
+      "bot_id": 696,
+      "is_available": true
+    },
+    {
+      "name": "Kiwi",
+      "description": "",
+      "price": 1.5,
+      "category": "Acompanhamentos",
+      "id": 4560,
+      "bot_id": 696,
+      "is_available": true
+    },
+    {
+      "name": "Morango",
+      "description": "",
+      "price": 2.0,
+      "category": "Acompanhamentos",
+      "id": 4561,
+      "bot_id": 696,
+      "is_available": true
+    },
+    {
+      "name": "Chocolat",
+      "description": "",
+      "price": 2.0,
+      "category": "Adicionais",
+      "id": 4566,
+      "bot_id": 696,
+      "is_available": true
+    },
+    {
+      "name": "Granola",
+      "description": "",
+      "price": 2.0,
+      "category": "Adicionais",
+      "id": 4567,
+      "bot_id": 696,
+      "is_available": true
+    },
+    {
+      "name": "Leite condensado",
+      "description": "",
+      "price": 2.0,
+      "category": "Adicionais",
+      "id": 4564,
+      "bot_id": 696,
+      "is_available": true
+    },
+    {
+      "name": "Leite em pó",
+      "description": "",
+      "price": 1.5,
+      "category": "Adicionais",
+      "id": 4563,
+      "bot_id": 696,
+      "is_available": true
+    },
+    {
+      "name": "Nutella",
+      "description": "",
+      "price": 2.0,
+      "category": "Adicionais",
+      "id": 4568,
+      "bot_id": 696,
+      "is_available": true
+    },
+    {
+      "name": "Paca",
+      "description": "",
+      "price": 2.0,
+      "category": "Adicionais",
+      "id": 4565,
+      "bot_id": 696,
+      "is_available": true
+    },
+    {
+      "name": "Açaí 300ml",
+      "description": "Açaí no Copo",
+      "price": 10.0,
+      "category": "Sobremesas",
+      "id": 4556,
+      "bot_id": 696,
+      "is_available": true
+    },
+    {
+      "name": "Açaí 500ml",
+      "description": "Açaí no Copo",
+      "price": 14.0,
+      "category": "Sobremesas",
+      "id": 4557,
+      "bot_id": 696,
+      "is_available": true
+    },
+    {
+      "name": "Açaí 700ml",
+      "description": "Açaí no Copo",
+      "price": 18.0,
+      "category": "Sobremesas",
+      "id": 4558,
+      "bot_id": 696,
+      "is_available": true
+    }
+  ],
+  "category": "açaiteria"
+}

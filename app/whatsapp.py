@@ -4082,6 +4082,7 @@ _REMOVE_KEYWORD_RE = re.compile(
     rf"(?:{_ADD_QTY_WORDS}|\d+)\s*\(?[a-záàâãéèêíìîóòôõúùûç]"
     r"|"
     r"(?:o|a|os|as|todo|toda|todos|todas)\s+[a-záàâãéèêíìîóòôõúùûç]"
+    r"(?!\w*\s+(?:do|da|dos|das|no|na|nos|nas)\s)"
     r")",
     re.IGNORECASE,
 )

@@ -1,0 +1,176 @@
+{
+  "products": [
+    {
+      "name": "Merengue com Baunilha",
+      "description": "",
+      "price": 12.0,
+      "category": "Panquecas",
+      "id": 4546,
+      "bot_id": 695,
+      "is_available": true
+    },
+    {
+      "name": "Panquecas da Mamãe",
+      "description": "",
+      "price": 12.0,
+      "category": "Panquecas",
+      "id": 4550,
+      "bot_id": 695,
+      "is_available": true
+    },
+    {
+      "name": "Panquecas de Chocolate",
+      "description": "",
+      "price": 12.0,
+      "category": "Panquecas",
+      "id": 4548,
+      "bot_id": 695,
+      "is_available": true
+    },
+    {
+      "name": "Panquecas de Doce de Leite",
+      "description": "",
+      "price": 12.0,
+      "category": "Panquecas",
+      "id": 4547,
+      "bot_id": 695,
+      "is_available": true
+    },
+    {
+      "name": "Panquecas de Mirtilo",
+      "description": "",
+      "price": 12.0,
+      "category": "Panquecas",
+      "id": 4545,
+      "bot_id": 695,
+      "is_available": true
+    },
+    {
+      "name": "Panquecas de Morango",
+      "description": "",
+      "price": 12.0,
+      "category": "Panquecas",
+      "id": 4549,
+      "bot_id": 695,
+      "is_available": true
+    },
+    {
+      "name": "Água de Coco",
+      "description": "",
+      "price": 10.0,
+      "category": "Sucos e Leite",
+      "id": 4555,
+      "bot_id": 695,
+      "is_available": true
+    },
+    {
+      "name": "Leite Achocolatado",
+      "description": "",
+      "price": 12.0,
+      "category": "Sucos e Leite",
+      "id": 4553,
+      "bot_id": 695,
+      "is_available": true
+    },
+    {
+      "name": "Suco de Abacaxi",
+      "description": "",
+      "price": 12.0,
+      "category": "Sucos e Leite",
+      "id": 4554,
+      "bot_id": 695,
+      "is_available": true
+    },
+    {
+      "name": "Suco de Laranja",
+      "description": "",
+      "price": 8.0,
+      "category": "Sucos e Leite",
+      "id": 4551,
+      "bot_id": 695,
+      "is_available": true
+    },
+    {
+      "name": "Suco de Manga",
+      "description": "",
+      "price": 8.0,
+      "category": "Sucos e Leite",
+      "id": 4552,
+      "bot_id": 695,
+      "is_available": true
+    },
+    {
+      "name": "Café da Manhã Defumado",
+      "description": "",
+      "price": 11.0,
+      "category": "Tradicionais Favoritos",
+      "id": 4540,
+      "bot_id": 695,
+      "is_available": true
+    },
+    {
+      "name": "Fatiado do Interior",
+      "description": "",
+      "price": 12.0,
+      "category": "Tradicionais Favoritos",
+      "id": 4539,
+      "bot_id": 695,
+      "is_available": true
+    },
+    {
+      "name": "Manhã do Campo",
+      "description": "",
+      "price": 11.0,
+      "category": "Tradicionais Favoritos",
+      "id": 4541,
+      "bot_id": 695,
+      "is_available": true
+    },
+    {
+      "name": "Nascer do Sol",
+      "description": "",
+      "price": 8.0,
+      "category": "Tradicionais Favoritos",
+      "id": 4538,
+      "bot_id": 695,
+      "is_available": true
+    },
+    {
+      "name": "Ovo Mexido Trufado",
+      "description": "",
+      "price": 12.0,
+      "category": "Tradicionais Favoritos",
+      "id": 4543,
+      "bot_id": 695,
+      "is_available": true
+    },
+    {
+      "name": "Prato de Brunch",
+      "description": "",
+      "price": 12.0,
+      "category": "Tradicionais Favoritos",
+      "id": 4544,
+      "bot_id": 695,
+      "is_available": true
+    },
+    {
+      "name": "Tio João",
+      "description": "",
+      "price": 12.0,
+      "category": "Tradicionais Favoritos",
+      "id": 4537,
+      "bot_id": 695,
+      "is_available": true
+    },
+    {
+      "name": "Torradas e Afins",
+      "description": "",
+      "price": 10.0,
+      "category": "Tradicionais Favoritos",
+      "id": 4542,
+      "bot_id": 695,
+      "is_available": true
+    }
+  ],
+  "category": "doceria"
+}

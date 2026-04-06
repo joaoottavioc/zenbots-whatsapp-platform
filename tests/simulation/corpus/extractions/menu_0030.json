@@ -1,0 +1,212 @@
+{
+  "products": [
+    {
+      "name": "Calabresa",
+      "description": "",
+      "price": 3.5,
+      "category": "Pastéis",
+      "id": 4760,
+      "bot_id": 709,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa c/Queijo",
+      "description": "",
+      "price": 3.5,
+      "category": "Pastéis",
+      "id": 4761,
+      "bot_id": 709,
+      "is_available": true
+    },
+    {
+      "name": "Camarão",
+      "description": "",
+      "price": 6.5,
+      "category": "Pastéis",
+      "id": 4773,
+      "bot_id": 709,
+      "is_available": true
+    },
+    {
+      "name": "Camarão c/Catupiry",
+      "description": "",
+      "price": 6.5,
+      "category": "Pastéis",
+      "id": 4774,
+      "bot_id": 709,
+      "is_available": true
+    },
+    {
+      "name": "Carne",
+      "description": "",
+      "price": 3.25,
+      "category": "Pastéis",
+      "id": 4753,
+      "bot_id": 709,
+      "is_available": true
+    },
+    {
+      "name": "Carne c/Azeitona",
+      "description": "",
+      "price": 3.5,
+      "category": "Pastéis",
+      "id": 4754,
+      "bot_id": 709,
+      "is_available": true
+    },
+    {
+      "name": "Carne c/Queijo",
+      "description": "",
+      "price": 3.0,
+      "category": "Pastéis",
+      "id": 4755,
+      "bot_id": 709,
+      "is_available": true
+    },
+    {
+      "name": "Coração",
+      "description": "",
+      "price": 4.0,
+      "category": "Pastéis",
+      "id": 4762,
+      "bot_id": 709,
+      "is_available": true
+    },
+    {
+      "name": "Coração c/Queijo",
+      "description": "",
+      "price": 4.0,
+      "category": "Pastéis",
+      "id": 4763,
+      "bot_id": 709,
+      "is_available": true
+    },
+    {
+      "name": "Frango",
+      "description": "",
+      "price": 3.5,
+      "category": "Pastéis",
+      "id": 4758,
+      "bot_id": 709,
+      "is_available": true
+    },
+    {
+      "name": "Frango c/Catupiry",
+      "description": "",
+      "price": 3.2,
+      "category": "Pastéis",
+      "id": 4759,
+      "bot_id": 709,
+      "is_available": true
+    },
+    {
+      "name": "Palmito",
+      "description": "",
+      "price": 3.5,
+      "category": "Pastéis",
+      "id": 4769,
+      "bot_id": 709,
+      "is_available": true
+    },
+    {
+      "name": "Palmito c/Queijo",
+      "description": "",
+      "price": 4.0,
+      "category": "Pastéis",
+      "id": 4770,
+      "bot_id": 709,
+      "is_available": true
+    },
+    {
+      "name": "Pastel de Vento",
+      "description": "",
+      "price": 2.0,
+      "category": "Pastéis",
+      "id": 4775,
+      "bot_id": 709,
+      "is_available": true
+    },
+    {
+      "name": "Pizza",
+      "description": "",
+      "price": 4.0,
+      "category": "Pastéis",
+      "id": 4768,
+      "bot_id": 709,
+      "is_available": true
+    },
+    {
+      "name": "Quatro Queijos",
+      "description": "",
+      "price": 3.5,
+      "category": "Pastéis",
+      "id": 4767,
+      "bot_id": 709,
+      "is_available": true
+    },
+    {
+      "name": "Queijo",
+      "description": "",
+      "price": 3.5,
+      "category": "Pastéis",
+      "id": 4764,
+      "bot_id": 709,
+      "is_available": true
+    },
+    {
+      "name": "Queijo c/Catupiry",
+      "description": "",
+      "price": 3.5,
+      "category": "Pastéis",
+      "id": 4766,
+      "bot_id": 709,
+      "is_available": true
+    },
+    {
+      "name": "Queijo c/Presunto",
+      "description": "",
+      "price": 3.5,
+      "category": "Pastéis",
+      "id": 4765,
+      "bot_id": 709,
+      "is_available": true
+    },
+    {
+      "name": "Siri",
+      "description": "",
+      "price": 3.5,
+      "category": "Pastéis",
+      "id": 4771,
+      "bot_id": 709,
+      "is_available": true
+    },
+    {
+      "name": "Siri c/Catupiry",
+      "description": "",
+      "price": 4.0,
+      "category": "Pastéis",
+      "id": 4772,
+      "bot_id": 709,
+      "is_available": true
+    },
+    {
+      "name": "Stroganoff",
+      "description": "",
+      "price": 4.0,
+      "category": "Pastéis",
+      "id": 4756,
+      "bot_id": 709,
+      "is_available": true
+    },
+    {
+      "name": "Stroganoff c/Queijo",
+      "description": "",
+      "price": 4.5,
+      "category": "Pastéis",
+      "id": 4757,
+      "bot_id": 709,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

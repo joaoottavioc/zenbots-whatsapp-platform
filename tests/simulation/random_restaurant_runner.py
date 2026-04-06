@@ -45,19 +45,56 @@ PASSWORD = "Test123$"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 CATEGORIES = [
-    "pastelaria", "pizzaria", "hamburgueria", "sushi", "açaiteria",
-    "tapiocaria", "espetaria", "creperia", "marmitaria", "padaria",
-    "cafeteria", "sorveteria", "doceria", "casa de sucos", "petiscaria",
-    "lanchonete", "comida árabe", "comida japonesa", "comida mexicana",
-    "comida baiana", "comida italiana", "restaurante vegano", "food truck",
-    "churrascaria", "temakeria", "poke", "hot dog gourmet", "comida chinesa",
-    "confeitaria", "rotisseria", "comida nordestina", "comida mineira",
+    "pastelaria",
+    "pizzaria",
+    "hamburgueria",
+    "sushi",
+    "açaiteria",
+    "tapiocaria",
+    "espetaria",
+    "creperia",
+    "marmitaria",
+    "padaria",
+    "cafeteria",
+    "sorveteria",
+    "doceria",
+    "casa de sucos",
+    "petiscaria",
+    "lanchonete",
+    "comida árabe",
+    "comida japonesa",
+    "comida mexicana",
+    "comida baiana",
+    "comida italiana",
+    "restaurante vegano",
+    "food truck",
+    "churrascaria",
+    "temakeria",
+    "poke",
+    "hot dog gourmet",
+    "comida chinesa",
+    "confeitaria",
+    "rotisseria",
+    "comida nordestina",
+    "comida mineira",
 ]
 
 NEIGHBORHOODS = [
-    "pinheiros", "vila mariana", "mooca", "tatuapé", "perdizes",
-    "vila madalena", "itaim bibi", "brooklin", "santana", "lapa",
-    "liberdade", "bela vista", "consolação", "jardins", "higienópolis",
+    "pinheiros",
+    "vila mariana",
+    "mooca",
+    "tatuapé",
+    "perdizes",
+    "vila madalena",
+    "itaim bibi",
+    "brooklin",
+    "santana",
+    "lapa",
+    "liberdade",
+    "bela vista",
+    "consolação",
+    "jardins",
+    "higienópolis",
 ]
 
 TESTED_LOG = PROJECT_ROOT / ".claude" / "simulation-reports" / "tested_restaurants.txt"
@@ -71,7 +108,11 @@ RUNS_DIR = REPORT_DIR / "runs"
 
 def _load_tested() -> set[str]:
     if TESTED_LOG.exists():
-        return {line.strip().lower() for line in TESTED_LOG.read_text().splitlines() if line.strip()}
+        return {
+            line.strip().lower()
+            for line in TESTED_LOG.read_text().splitlines()
+            if line.strip()
+        }
     return set()
 
 
@@ -122,15 +163,26 @@ def search_menu_image(category: str) -> dict | None:
         # Filter: need reasonable resolution and image format
         if width < 400 or height < 400:
             continue
-        if not any(url.lower().endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".webp")):
+        if not any(
+            url.lower().endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".webp")
+        ):
             # Allow URLs without clear extension (many CDNs don't have them)
             if "svg" in url.lower() or "gif" in url.lower():
                 continue
 
         # Extract restaurant name from title
         name = title.split(" - ")[0].split(" | ")[0].split(",")[0].strip()
-        for suffix in ["Delivery", "delivery", "Cardápio", "cardápio",
-                        "Menu", "menu", "PDF", "Preços", "preços"]:
+        for suffix in [
+            "Delivery",
+            "delivery",
+            "Cardápio",
+            "cardápio",
+            "Menu",
+            "menu",
+            "PDF",
+            "Preços",
+            "preços",
+        ]:
             name = name.replace(suffix, "").strip()
         name = name.strip(" -|,.")
 
@@ -151,8 +203,12 @@ def search_menu_image(category: str) -> dict | None:
 def download_image(url: str) -> bytes | None:
     """Download an image, return bytes."""
     try:
-        resp = httpx.get(url, timeout=20, follow_redirects=True,
-                         headers={"User-Agent": "Mozilla/5.0"})
+        resp = httpx.get(
+            url,
+            timeout=20,
+            follow_redirects=True,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
         if resp.status_code == 200 and len(resp.content) > 5000:
             return resp.content
     except Exception as e:
@@ -170,10 +226,10 @@ def generate_menu_fallback(restaurant: dict) -> list[dict]:
     import openai
 
     client = openai.OpenAI()
-    prompt = f"""Generate a realistic menu for a Brazilian {restaurant['category']} restaurant.
+    prompt = f"""Generate a realistic menu for a Brazilian {restaurant["category"]} restaurant.
 
-Name: {restaurant['name']}
-Location: {restaurant['neighborhood']}, São Paulo
+Name: {restaurant["name"]}
+Location: {restaurant["neighborhood"]}, São Paulo
 
 Rules:
 - Return exactly 15 products as JSON
@@ -206,14 +262,27 @@ Return ONLY valid JSON: {{"products": [{{"name": "...", "price": 00.00, "categor
 # ---------------------------------------------------------------------------
 
 
-def generate_test_scenarios(products: list[dict], unavailable_indices: list[int]) -> dict:
+def generate_test_scenarios(
+    products: list[dict], unavailable_indices: list[int]
+) -> dict:
     """Auto-generate test scenarios from the product list."""
     available = [p for i, p in enumerate(products) if i not in unavailable_indices]
     unavailable = [products[i] for i in unavailable_indices]
 
-    main_items = [p for p in available if p.get("category", "").lower() not in
-                  ("bebidas", "drinks", "sobremesas", "adicionais", "complementos",
-                   "acompanhamentos", "extras")]
+    main_items = [
+        p
+        for p in available
+        if p.get("category", "").lower()
+        not in (
+            "bebidas",
+            "drinks",
+            "sobremesas",
+            "adicionais",
+            "complementos",
+            "acompanhamentos",
+            "extras",
+        )
+    ]
     drinks = [p for p in available if "bebida" in p.get("category", "").lower()]
     sides = [p for p in available if p not in main_items and p not in drinks]
 
@@ -225,7 +294,7 @@ def generate_test_scenarios(products: list[dict], unavailable_indices: list[int]
 
     single = main_items[0]
     multi_1 = main_items[1] if len(main_items) > 1 else available[1]
-    multi_2 = (drinks[0] if drinks else sides[0] if sides else available[2])
+    multi_2 = drinks[0] if drinks else sides[0] if sides else available[2]
     remove_item = main_items[2] if len(main_items) > 2 else available[2]
     checkout_item = main_items[3] if len(main_items) > 3 else available[3]
 
@@ -265,7 +334,9 @@ def generate_test_scenarios(products: list[dict], unavailable_indices: list[int]
 async def create_bots(restaurants: list[dict]) -> dict:
     """Create bots + products via the ZenBots API."""
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=60) as client:
-        resp = await client.post("/auth/token", data={"username": EMAIL, "password": PASSWORD})
+        resp = await client.post(
+            "/auth/token", data={"username": EMAIL, "password": PASSWORD}
+        )
         if resp.status_code != 200:
             print(f"Login failed: {resp.status_code}")
             return {}
@@ -277,15 +348,21 @@ async def create_bots(restaurants: list[dict]) -> dict:
             label = f"rand{i}"
             phone_id = f"rand-test-{i}-{int(time.time())}"
 
-            bot_resp = await client.post("/bots", json={
-                "restaurant_name": rest["name"],
-                "phone_number_id": phone_id,
-                "whatsapp_token": "fake-token",
-                "whatsapp_number": f"5511rand{i}{int(time.time()) % 100000:05d}",
-            }, headers=headers)
+            bot_resp = await client.post(
+                "/bots",
+                json={
+                    "restaurant_name": rest["name"],
+                    "phone_number_id": phone_id,
+                    "whatsapp_token": "fake-token",
+                    "whatsapp_number": f"5511rand{i}{int(time.time()) % 100000:05d}",
+                },
+                headers=headers,
+            )
 
             if bot_resp.status_code != 201:
-                print(f"  Failed to create bot '{rest['name']}': {bot_resp.status_code}")
+                print(
+                    f"  Failed to create bot '{rest['name']}': {bot_resp.status_code}"
+                )
                 continue
 
             bot_id = bot_resp.json()["id"]
@@ -294,7 +371,11 @@ async def create_bots(restaurants: list[dict]) -> dict:
             # --- Try image-based extraction first ---
             products = []
             if rest.get("image_data"):
-                print("    Uploading menu image via Cadastro Magico...", end=" ", flush=True)
+                print(
+                    "    Uploading menu image via Cadastro Magico...",
+                    end=" ",
+                    flush=True,
+                )
                 # Determine file extension from URL
                 img_url = rest.get("image_url", "")
                 ext = ".jpg"
@@ -320,14 +401,18 @@ async def create_bots(restaurants: list[dict]) -> dict:
                     if upload_resp.status_code == 201:
                         # Fetch created products
                         prod_resp = await client.get(
-                            f"/bots/{bot_id}/products?limit=200", headers=headers)
+                            f"/bots/{bot_id}/products?limit=200", headers=headers
+                        )
                         if prod_resp.status_code == 200:
                             raw_products = prod_resp.json()
                             products = [
-                                {"name": p["name"], "price": p["price"],
-                                 "category": p.get("category", "Geral"),
-                                 "description": p.get("description", ""),
-                                 "id": p["id"]}
+                                {
+                                    "name": p["name"],
+                                    "price": p["price"],
+                                    "category": p.get("category", "Geral"),
+                                    "description": p.get("description", ""),
+                                    "id": p["id"],
+                                }
                                 for p in raw_products
                             ]
                             print(f"{len(products)} products extracted")
@@ -346,15 +431,19 @@ async def create_bots(restaurants: list[dict]) -> dict:
                 print(f"    Adding {len(rest['products'])} products via API...")
                 for prod in rest["products"]:
                     p_resp = await client.post(
-                        f"/bots/{bot_id}/products", json=prod, headers=headers)
+                        f"/bots/{bot_id}/products", json=prod, headers=headers
+                    )
                     if p_resp.status_code == 201:
                         p_data = p_resp.json()
-                        products.append({
-                            "name": p_data["name"], "price": p_data["price"],
-                            "category": p_data.get("category", "Geral"),
-                            "description": p_data.get("description", ""),
-                            "id": p_data["id"],
-                        })
+                        products.append(
+                            {
+                                "name": p_data["name"],
+                                "price": p_data["price"],
+                                "category": p_data.get("category", "Geral"),
+                                "description": p_data.get("description", ""),
+                                "id": p_data["id"],
+                            }
+                        )
                 rest["source"] = "llm_fallback"
 
             if len(products) < 5:
@@ -364,18 +453,21 @@ async def create_bots(restaurants: list[dict]) -> dict:
             rest["products_created"] = products
 
             # Mark 2 random as unavailable
-            non_drink = [j for j, p in enumerate(products)
-                         if "bebida" not in p.get("category", "").lower()]
-            unavail_indices = random.sample(
-                non_drink[:10], min(2, len(non_drink))
-            )
+            non_drink = [
+                j
+                for j, p in enumerate(products)
+                if "bebida" not in p.get("category", "").lower()
+            ]
+            unavail_indices = random.sample(non_drink[:10], min(2, len(non_drink)))
 
             for idx in unavail_indices:
                 pid = products[idx].get("id")
                 if pid:
                     await client.put(
                         f"/bots/{bot_id}/products/{pid}",
-                        json={"is_available": False}, headers=headers)
+                        json={"is_available": False},
+                        headers=headers,
+                    )
                     print(f"    [UNAVAIL] {products[idx]['name']}")
 
             scenarios = generate_test_scenarios(products, unavail_indices)
@@ -415,9 +507,23 @@ def create_subscriptions(bots: dict):
         f"VALUES {values};"
     )
     subprocess.run(
-        ["docker", "compose", "exec", "-T", "db", "psql", "-U", "postgres",
-         "-d", "botbuilder", "-c", sql],
-        cwd=str(PROJECT_ROOT), capture_output=True, text=True,
+        [
+            "docker",
+            "compose",
+            "exec",
+            "-T",
+            "db",
+            "psql",
+            "-U",
+            "postgres",
+            "-d",
+            "botbuilder",
+            "-c",
+            sql,
+        ],
+        cwd=str(PROJECT_ROOT),
+        capture_output=True,
+        text=True,
     )
 
 
@@ -437,14 +543,28 @@ def write_test_data(bots: dict):
             "category": bot["category"],
             "scenarios": bot["scenarios"],
         }
-    data_file.write_text(json.dumps(serializable, ensure_ascii=False, indent=2), encoding="utf-8")
+    data_file.write_text(
+        json.dumps(serializable, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
 
 def run_tests() -> str:
     result = subprocess.run(
-        ["docker", "compose", "exec", "-T", "backend",
-         "pytest", "tests/simulation/test_random_restaurants.py", "-v", "--tb=short"],
-        cwd=str(PROJECT_ROOT), capture_output=True, text=True, timeout=300,
+        [
+            "docker",
+            "compose",
+            "exec",
+            "-T",
+            "backend",
+            "pytest",
+            "tests/simulation/test_random_restaurants.py",
+            "-v",
+            "--tb=short",
+        ],
+        cwd=str(PROJECT_ROOT),
+        capture_output=True,
+        text=True,
+        timeout=300,
     )
     return result.stdout + result.stderr
 
@@ -480,9 +600,23 @@ def cleanup_bots(bots: dict):
     END $$;
     """
     subprocess.run(
-        ["docker", "compose", "exec", "-T", "db", "psql", "-U", "postgres",
-         "-d", "botbuilder", "-c", sql],
-        cwd=str(PROJECT_ROOT), capture_output=True, text=True,
+        [
+            "docker",
+            "compose",
+            "exec",
+            "-T",
+            "db",
+            "psql",
+            "-U",
+            "postgres",
+            "-d",
+            "botbuilder",
+            "-c",
+            sql,
+        ],
+        cwd=str(PROJECT_ROOT),
+        capture_output=True,
+        text=True,
     )
 
 
@@ -514,7 +648,8 @@ def parse_test_results(test_output: str) -> dict:
     results["total"] = results["total_passed"] + results["total_failed"]
     results["pass_rate"] = (
         round(100 * results["total_passed"] / results["total"], 1)
-        if results["total"] > 0 else 0
+        if results["total"] > 0
+        else 0
     )
     return results
 
@@ -533,27 +668,44 @@ def save_run_json(bots: dict, results: dict, timestamp: str):
     }
 
     for label, bot in bots.items():
-        run_data["restaurants"].append({
-            "name": bot["name"],
-            "category": bot["category"],
-            "source": bot.get("source", "unknown"),
-            "product_count": bot.get("product_count", 0),
-        })
+        run_data["restaurants"].append(
+            {
+                "name": bot["name"],
+                "category": bot["category"],
+                "source": bot.get("source", "unknown"),
+                "product_count": bot.get("product_count", 0),
+            }
+        )
 
     # Per-scenario results
-    scenario_types = ["AddSingle", "AddMulti", "Unavailable", "Remove",
-                      "Suggestions", "Checkout", "Greeting"]
+    scenario_types = [
+        "AddSingle",
+        "AddMulti",
+        "Unavailable",
+        "Remove",
+        "Suggestions",
+        "Checkout",
+        "Greeting",
+    ]
     scenario_stats = {}
     for st in scenario_types:
-        p = sum(1 for ln in results["passed"] if st.lower() in ln.lower()
-                or st.replace("Add", "add_") in ln)
-        f = sum(1 for ln in results["failed"] if st.lower() in ln.lower()
-                or st.replace("Add", "add_") in ln)
+        p = sum(
+            1
+            for ln in results["passed"]
+            if st.lower() in ln.lower() or st.replace("Add", "add_") in ln
+        )
+        f = sum(
+            1
+            for ln in results["failed"]
+            if st.lower() in ln.lower() or st.replace("Add", "add_") in ln
+        )
         scenario_stats[st] = {"passed": p, "failed": f, "total": p + f}
     run_data["scenarios"] = scenario_stats
 
     json_file = RUNS_DIR / f"{timestamp}.json"
-    json_file.write_text(json.dumps(run_data, ensure_ascii=False, indent=2), encoding="utf-8")
+    json_file.write_text(
+        json.dumps(run_data, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     return json_file
 
 
@@ -603,12 +755,17 @@ def generate_report(bots: dict, test_output: str) -> str:
 
 def main():
     parser = argparse.ArgumentParser(description="Random Restaurant Test Runner")
-    parser.add_argument("--count", type=int, default=5,
-                        help="Number of restaurants to test")
-    parser.add_argument("--no-cleanup", action="store_true",
-                        help="Don't delete bots after test")
-    parser.add_argument("--no-images", action="store_true",
-                        help="Skip image search, use LLM-generated menus only")
+    parser.add_argument(
+        "--count", type=int, default=5, help="Number of restaurants to test"
+    )
+    parser.add_argument(
+        "--no-cleanup", action="store_true", help="Don't delete bots after test"
+    )
+    parser.add_argument(
+        "--no-images",
+        action="store_true",
+        help="Skip image search, use LLM-generated menus only",
+    )
     args = parser.parse_args()
 
     print("=" * 60)

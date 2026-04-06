@@ -29,14 +29,45 @@ EMAIL = "test1@exemplo.com"
 PASSWORD = "Test123$"
 
 CATEGORY_KEYWORDS = {
-    "pizzaria": ["pizza", "margherita", "calabresa", "pepperoni", "mussarela", "napolitana", "portuguesa"],
-    "hamburgueria": ["burger", "hambúrguer", "hamburger", "smash", "cheeseburger", "artesanal"],
-    "sushi": ["temaki", "sashimi", "sushi", "uramaki", "niguiri", "hot roll", "japa", "combinado"],
+    "pizzaria": [
+        "pizza",
+        "margherita",
+        "calabresa",
+        "pepperoni",
+        "mussarela",
+        "napolitana",
+        "portuguesa",
+    ],
+    "hamburgueria": [
+        "burger",
+        "hambúrguer",
+        "hamburger",
+        "smash",
+        "cheeseburger",
+        "artesanal",
+    ],
+    "sushi": [
+        "temaki",
+        "sashimi",
+        "sushi",
+        "uramaki",
+        "niguiri",
+        "hot roll",
+        "japa",
+        "combinado",
+    ],
     "pastelaria": ["pastel"],
     "açaiteria": ["açaí", "acai", "tigela"],
     "lanchonete": ["x-burger", "x-tudo", "x-salada", "lanche", "misto quente"],
     "padaria": ["pão", "croissant", "bolo", "focaccia", "brioche"],
-    "marmitaria": ["marmita", "parmegiana", "executivo", "prato feito", "feijoada", "virado"],
+    "marmitaria": [
+        "marmita",
+        "parmegiana",
+        "executivo",
+        "prato feito",
+        "feijoada",
+        "virado",
+    ],
     "espetaria": ["espetinho", "espeto", "churrasco", "churrasquinho"],
     "tapiocaria": ["tapioca", "crepioca"],
     "hot dog": ["hot dog", "cachorro quente", "dog gourmet"],
@@ -45,9 +76,24 @@ CATEGORY_KEYWORDS = {
     "cafeteria": ["café", "espresso", "latte", "cappuccino", "mocha"],
     "comida japonesa": ["yakisoba", "gyoza", "ramen", "tempurá", "katsu"],
     "churrascaria": ["picanha", "costela", "alcatra", "rodízio", "maminha"],
-    "comida árabe": ["esfiha", "kibe", "falafel", "shawarma", "homus", "esfirra", "árabe"],
+    "comida árabe": [
+        "esfiha",
+        "kibe",
+        "falafel",
+        "shawarma",
+        "homus",
+        "esfirra",
+        "árabe",
+    ],
     "doceria": ["brigadeiro", "trufa", "doce", "brownie", "torta", "bolo"],
-    "comida italiana": ["massa", "lasanha", "ravioli", "gnocchi", "risoto", "spaghetti"],
+    "comida italiana": [
+        "massa",
+        "lasanha",
+        "ravioli",
+        "gnocchi",
+        "risoto",
+        "spaghetti",
+    ],
     "comida mexicana": ["burrito", "taco", "nachos", "quesadilla", "guacamole"],
 }
 
@@ -80,8 +126,23 @@ def delete_bot(bot_id: int):
       DELETE FROM bot WHERE id=_bid;
     END $$;"""
     subprocess.run(
-        ["docker", "compose", "exec", "-T", "db", "psql", "-U", "postgres", "-d", "botbuilder", "-c", sql],
-        cwd=str(PROJECT_ROOT), capture_output=True, text=True,
+        [
+            "docker",
+            "compose",
+            "exec",
+            "-T",
+            "db",
+            "psql",
+            "-U",
+            "postgres",
+            "-d",
+            "botbuilder",
+            "-c",
+            sql,
+        ],
+        cwd=str(PROJECT_ROOT),
+        capture_output=True,
+        text=True,
     )
 
 
@@ -97,7 +158,9 @@ async def validate_all():
     print()
 
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=120) as client:
-        r = await client.post("/auth/token", data={"username": EMAIL, "password": PASSWORD})
+        r = await client.post(
+            "/auth/token", data={"username": EMAIL, "password": PASSWORD}
+        )
         if r.status_code != 200:
             print(f"Login failed: {r.status_code}")
             return
@@ -115,12 +178,16 @@ async def validate_all():
 
             print(f"  {entry['id']}...", end=" ", flush=True)
 
-            bot_resp = await client.post("/bots", json={
-                "restaurant_name": f"Validate {entry['id']}",
-                "phone_number_id": f"corpus-build-{entry['id']}",
-                "whatsapp_token": "fake-token",
-                "whatsapp_number": f"5511val{int(time.time()) % 99999:05d}",
-            }, headers=headers)
+            bot_resp = await client.post(
+                "/bots",
+                json={
+                    "restaurant_name": f"Validate {entry['id']}",
+                    "phone_number_id": f"corpus-build-{entry['id']}",
+                    "whatsapp_token": "fake-token",
+                    "whatsapp_number": f"5511val{int(time.time()) % 99999:05d}",
+                },
+                headers=headers,
+            )
 
             if bot_resp.status_code != 201:
                 print(f"FAIL (bot: {bot_resp.status_code})")
@@ -150,7 +217,9 @@ async def validate_all():
                     entry["file"] = f"rejected/{image_path.name}"
                     continue
 
-                prod_resp = await client.get(f"/bots/{bot_id}/products?limit=200", headers=headers)
+                prod_resp = await client.get(
+                    f"/bots/{bot_id}/products?limit=200", headers=headers
+                )
                 products = prod_resp.json() if prod_resp.status_code == 200 else []
 
                 if len(products) >= 5:
@@ -160,10 +229,17 @@ async def validate_all():
                     entry["category"] = category
 
                     extraction_file = EXTRACTIONS / f"{entry['id']}.json"
-                    extraction_file.write_text(json.dumps({
-                        "products": products,
-                        "category": category,
-                    }, ensure_ascii=False, indent=2), encoding="utf-8")
+                    extraction_file.write_text(
+                        json.dumps(
+                            {
+                                "products": products,
+                                "category": category,
+                            },
+                            ensure_ascii=False,
+                            indent=2,
+                        ),
+                        encoding="utf-8",
+                    )
 
                     validated += 1
                     print(f"OK -- {len(products)} products -- {category}")
@@ -179,7 +255,9 @@ async def validate_all():
             finally:
                 delete_bot(bot_id)
 
-        MANIFEST.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+        MANIFEST.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
         print(f"\nDone! Validated: {validated}, Rejected: {rejected}")
         total_valid = sum(1 for e in manifest if e.get("validated"))

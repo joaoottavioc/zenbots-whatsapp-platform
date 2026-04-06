@@ -1,0 +1,140 @@
+{
+  "products": [
+    {
+      "name": "Hot Roll (10 unidades)",
+      "description": "",
+      "price": 38.9,
+      "category": "Combinados",
+      "id": 4581,
+      "bot_id": 697,
+      "is_available": true
+    },
+    {
+      "name": "Joy (10 unidades)",
+      "description": "",
+      "price": 38.9,
+      "category": "Combinados",
+      "id": 4579,
+      "bot_id": 697,
+      "is_available": true
+    },
+    {
+      "name": "Sushi Variados do Chef",
+      "description": "",
+      "price": 57.9,
+      "category": "Combinados",
+      "id": 4583,
+      "bot_id": 697,
+      "is_available": true
+    },
+    {
+      "name": "Sushi Variedades do Chef",
+      "description": "",
+      "price": 55.9,
+      "category": "Combinados",
+      "id": 4578,
+      "bot_id": 697,
+      "is_available": true
+    },
+    {
+      "name": "Umakis (10 unidades)",
+      "description": "",
+      "price": 38.9,
+      "category": "Combinados",
+      "id": 4574,
+      "bot_id": 697,
+      "is_available": true
+    },
+    {
+      "name": "California",
+      "description": "",
+      "price": 19.0,
+      "category": "Entradas",
+      "id": 4576,
+      "bot_id": 697,
+      "is_available": true
+    },
+    {
+      "name": "Capricho de Salmão (200g)",
+      "description": "",
+      "price": 32.9,
+      "category": "Entradas",
+      "id": 4569,
+      "bot_id": 697,
+      "is_available": true
+    },
+    {
+      "name": "Hot Roll Flambado",
+      "description": "",
+      "price": 19.0,
+      "category": "Entradas",
+      "id": 4582,
+      "bot_id": 697,
+      "is_available": true
+    },
+    {
+      "name": "Joy",
+      "description": "Chico César",
+      "price": 18.9,
+      "category": "Entradas",
+      "id": 4580,
+      "bot_id": 697,
+      "is_available": true
+    },
+    {
+      "name": "Philadelphia",
+      "description": "",
+      "price": 19.0,
+      "category": "Entradas",
+      "id": 4575,
+      "bot_id": 697,
+      "is_available": true
+    },
+    {
+      "name": "Salmão Grelhado",
+      "description": "",
+      "price": 19.0,
+      "category": "Entradas",
+      "id": 4577,
+      "bot_id": 697,
+      "is_available": true
+    },
+    {
+      "name": "Sashimi (10 unidades)",
+      "description": "",
+      "price": 27.9,
+      "category": "Entradas",
+      "id": 4570,
+      "bot_id": 697,
+      "is_available": true
+    },
+    {
+      "name": "Shimeji na Manteiga (165g)",
+      "description": "",
+      "price": 18.9,
+      "category": "Entradas",
+      "id": 4571,
+      "bot_id": 697,
+      "is_available": true
+    },
+    {
+      "name": "Temaki Hot",
+      "description": "",
+      "price": 17.9,
+      "category": "Entradas",
+      "id": 4573,
+      "bot_id": 697,
+      "is_available": true
+    },
+    {
+      "name": "Temakis",
+      "description": "Salmão",
+      "price": 19.0,
+      "category": "Entradas",
+      "id": 4572,
+      "bot_id": 697,
+      "is_available": true
+    }
+  ],
+  "category": "sushi"
+}

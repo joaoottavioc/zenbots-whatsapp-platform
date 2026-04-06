@@ -248,11 +248,14 @@ class TestUnavailableTermMapping:
         from app.prompt_central import create_central_prompt
 
         class FakeProduct:
-            def __init__(self, id, name, category=None, description=None):
+            def __init__(
+                self, id, name, category=None, description=None, is_available=True
+            ):
                 self.id = id
                 self.name = name
                 self.category = category
                 self.description = description
+                self.is_available = is_available
 
         unavail = [FakeProduct(1, "THE CHEESEBURGER")]
         term_map = {1: "cheesuburger"}
@@ -279,11 +282,14 @@ class TestUnavailableTermMapping:
         from app.prompt_central import create_central_prompt
 
         class FakeProduct:
-            def __init__(self, id, name, category=None, description=None):
+            def __init__(
+                self, id, name, category=None, description=None, is_available=True
+            ):
                 self.id = id
                 self.name = name
                 self.category = category
                 self.description = description
+                self.is_available = is_available
 
         unavail = [FakeProduct(690, "Picanha")]
         variant_map = {"Picanha": ["Picanha com catupiry", "Picanha com bacon"]}
@@ -307,11 +313,14 @@ class TestUnavailableTermMapping:
         from app.prompt_central import create_central_prompt
 
         class FakeProduct:
-            def __init__(self, id, name, category=None, description=None):
+            def __init__(
+                self, id, name, category=None, description=None, is_available=True
+            ):
                 self.id = id
                 self.name = name
                 self.category = category
                 self.description = description
+                self.is_available = is_available
 
         unavail = [FakeProduct(1, "THE CHEESEBURGER")]
 
@@ -342,11 +351,14 @@ class TestCategoryInMenuContext:
         from app.prompt_central import create_central_prompt
 
         class FakeProduct:
-            def __init__(self, id, name, category=None, description=None):
+            def __init__(
+                self, id, name, category=None, description=None, is_available=True
+            ):
                 self.id = id
                 self.name = name
                 self.category = category
                 self.description = description
+                self.is_available = is_available
 
         products = [
             FakeProduct(1, "PCQ", category="Lanches", description="queijo"),
@@ -369,11 +381,14 @@ class TestCategoryInMenuContext:
         from app.prompt_central import create_central_prompt
 
         class FakeProduct:
-            def __init__(self, id, name, category=None, description=None):
+            def __init__(
+                self, id, name, category=None, description=None, is_available=True
+            ):
                 self.id = id
                 self.name = name
                 self.category = category
                 self.description = description
+                self.is_available = is_available
 
         products = [FakeProduct(1, "Mystery Item", category=None)]
 
@@ -725,11 +740,14 @@ class TestPromptNoCap:
     """Verify create_central_prompt includes ALL products (no [:15] truncation)."""
 
     class _FP:
-        def __init__(self, id, name, category="Lanches", description="desc"):
+        def __init__(
+            self, id, name, category="Lanches", description="desc", is_available=True
+        ):
             self.id = id
             self.name = name
             self.category = category
             self.description = description
+            self.is_available = is_available
 
     def _build_prompt_text(self, products):
         from app.prompt_central import create_central_prompt

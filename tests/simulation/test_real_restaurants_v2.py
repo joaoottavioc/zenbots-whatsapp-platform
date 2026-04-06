@@ -51,18 +51,28 @@ class RealSimContext:
 
     def _build_payload(self, text_body: str) -> dict:
         return {
-            "entry": [{"changes": [{"value": {
-                "metadata": {
-                    "phone_number_id": self.phone_number_id,
-                    "display_phone_number": self.contact_phone,
-                },
-                "messages": [{
-                    "from": self.contact_phone,
-                    "id": f"wamid.v2{uuid.uuid4().hex[:12]}",
-                    "text": {"body": text_body},
-                    "type": "text",
-                }],
-            }}]}],
+            "entry": [
+                {
+                    "changes": [
+                        {
+                            "value": {
+                                "metadata": {
+                                    "phone_number_id": self.phone_number_id,
+                                    "display_phone_number": self.contact_phone,
+                                },
+                                "messages": [
+                                    {
+                                        "from": self.contact_phone,
+                                        "id": f"wamid.v2{uuid.uuid4().hex[:12]}",
+                                        "text": {"body": text_body},
+                                        "type": "text",
+                                    }
+                                ],
+                            }
+                        }
+                    ]
+                }
+            ],
         }
 
     async def send(self, text_body: str) -> str | None:
@@ -107,9 +117,7 @@ class RealSimContext:
             if not contact_obj:
                 return []
             cart_result = await fresh_session.execute(
-                select(ShoppingCart).where(
-                    ShoppingCart.contact_id == contact_obj.id
-                )
+                select(ShoppingCart).where(ShoppingCart.contact_id == contact_obj.id)
             )
             cart_obj = cart_result.scalars().first()
             if not cart_obj:
@@ -143,7 +151,9 @@ async def db_check():
             select(Bot.id).where(Bot.phone_number_id == PHONE_IDS["pastel"])
         )
         if not result.first():
-            pytest.skip("V2 bots not found. Run: python -m tests.simulation.real_restaurant_setup_v2")
+            pytest.skip(
+                "V2 bots not found. Run: python -m tests.simulation.real_restaurant_setup_v2"
+            )
 
 
 async def _make_ctx(label: str) -> RealSimContext:
@@ -165,7 +175,9 @@ class TestV2AddSingle:
         for exp_name, exp_qty in sc["add_single_expected"]:
             found = [(n, q) for n, q in cart if exp_name.lower() in n.lower()]
             assert found, f"[{label}] '{exp_name}' not in cart: {cart}"
-            assert found[0][1] == exp_qty, f"[{label}] qty mismatch: {found[0][1]} != {exp_qty}"
+            assert found[0][1] == exp_qty, (
+                f"[{label}] qty mismatch: {found[0][1]} != {exp_qty}"
+            )
 
 
 class TestV2AddMulti:
@@ -178,11 +190,15 @@ class TestV2AddMulti:
         await ctx.send(sc["add_multi_msg"])
         cart = await ctx.get_cart_items()
         expected = sc["add_multi_expected"]
-        assert len(cart) >= len(expected), f"[{label}] Expected >= {len(expected)} items, got {cart}"
+        assert len(cart) >= len(expected), (
+            f"[{label}] Expected >= {len(expected)} items, got {cart}"
+        )
         for exp_name, exp_qty in expected:
             found = [(n, q) for n, q in cart if exp_name.lower() in n.lower()]
             assert found, f"[{label}] '{exp_name}' not in cart: {cart}"
-            assert found[0][1] == exp_qty, f"[{label}] qty mismatch: {found[0][1]} != {exp_qty}"
+            assert found[0][1] == exp_qty, (
+                f"[{label}] qty mismatch: {found[0][1]} != {exp_qty}"
+            )
 
 
 class TestV2Unavailable:
@@ -203,7 +219,14 @@ class TestV2Unavailable:
         assert response is not None
         resp_lower = response.lower()
         assert any(
-            w in resp_lower for w in ("falta", "indisponivel", "indisponível", "disponivel", "disponível")
+            w in resp_lower
+            for w in (
+                "falta",
+                "indisponivel",
+                "indisponível",
+                "disponivel",
+                "disponível",
+            )
         ), f"[{label}] No em falta mention: {response[:200]}"
 
 

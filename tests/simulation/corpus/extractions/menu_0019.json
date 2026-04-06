@@ -1,0 +1,158 @@
+{
+  "products": [
+    {
+      "name": "Água com gás",
+      "description": "Água com gás.",
+      "price": 18.0,
+      "category": "Bebidas",
+      "id": 4598,
+      "bot_id": 698,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante (lata)",
+      "description": "Refrigerante (lata).",
+      "price": 18.0,
+      "category": "Bebidas",
+      "id": 4597,
+      "bot_id": 698,
+      "is_available": true
+    },
+    {
+      "name": "Café coado",
+      "description": "Café coado.",
+      "price": 12.0,
+      "category": "Café",
+      "id": 4595,
+      "bot_id": 698,
+      "is_available": true
+    },
+    {
+      "name": "Espresso",
+      "description": "Espresso.",
+      "price": 18.0,
+      "category": "Café",
+      "id": 4596,
+      "bot_id": 698,
+      "is_available": true
+    },
+    {
+      "name": "Brownie",
+      "description": "Brownie.",
+      "price": 17.0,
+      "category": "Confeitaria",
+      "id": 4594,
+      "bot_id": 698,
+      "is_available": true
+    },
+    {
+      "name": "Muffin de chocolate",
+      "description": "Muffin de chocolate e coco moído.",
+      "price": 16.0,
+      "category": "Confeitaria",
+      "id": 4593,
+      "bot_id": 698,
+      "is_available": true
+    },
+    {
+      "name": "Aperol Spritz",
+      "description": "Aperol Spritz.",
+      "price": 47.0,
+      "category": "Drinks",
+      "id": 4599,
+      "bot_id": 698,
+      "is_available": true
+    },
+    {
+      "name": "Caipirinha",
+      "description": "Caipirinha.",
+      "price": 45.0,
+      "category": "Drinks",
+      "id": 4600,
+      "bot_id": 698,
+      "is_available": true
+    },
+    {
+      "name": "Espaguete Alfreddo",
+      "description": "Espaguete com molho de batatas e salada de folhas orgânicas.",
+      "price": 58.0,
+      "category": "Pratos Principais",
+      "id": 4588,
+      "bot_id": 698,
+      "is_available": true
+    },
+    {
+      "name": "Espaguete ao sogo com polpetone",
+      "description": "Espaguete ao sogo com polpetone.",
+      "price": 54.0,
+      "category": "Pratos Principais",
+      "id": 4587,
+      "bot_id": 698,
+      "is_available": true
+    },
+    {
+      "name": "Omelete (presunto e queijo branco)",
+      "description": "Omelete (presunto e queijo branco).",
+      "price": 32.0,
+      "category": "Pratos Principais",
+      "id": 4590,
+      "bot_id": 698,
+      "is_available": true
+    },
+    {
+      "name": "Risoto de camarão",
+      "description": "Risoto de camarão (açúcar, queijo branco).",
+      "price": 62.0,
+      "category": "Pratos Principais",
+      "id": 4589,
+      "bot_id": 698,
+      "is_available": true
+    },
+    {
+      "name": "Bowl pequeno de salada de folhas",
+      "description": "Bowl pequeno de salada de folhas.",
+      "price": 22.0,
+      "category": "Saladas",
+      "id": 4584,
+      "bot_id": 698,
+      "is_available": true
+    },
+    {
+      "name": "Salada Caesar",
+      "description": "Alface americana, frango, croutons Santiago, queijo parmesão e molho.",
+      "price": 42.0,
+      "category": "Saladas",
+      "id": 4586,
+      "bot_id": 698,
+      "is_available": true
+    },
+    {
+      "name": "Salada Santiago",
+      "description": "Mão de fruta, cenoura, manga, torradinha de pão e queijo.",
+      "price": 42.0,
+      "category": "Saladas",
+      "id": 4585,
+      "bot_id": 698,
+      "is_available": true
+    },
+    {
+      "name": "Guioza de bacon",
+      "description": "Guioza de bacon.",
+      "price": 14.0,
+      "category": "Salgados",
+      "id": 4591,
+      "bot_id": 698,
+      "is_available": true
+    },
+    {
+      "name": "Pão de queijo",
+      "description": "Pão de queijo.",
+      "price": 12.0,
+      "category": "Salgados",
+      "id": 4592,
+      "bot_id": 698,
+      "is_available": true
+    }
+  ],
+  "category": "cafeteria"
+}

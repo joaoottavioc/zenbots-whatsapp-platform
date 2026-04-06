@@ -1,0 +1,68 @@
+{
+  "products": [
+    {
+      "name": "Carne",
+      "description": "",
+      "price": 10.0,
+      "category": "Pratos Principais",
+      "id": 4532,
+      "bot_id": 694,
+      "is_available": true
+    },
+    {
+      "name": "Coração",
+      "description": "",
+      "price": 10.0,
+      "category": "Pratos Principais",
+      "id": 4533,
+      "bot_id": 694,
+      "is_available": true
+    },
+    {
+      "name": "Franco",
+      "description": "",
+      "price": 10.0,
+      "category": "Pratos Principais",
+      "id": 4531,
+      "bot_id": 694,
+      "is_available": true
+    },
+    {
+      "name": "Franco com Bacon",
+      "description": "",
+      "price": 10.0,
+      "category": "Pratos Principais",
+      "id": 4534,
+      "bot_id": 694,
+      "is_available": true
+    },
+    {
+      "name": "Linguiça",
+      "description": "",
+      "price": 10.0,
+      "category": "Pratos Principais",
+      "id": 4535,
+      "bot_id": 694,
+      "is_available": true
+    },
+    {
+      "name": "Pão de Alho",
+      "description": "",
+      "price": 10.0,
+      "category": "Pratos Principais",
+      "id": 4536,
+      "bot_id": 694,
+      "is_available": true
+    },
+    {
+      "name": "Queijo",
+      "description": "",
+      "price": 10.0,
+      "category": "Pratos Principais",
+      "id": 4530,
+      "bot_id": 694,
+      "is_available": true
+    }
+  ],
+  "category": "padaria"
+}

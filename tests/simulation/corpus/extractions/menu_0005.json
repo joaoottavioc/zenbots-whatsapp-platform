@@ -1,0 +1,59 @@
+{
+  "products": [
+    {
+      "name": "Kit Bife a Parmegiana",
+      "description": "Bife a parmegiana, arroz, feijão, fritas + salada",
+      "price": 36.9,
+      "category": "Cardápio",
+      "id": 4375,
+      "bot_id": 684,
+      "is_available": true
+    },
+    {
+      "name": "Kit Frango a Parmegiana",
+      "description": "Frango a parmegiana, arroz, feijão, fritas + salada",
+      "price": 26.9,
+      "category": "Cardápio",
+      "id": 4374,
+      "bot_id": 684,
+      "is_available": true
+    },
+    {
+      "name": "Marmitex G",
+      "description": "Arroz, feijão, farofa, polenta frita, mix de folhas",
+      "price": 19.0,
+      "category": "Cardápio",
+      "id": 4372,
+      "bot_id": 684,
+      "is_available": true
+    },
+    {
+      "name": "Marmitex Light",
+      "description": "Arroz, feijão, farofa, polenta frita, mix de folhas",
+      "price": 15.0,
+      "category": "Cardápio",
+      "id": 4373,
+      "bot_id": 684,
+      "is_available": true
+    },
+    {
+      "name": "Marmitex M",
+      "description": "Arroz, feijão, farofa, polenta frita, mix de folhas",
+      "price": 17.0,
+      "category": "Cardápio",
+      "id": 4371,
+      "bot_id": 684,
+      "is_available": true
+    },
+    {
+      "name": "Marmitex P",
+      "description": "Arroz, feijão, farofa, polenta frita, mix de folhas",
+      "price": 14.0,
+      "category": "Cardápio",
+      "id": 4370,
+      "bot_id": 684,
+      "is_available": true
+    }
+  ],
+  "category": "marmitaria"
+}

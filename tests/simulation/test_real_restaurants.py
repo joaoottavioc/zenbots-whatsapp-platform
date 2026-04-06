@@ -138,9 +138,7 @@ class RealSimContext:
                 return []
 
             cart_result = await fresh_session.execute(
-                select(ShoppingCart).where(
-                    ShoppingCart.contact_id == contact_obj.id
-                )
+                select(ShoppingCart).where(ShoppingCart.contact_id == contact_obj.id)
             )
             cart_obj = cart_result.scalars().first()
             if not cart_obj:
@@ -181,9 +179,7 @@ async def db_check():
     # Verify at least one bot exists
     async with async_session() as session:
         result = await session.execute(
-            select(Bot.id).where(
-                Bot.phone_number_id == PHONE_IDS["sushi"]
-            )
+            select(Bot.id).where(Bot.phone_number_id == PHONE_IDS["sushi"])
         )
         if not result.first():
             pytest.skip(
@@ -283,7 +279,13 @@ class TestRealUnavailable:
         resp_lower = response.lower()
         assert any(
             w in resp_lower
-            for w in ("falta", "indisponivel", "indisponível", "disponivel", "disponível")
+            for w in (
+                "falta",
+                "indisponivel",
+                "indisponível",
+                "disponivel",
+                "disponível",
+            )
         ), f"[{label}] No em falta mention: {response[:200]}"
 
 

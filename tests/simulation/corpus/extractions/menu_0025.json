@@ -1,0 +1,122 @@
+{
+  "products": [
+    {
+      "name": "BBQ Chicken Burger",
+      "description": "Pão de hambúrguer, hamburger artesanal 200g, queijo prato, maionese, alface, tomate, cebola.",
+      "price": 19.0,
+      "category": "Lanches",
+      "id": 4687,
+      "bot_id": 704,
+      "is_available": true
+    },
+    {
+      "name": "BBQ Peppers Burger",
+      "description": "Pão de hambúrguer, hamburger artesanal 200g, queijo prato, maionese, alface, tomate, cebola.",
+      "price": 19.0,
+      "category": "Lanches",
+      "id": 4686,
+      "bot_id": 704,
+      "is_available": true
+    },
+    {
+      "name": "Mississippi Classic Burger",
+      "description": "Pão de hambúrguer, hamburger artesanal 200g, queijo prato, maionese, alface, tomate, cebola.",
+      "price": 17.0,
+      "category": "Lanches",
+      "id": 4684,
+      "bot_id": 704,
+      "is_available": true
+    },
+    {
+      "name": "Public Burger",
+      "description": "Pão de hambúrguer, hamburger artesanal 200g, queijo prato, maionese, alface, tomate, cebola.",
+      "price": 19.0,
+      "category": "Lanches",
+      "id": 4685,
+      "bot_id": 704,
+      "is_available": true
+    },
+    {
+      "name": "Rush Burger",
+      "description": "Pão de hambúrguer, hamburger artesanal 200g, queijo prato, maionese, alface, tomate, cebola.",
+      "price": 18.5,
+      "category": "Lanches",
+      "id": 4683,
+      "bot_id": 704,
+      "is_available": true
+    },
+    {
+      "name": "The Beatles Kids Burger",
+      "description": "Pão de hambúrguer, hamburger artesanal 100g, queijo prato, maionese, alface, tomate, cebola.",
+      "price": 8.0,
+      "category": "Lanches",
+      "id": 4681,
+      "bot_id": 704,
+      "is_available": true
+    },
+    {
+      "name": "Zé Legume Burger",
+      "description": "Pão de hambúrguer, hamburger artesanal 200g, queijo prato, maionese, alface, tomate, cebola.",
+      "price": 19.0,
+      "category": "Lanches",
+      "id": 4688,
+      "bot_id": 704,
+      "is_available": true
+    },
+    {
+      "name": "Monsters 1",
+      "description": "Pão de batata rústica.",
+      "price": 20.0,
+      "category": "Porções",
+      "id": 4689,
+      "bot_id": 704,
+      "is_available": true
+    },
+    {
+      "name": "Monsters 2",
+      "description": "Pão de batata rústica.",
+      "price": 28.0,
+      "category": "Porções",
+      "id": 4690,
+      "bot_id": 704,
+      "is_available": true
+    },
+    {
+      "name": "Classic Salad",
+      "description": "Tomate cereja, palmito, alface americana e molho especial da casa.",
+      "price": 5.5,
+      "category": "Saladas",
+      "id": 4682,
+      "bot_id": 704,
+      "is_available": true
+    },
+    {
+      "name": "Brigadeiro de Colher com Castanha",
+      "description": "",
+      "price": 6.0,
+      "category": "Sobremesas",
+      "id": 4693,
+      "bot_id": 704,
+      "is_available": true
+    },
+    {
+      "name": "Brigadeiro de Colher Gourmet",
+      "description": "",
+      "price": 5.0,
+      "category": "Sobremesas",
+      "id": 4692,
+      "bot_id": 704,
+      "is_available": true
+    },
+    {
+      "name": "Brigadeiro de Colher Tradicional",
+      "description": "",
+      "price": 4.5,
+      "category": "Sobremesas",
+      "id": 4691,
+      "bot_id": 704,
+      "is_available": true
+    }
+  ],
+  "category": "hamburgueria"
+}

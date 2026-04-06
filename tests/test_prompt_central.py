@@ -291,9 +291,9 @@ class TestPrefixCachingStructure:
         assert messages[history_start]["content"] == "oi"
 
     def test_static_system_does_not_contain_dynamic_context(self):
-        """Static system message must NOT contain menu/cart/suggestion context."""
+        """Static system message must NOT contain dynamic cart/menu data."""
         cart_items = [{"quantity": 2, "name": "Pizza", "product_id": 1}]
-        products = [_make_product(product_id=5, name="Coca-Cola")]
+        products = [_make_product(product_id=5, name="Brigadeiro Belga")]
         messages = create_central_prompt(
             user_query="oi",
             history=[],
@@ -303,7 +303,9 @@ class TestPrefixCachingStructure:
         )
         static = messages[0]["content"]
         assert "2x Pizza" not in static
-        assert "Coca-Cola" not in static
+        # Dynamic product data should not leak into static prompt
+        # (Note: generic examples like "Coca-Cola" may appear in static rules)
+        assert "Brigadeiro Belga" not in static
 
     def test_dynamic_system_contains_cart_and_menu(self):
         """Dynamic system message must contain menu and cart context."""

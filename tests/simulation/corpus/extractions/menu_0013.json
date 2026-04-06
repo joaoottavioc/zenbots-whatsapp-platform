@@ -1,0 +1,77 @@
+{
+  "products": [
+    {
+      "name": "AMERICANO",
+      "description": "Pão, carne de boi, maionese, alface, tomate, milho e batata",
+      "price": 11.5,
+      "category": "Sanduíches",
+      "id": 4496,
+      "bot_id": 692,
+      "is_available": true
+    },
+    {
+      "name": "BACON BURG",
+      "description": "Pão, 2 hambúrgueres, bacon, maionese, alface, tomate, milho e batata",
+      "price": 13.0,
+      "category": "Sanduíches",
+      "id": 4492,
+      "bot_id": 692,
+      "is_available": true
+    },
+    {
+      "name": "EGGS BACON",
+      "description": "Pão, 2 hambúrgueres, ovo, bacon, maionese, alface, tomate, milho e batata",
+      "price": 14.0,
+      "category": "Sanduíches",
+      "id": 4493,
+      "bot_id": 692,
+      "is_available": true
+    },
+    {
+      "name": "FRANTUDO",
+      "description": "Pão, 2 hambúrgueres de frango, presunto, maionese, alface, tomate, milho e batata",
+      "price": 17.0,
+      "category": "Sanduíches",
+      "id": 4495,
+      "bot_id": 692,
+      "is_available": true
+    },
+    {
+      "name": "GALINHA MISTA",
+      "description": "Pão, 2 hambúrgueres de frango, presunto, maionese, alface, tomate, milho e batata",
+      "price": 15.0,
+      "category": "Sanduíches",
+      "id": 4494,
+      "bot_id": 692,
+      "is_available": true
+    },
+    {
+      "name": "MUTAMBA",
+      "description": "Pão, carne de boi, maionese, alface, tomate, milho e batata",
+      "price": 14.0,
+      "category": "Sanduíches",
+      "id": 4497,
+      "bot_id": 692,
+      "is_available": true
+    },
+    {
+      "name": "X FOMINHA",
+      "description": "Pão, carne de boi, presunto, muss., ovo, bacon, maionese, alface, tomate, milho e batata",
+      "price": 18.5,
+      "category": "Sanduíches",
+      "id": 4490,
+      "bot_id": 692,
+      "is_available": true
+    },
+    {
+      "name": "X GALINHA",
+      "description": "Pão, peito de frango desfiado, queijo, ovo, maionese, alface, tomate, milho e batata",
+      "price": 15.0,
+      "category": "Sanduíches",
+      "id": 4491,
+      "bot_id": 692,
+      "is_available": true
+    }
+  ],
+  "category": "hamburgueria"
+}
