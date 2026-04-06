@@ -4296,7 +4296,7 @@ async def resolve_intent(text_body, cart, cart_items_for_intent, found_products=
         _ext_wc = sum(len(t.split()) for t in _extracted)
         _ratio = _ext_wc / _orig_wc if _orig_wc > 0 else 1.0
 
-        if _ratio > 0.5:
+        if _ratio >= 0.5:
             # Conversational noise — let the LLM handle it conversationally
             logger.info(
                 "[INTENT] low confidence + noise: %s score=%.2f"

@@ -82,22 +82,23 @@ async def test_add_intent_not_overridden_during_checkout():
 
 @pytest.mark.asyncio
 async def test_clear_cart_overridden_via_low_confidence_router():
-    """Low confidence during checkout defaults to ADD, which is then overridden
-    to BACK_TO_SHOPPING by the checkout intent override map.
+    """Low confidence during checkout: noise guard catches 'não quero mais'
+    as conversational (high word ratio) → GREETING_OR_QUESTION.
 
-    After T2-3 + 2026-03-19 changes: low confidence defaults to ADD (not
-    router's best guess). ADD during checkout is overridden to BACK_TO_SHOPPING.
+    During checkout, GREETING_OR_QUESTION is overridden to BACK_TO_SHOPPING
+    by the checkout intent override map.
     """
     from app.whatsapp import resolve_intent
 
     cart = _make_cart(state=CartState.AWAITING_CUSTOMER_NAME)
 
-    # Low confidence — defaults to ADD, then checkout override → BACK_TO_SHOPPING
+    # Low confidence + high word ratio → noise guard → GREETING_OR_QUESTION
+    # During checkout → overridden to BACK_TO_SHOPPING
     with patch(
         "app.whatsapp.semantic_intent", return_value=("CLEAR_CART", 0.3, "cancela")
     ):
         intent = await resolve_intent("não quero mais", cart, [])
 
-    # Low confidence defaults to ADD. ADD is not in checkout overrides,
-    # so it stays as ADD. The shopping handler will process it.
-    assert intent == "ADD"
+    # Noise guard classifies "não quero mais" as conversational at low confidence.
+    # Checkout override maps GREETING_OR_QUESTION → BACK_TO_SHOPPING.
+    assert intent == "GREETING_OR_QUESTION"
