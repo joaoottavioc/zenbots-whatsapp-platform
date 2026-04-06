@@ -1,4 +1,4 @@
-# app/whatsapp.py
+# app/whatsapp.py  # F7/F8/F10 fixes applied 2026-04-04
 import os
 import json
 import random
@@ -1464,13 +1464,25 @@ async def _handle_shopping_intent(
         # reliable than the LLM for structured orders with typos.
         if intent == "ADD" and _qty_pairs:
             _real_pairs = [(q, n) for q, n in _qty_pairs if q > 1 or len(n.split()) > 1]
-            # Track single-word qty=1 items that _real_pairs filters out.
-            # These still need unavailable detection even though they skip
-            # programmatic matching.
+            # Single-word qty=1 items (e.g. "brahma") are normally excluded from
+            # programmatic matching to avoid false positives. But if the word is
+            # long enough (≥4 chars), it's likely an abbreviated product name —
+            # promote it to _real_pairs so it uses the reliable programmatic path
+            # instead of falling through to the LLM (which often picks
+            # answer_conversationally and triggers Option C). (Fix for F8)
+            _single_word_candidates = [
+                (q, n)
+                for q, n in _qty_pairs
+                if q == 1 and len(n.split()) == 1 and len(n) >= 4
+            ]
+            if _single_word_candidates:
+                _real_pairs.extend(_single_word_candidates)
+            # Track remaining single-word items (too short to promote) for
+            # unavailable detection.
             _filtered_out_items = [
                 n
                 for q, n in _qty_pairs
-                if q == 1 and len(n.split()) == 1 and len(n) >= 3
+                if q == 1 and len(n.split()) == 1 and len(n) >= 3 and len(n) < 4
             ]
             if _real_pairs:
                 # Load all available products for fuzzy matching
@@ -1579,17 +1591,71 @@ async def _handle_shopping_intent(
                                     best = p
                         return best if best_score >= 1 else None
 
-                    _prog_selections: list[tuple] = []
+                    _prog_selections: list[tuple] = []  # (product, qty, search_term)
                     _prog_seen: set[int] = set()
                     _prog_unmatched: list[str] = list(_filtered_out_items)
 
                     for qty, item_name in _real_pairs:
                         matched = _match_product(item_name, _prog_seen)
                         if matched:
-                            _prog_selections.append((matched, qty))
+                            _prog_selections.append((matched, qty, item_name))
                             _prog_seen.add(matched.id)
                         elif item_name.strip() and len(item_name.strip()) >= 3:
                             _prog_unmatched.append(item_name.strip())
+
+                    # Cross-check: detect unavailable substitutions (F10 fix).
+                    # When "capuccino paçoca" (unavailable) fuzzy-matches
+                    # "FROZEN CAPUCINO" (available), the user wanted the
+                    # unavailable product. Compare similarity scores and
+                    # remove the substitution before adding to cart.
+                    if _prog_selections:
+                        _xcheck_terms = [t for _, _, t in _prog_selections]
+                        _xcheck_unavail = await crud.find_unavailable_products(
+                            session, bot.id, _xcheck_terms
+                        )
+                        if _xcheck_unavail:
+
+                            def _xn(s: str) -> str:
+                                return (
+                                    s.lower()
+                                    .replace("'", "")
+                                    .replace("\u2019", "")
+                                    .strip()
+                                )
+
+                            _to_remove: set[int] = set()
+                            for i, (matched_prod, _q, search_term) in enumerate(
+                                _prog_selections
+                            ):
+                                t = _xn(search_term)
+                                avail_sim = _ProdSM(
+                                    None, t, _xn(matched_prod.name)
+                                ).ratio()
+                                best_unavail = max(
+                                    _xcheck_unavail,
+                                    key=lambda p: _ProdSM(None, t, _xn(p.name)).ratio(),
+                                )
+                                unavail_sim = _ProdSM(
+                                    None, t, _xn(best_unavail.name)
+                                ).ratio()
+                                # Unavailable product is a clearly better match →
+                                # user wanted the unavailable one, not the
+                                # substitution. Require a meaningful gap (0.15)
+                                # to avoid false positives when names are similar
+                                # (e.g. "mignon com chedar" matching both
+                                # "Mignon ao molho cheddar" and "Mignon com cebola").
+                                if (
+                                    unavail_sim >= 0.6
+                                    and unavail_sim > avail_sim + 0.15
+                                ):
+                                    _to_remove.add(i)
+                                    _prog_unmatched.append(search_term)
+                            if _to_remove:
+                                _prog_selections = [
+                                    s
+                                    for i, s in enumerate(_prog_selections)
+                                    if i not in _to_remove
+                                ]
 
                     if _prog_selections:
                         items_to_add = [
@@ -1598,7 +1664,7 @@ async def _handle_shopping_intent(
                                 "quantity": qty,
                                 "product_name": p.name,
                             }
-                            for p, qty in _prog_selections
+                            for p, qty, _term in _prog_selections
                         ]
                         skipped: list[str] = []
                         await crud.add_items_to_db_cart(
@@ -1672,9 +1738,14 @@ async def _handle_shopping_intent(
 
                 for cand in unavailable_candidates:
                     for term in search_terms:
-                        if (
-                            _SM(None, _norm_blind(term), _norm_blind(cand.name)).ratio()
-                            >= _MIN_BLIND_SIM
+                        t_norm = _norm_blind(term)
+                        c_norm = _norm_blind(cand.name)
+                        # Accept if SequenceMatcher passes OR if the search
+                        # term is a substring of the product name (handles
+                        # abbreviations like "brahma" → "Cerveja Brahma 600ml"
+                        # where ILIKE matched but string ratio is low). (Fix F7)
+                        if _SM(None, t_norm, c_norm).ratio() >= _MIN_BLIND_SIM or (
+                            len(t_norm) >= 4 and t_norm in c_norm
                         ):
                             unavailable_matches.append(cand)
                             _unavail_term_map[cand.id] = term
@@ -1705,17 +1776,30 @@ async def _handle_shopping_intent(
                     unavail_score = SequenceMatcher(
                         None, term_norm, _norm(best_unavail.name)
                     ).ratio()
+                    # Substring containment is a strong signal even when
+                    # SequenceMatcher ratio is low (abbreviations like
+                    # "brahma" → "Cerveja Brahma 600ml"). (Fix F7)
+                    _is_substring = len(term_norm) >= 4 and term_norm in _norm(
+                        best_unavail.name
+                    )
                     # Must exceed minimum absolute threshold AND beat available match
-                    if unavail_score < _MIN_UNAVAIL_SIM:
+                    if unavail_score < _MIN_UNAVAIL_SIM and not _is_substring:
                         continue
                     best_avail_score = max(
                         SequenceMatcher(None, term_norm, _norm(p.name)).ratio()
                         for p in found_products
                     )
+                    # Substring match for unavailable AND no substring match
+                    # for any available product → clearly wanted the unavailable one
+                    _avail_has_substring = (
+                        any(term_norm in _norm(p.name) for p in found_products)
+                        if _is_substring
+                        else False
+                    )
                     if (
                         unavail_score > best_avail_score
-                        and best_unavail.id not in _seen_unavail_ids
-                    ):
+                        or (_is_substring and not _avail_has_substring)
+                    ) and best_unavail.id not in _seen_unavail_ids:
                         unavailable_matches.append(best_unavail)
                         _seen_unavail_ids.add(best_unavail.id)
                         _unavail_term_map[best_unavail.id] = term
@@ -1785,13 +1869,12 @@ async def _handle_shopping_intent(
         else:
             _prompt_products = found_products
 
-        # Fetch ALL available products for this bot — gives LLM full context
-        # for quantity-product parsing from turn 1 (no history dependency).
+        # Fetch ALL products for this bot (available + unavailable) — gives
+        # LLM full context for disambiguation and em falta detection.
         _all_products_result = await session.execute(
             select(Product)
             .where(
                 Product.bot_id == bot.id,
-                Product.is_available == True,
                 Product.is_deleted == False,
             )
             .order_by(Product.category, Product.name)
@@ -1923,6 +2006,39 @@ async def _handle_shopping_intent(
                         else:
                             response_to_user = f"Não encontrei *{items_str}* no nosso cardápio. 😕 Quer tentar outro item ou ver nossas sugestões?"
                     else:
+                        # Override LLM quantities with programmatic ones.
+                        # The LLM picks the right product; the extractor
+                        # already parsed the right quantity.
+                        if _qty_pairs and items_arg:
+                            from difflib import SequenceMatcher as _QtySM
+
+                            for llm_item in items_arg:
+                                llm_name = (
+                                    llm_item.get("product_name", "") or ""
+                                ).lower()
+                                if not llm_name:
+                                    continue
+                                best_pair_qty = None
+                                best_pair_score = 0.0
+                                for pq, pn in _qty_pairs:
+                                    score = _QtySM(None, pn.lower(), llm_name).ratio()
+                                    if score > best_pair_score:
+                                        best_pair_score = score
+                                        best_pair_qty = pq
+                                if (
+                                    best_pair_qty is not None
+                                    and best_pair_score >= 0.4
+                                    and best_pair_qty != llm_item.get("quantity")
+                                ):
+                                    logger.info(
+                                        "[QTY_OVERRIDE] '%s': LLM=%d → prog=%d (score=%.2f)",
+                                        llm_name,
+                                        llm_item.get("quantity", 0),
+                                        best_pair_qty,
+                                        best_pair_score,
+                                    )
+                                    llm_item["quantity"] = best_pair_qty
+
                         clear_pending(cart)
                         qty_before = sum(item.quantity for item in cart.items)
 
@@ -3493,6 +3609,13 @@ def _programmatic_cart_reduce(
         "retira",
         "retirar",
         "retiro",
+        "sem",
+        "cancela",
+        "cancelar",
+        "esquece",
+        "esquecer",
+        "deixa",
+        "fora",
     }
 
     def _extract_size_token(s: str) -> str | None:
@@ -3962,6 +4085,12 @@ _REMOVE_KEYWORD_RE = re.compile(
     r")",
     re.IGNORECASE,
 )
+# Extended remove patterns: "sem o X", "cancela o X", "esquece o X"
+_REMOVE_ALT_RE = re.compile(
+    r"(?:sem|cancela|esquece|deixa\s+sem|tira\s+fora)"
+    r"\s+(?:o|a|os|as)\s+[a-záàâãéèêíìîóòôõúùûç]",
+    re.IGNORECASE,
+)
 _ADD_KEYWORD_RE = re.compile(
     r"(?:quero(?:\s+pedir)?|manda(?:\s+ver)?|coloca|bota|adiciona|me\s+v[eê]|vou\s+querer|pode\s+mandar)"
     rf"(?:\s+\w{{1,5}}){{0,2}}\s+(?:{_ADD_QTY_WORDS}|\d+)\s*\(?[a-záàâãéèêíìîóòôõúùûç]",
@@ -3985,7 +4114,7 @@ async def resolve_intent(text_body, cart, cart_items_for_intent, found_products=
     # 0b. Pre-router guard: obvious REMOVE/MODIFY patterns bypass the semantic router.
     # "tire/tira/retira/remove" + qty + product is unambiguously a cart reduction,
     # but the router misclassifies it as ADD because product names shift the embedding.
-    if _REMOVE_KEYWORD_RE.search(text_body):
+    if _REMOVE_KEYWORD_RE.search(text_body) or _REMOVE_ALT_RE.search(text_body):
         logger.info("[INTENT] pre-router REMOVE guard matched: %r", text_body[:80])
         _last_router_score = 1.0
         final_intent = "MODIFY"
@@ -4026,6 +4155,45 @@ async def resolve_intent(text_body, cart, cart_items_for_intent, found_products=
         if in_checkout and final_intent in _CHECKOUT_INTENT_OVERRIDES:
             final_intent = _CHECKOUT_INTENT_OVERRIDES[final_intent]
         return final_intent
+
+    # 0e. Pre-router guard: obvious QUESTION patterns.
+    # "quanto custa o X?", "qual o valor do X?" should NOT add to cart.
+    # Only trigger when no ADD verb is present (avoids "quanto custa? manda um").
+    _QUESTION_STARTERS = (
+        "quanto custa",
+        "quanto é ",
+        "quanto eh ",
+        "quanto fica",
+        "quanto tá ",
+        "quanto ta ",
+        "quanto sai",
+        "qual o valor",
+        "qual o preco",
+        "qual o preço",
+        "aceita pix",
+        "aceita cartao",
+        "aceita cartão",
+        "tem maquininha",
+        "qual a taxa",
+        "vocês entregam",
+        "vcs entregam",
+        "ate que horas",
+        "até que horas",
+        "quanto tempo demora",
+    )
+    _ADD_VERBS = ("quero", "manda", "bota", "coloca", "me vê", "me ve", "adiciona")
+    if any(
+        _lower_body.startswith(q) or f" {q}" in _lower_body for q in _QUESTION_STARTERS
+    ):
+        if not any(v in _lower_body for v in _ADD_VERBS):
+            logger.info(
+                "[INTENT] pre-router QUESTION guard matched: %r", text_body[:80]
+            )
+            _last_router_score = 1.0
+            final_intent = "GREETING_OR_QUESTION"
+            if in_checkout and final_intent in _CHECKOUT_INTENT_OVERRIDES:
+                final_intent = _CHECKOUT_INTENT_OVERRIDES[final_intent]
+            return final_intent
 
     # 1. Try the fast semantic router first
     router_intent, router_score = None, 0.0

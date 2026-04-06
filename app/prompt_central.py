@@ -24,10 +24,17 @@ def create_central_prompt(
     # --- CONTEXTO DO CARDÁPIO ---
     menu_context = "Nenhum item relevante encontrado."
     if search_results:
-        menu_context = "\n".join(
-            f"- [{p.category or 'Geral'}] {p.name} (ID: {p.id}) – {(p.description or '')[:80]}"
-            for p in search_results
-        )
+        lines = []
+        for p in search_results:
+            if not p.is_available:
+                lines.append(
+                    f"- [{p.category or 'Geral'}] {p.name} (ID: {p.id}) — EM FALTA (indisponível)"
+                )
+            else:
+                lines.append(
+                    f"- [{p.category or 'Geral'}] {p.name} (ID: {p.id}) – {(p.description or '')[:80]}"
+                )
+        menu_context = "\n".join(lines)
 
     # --- CONTEXTO DO CARRINHO ---
     cart_context = "O carrinho está vazio."
@@ -75,6 +82,11 @@ Prioridade:
 Regra de estoque:
 - NUNCA avalie estoque, disponibilidade ou capacidade. NUNCA escreva “não temos X unidades”.
 - Se o produto existe no cardápio (mesmo com plural/sinônimo), REGISTRE exatamente a quantidade pedida com `add_items_to_cart`.
+- Produtos marcados “EM FALTA” no cardápio NÃO devem ser adicionados ao carrinho. Se o cliente pedir um item EM FALTA, use `answer_conversationally` para informar que está indisponível.
+
+Regra de abreviações:
+- O cliente pode usar nomes abreviados ou informais (ex: “coca” para “Coca-Cola 600ml”, “calabresa” para “Pizza Calabresa”).
+- Use o cardápio completo abaixo para resolver a qual produto o cliente se refere. Se houver ambiguidade (ex: “calabresa” pode ser pizza ou linguiça), escolha o item mais popular/principal da categoria.
 
 Regra de correspondência de produtos:
 - Só use `add_items_to_cart` se o produto no cardápio REALMENTE corresponde ao que o cliente pediu.

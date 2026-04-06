@@ -753,6 +753,18 @@ async def create_product(
     session.add(new_product)
     await session.commit()
     await session.refresh(new_product)
+
+    # Regenerate aliases for all products in this bot (new product may
+    # invalidate existing aliases or create new unique ones).
+    from app.alias_service import regenerate_aliases_for_bot
+
+    try:
+        alias_count = await regenerate_aliases_for_bot(session, bot_id)
+        if alias_count:
+            await session.commit()
+    except Exception as e:
+        logger.warning("ALIAS_CREATE_FAIL bot=%s err=%s", bot_id, e)
+
     return new_product
 
 
@@ -941,6 +953,18 @@ async def bulk_create_products(
                 session.add(product)
 
     await session.commit()
+
+    # Generate disambiguated aliases for all products in this bot.
+    # Must run after commit so all products are visible.
+    from app.alias_service import regenerate_aliases_for_bot
+
+    try:
+        alias_count = await regenerate_aliases_for_bot(session, bot_id)
+        if alias_count:
+            await session.commit()
+            logger.info("ALIAS_BULK bot=%s updated=%d", bot_id, alias_count)
+    except Exception as e:
+        logger.warning("ALIAS_BULK_FAIL bot=%s err=%s", bot_id, e)
 
     return len(processed_db_ids) + len(products_to_add)
 
