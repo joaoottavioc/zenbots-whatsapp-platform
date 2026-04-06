@@ -802,7 +802,7 @@ class TestNoiseIntentResolution:
             return_value=("REQUEST_SUGGESTION", 0.40, None),
         ):
             intent = await resolve_intent(
-                "nao sei meu primo acabou de chegar aqui",
+                "oi gente chegamos agora no bairro",
                 cart,
                 [],
             )
