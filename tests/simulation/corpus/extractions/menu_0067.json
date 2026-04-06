@@ -1,0 +1,149 @@
+{
+  "products": [
+    {
+      "name": "Arroz",
+      "description": "",
+      "price": 5.0,
+      "category": "Combos",
+      "id": 8935,
+      "bot_id": 1209,
+      "is_available": true
+    },
+    {
+      "name": "Combo de Filé Mignon",
+      "description": "500g de filé mignon ou frango em cubos, fritos em chapa com azeite (serve 2 pessoas).",
+      "price": 75.0,
+      "category": "Combos",
+      "id": 8932,
+      "bot_id": 1209,
+      "is_available": true
+    },
+    {
+      "name": "Porção de Filé",
+      "description": "",
+      "price": 56.0,
+      "category": "Combos",
+      "id": 8933,
+      "bot_id": 1209,
+      "is_available": true
+    },
+    {
+      "name": "Risoto Fungui Secchi",
+      "description": "",
+      "price": 75.0,
+      "category": "Combos",
+      "id": 8934,
+      "bot_id": 1209,
+      "is_available": true
+    },
+    {
+      "name": "Rúcula com alho",
+      "description": "",
+      "price": 22.5,
+      "category": "Especiais",
+      "id": 8943,
+      "bot_id": 1209,
+      "is_available": true
+    },
+    {
+      "name": "Rúcula com alho e bacon",
+      "description": "",
+      "price": 22.5,
+      "category": "Exclusivos",
+      "id": 8945,
+      "bot_id": 1209,
+      "is_available": true
+    },
+    {
+      "name": "Rúcula com o bacon",
+      "description": "",
+      "price": 22.5,
+      "category": "Exclusivos",
+      "id": 8944,
+      "bot_id": 1209,
+      "is_available": true
+    },
+    {
+      "name": "Fritas",
+      "description": "Fritas com alho.",
+      "price": 17.9,
+      "category": "Fritas",
+      "id": 8936,
+      "bot_id": 1209,
+      "is_available": true
+    },
+    {
+      "name": "Sanduíches",
+      "description": "Baguete com gergelim de aprox. 18cm com filé mignon ou frango desfiado. Todos acompanham queijo mussarela.",
+      "price": 20.5,
+      "category": "Sanduíches",
+      "id": 8931,
+      "bot_id": 1209,
+      "is_available": true
+    },
+    {
+      "name": "Aspargos",
+      "description": "",
+      "price": 22.5,
+      "category": "Tradicionais",
+      "id": 8938,
+      "bot_id": 1209,
+      "is_available": true
+    },
+    {
+      "name": "Brócolis",
+      "description": "",
+      "price": 22.5,
+      "category": "Tradicionais",
+      "id": 8937,
+      "bot_id": 1209,
+      "is_available": true
+    },
+    {
+      "name": "Champignon",
+      "description": "",
+      "price": 22.5,
+      "category": "Tradicionais",
+      "id": 8939,
+      "bot_id": 1209,
+      "is_available": true
+    },
+    {
+      "name": "Gorgonzola",
+      "description": "",
+      "price": 22.5,
+      "category": "Tradicionais",
+      "id": 8942,
+      "bot_id": 1209,
+      "is_available": true
+    },
+    {
+      "name": "Molhos Chutney e Mostarda",
+      "description": "(páprica e picante)",
+      "price": 22.5,
+      "category": "Tradicionais",
+      "id": 8940,
+      "bot_id": 1209,
+      "is_available": true
+    },
+    {
+      "name": "Rúcula temperada e alho frito",
+      "description": "",
+      "price": 22.5,
+      "category": "Tradicionais",
+      "id": 8941,
+      "bot_id": 1209,
+      "is_available": true
+    },
+    {
+      "name": "Filé e Queijo",
+      "description": "(qualquer sabor, sem filé)",
+      "price": 17.0,
+      "category": "Vegetariano",
+      "id": 8946,
+      "bot_id": 1209,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

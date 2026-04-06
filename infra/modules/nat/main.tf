@@ -19,6 +19,23 @@ resource "aws_nat_gateway" "this" {
   }
 }
 
+# ------------------ EIP for Reverse Proxy (stable IP for DNS) ------------------
+
+resource "aws_eip" "nat_instance" {
+  count  = var.nat_type == "instance" && var.enable_reverse_proxy ? 1 : 0
+  domain = "vpc"
+
+  tags = {
+    Name = "${var.project}-${var.environment}-nat-instance-eip"
+  }
+}
+
+resource "aws_eip_association" "nat_instance" {
+  count         = var.nat_type == "instance" && var.enable_reverse_proxy ? 1 : 0
+  instance_id   = aws_instance.nat[0].id
+  allocation_id = aws_eip.nat_instance[0].id
+}
+
 # ------------------ NAT Instance (dev — $3/mo) ------------------
 
 # fck-nat: lightweight, open-source NAT AMI optimized for low-traffic use
@@ -55,6 +72,30 @@ resource "aws_security_group" "nat" {
     cidr_blocks = var.private_subnet_cidrs
   }
 
+  # HTTPS ingress for Caddy reverse proxy
+  dynamic "ingress" {
+    for_each = var.enable_reverse_proxy ? [1] : []
+    content {
+      from_port   = 443
+      to_port     = 443
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+      description = "HTTPS for Caddy reverse proxy"
+    }
+  }
+
+  # HTTP ingress for Let's Encrypt ACME HTTP-01 challenge
+  dynamic "ingress" {
+    for_each = var.enable_reverse_proxy ? [1] : []
+    content {
+      from_port   = 80
+      to_port     = 80
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+      description = "HTTP for ACME challenge"
+    }
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -79,6 +120,13 @@ resource "aws_instance" "nat" {
   vpc_security_group_ids      = [aws_security_group.nat[0].id]
   source_dest_check           = false
   associate_public_ip_address = true
+
+  user_data = var.enable_reverse_proxy ? templatefile("${path.module}/caddy_userdata.sh.tpl", {
+    domain   = var.reverse_proxy_domain
+    upstream = var.reverse_proxy_upstream
+  }) : null
+
+  user_data_replace_on_change = true
 
   tags = {
     Name = "${var.project}-${var.environment}-nat-instance"

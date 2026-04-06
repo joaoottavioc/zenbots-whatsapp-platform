@@ -1,0 +1,257 @@
+{
+  "products": [
+    {
+      "name": "Bacon",
+      "description": "",
+      "price": 2.0,
+      "category": "Adicionais",
+      "id": 8810,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa",
+      "description": "",
+      "price": 2.0,
+      "category": "Adicionais",
+      "id": 8809,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Carne Seca",
+      "description": "",
+      "price": 2.0,
+      "category": "Adicionais",
+      "id": 8811,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Cebola",
+      "description": "",
+      "price": 1.0,
+      "category": "Adicionais",
+      "id": 8817,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Cebolinha",
+      "description": "",
+      "price": 0.5,
+      "category": "Adicionais",
+      "id": 8820,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Frango",
+      "description": "",
+      "price": 1.5,
+      "category": "Adicionais",
+      "id": 8808,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Milho",
+      "description": "",
+      "price": 1.0,
+      "category": "Adicionais",
+      "id": 8814,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Orégano",
+      "description": "",
+      "price": 0.5,
+      "category": "Adicionais",
+      "id": 8818,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Ovo",
+      "description": "",
+      "price": 1.5,
+      "category": "Adicionais",
+      "id": 8813,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Pimenta do Reino",
+      "description": "",
+      "price": 0.5,
+      "category": "Adicionais",
+      "id": 8819,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Queijo",
+      "description": "",
+      "price": 1.5,
+      "category": "Adicionais",
+      "id": 8812,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Rúcula",
+      "description": "",
+      "price": 1.0,
+      "category": "Adicionais",
+      "id": 8816,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Tomate",
+      "description": "",
+      "price": 1.0,
+      "category": "Adicionais",
+      "id": 8815,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa com Cebola Caramelizada Flambada no Conhaque",
+      "description": "",
+      "price": 13.0,
+      "category": "Salgadas",
+      "id": 8802,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa com Queijo",
+      "description": "",
+      "price": 11.0,
+      "category": "Salgadas",
+      "id": 8801,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Carne Moída Cremosa Picante",
+      "description": "",
+      "price": 11.0,
+      "category": "Salgadas",
+      "id": 8800,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Carne Seca com Queijo",
+      "description": "",
+      "price": 13.0,
+      "category": "Salgadas",
+      "id": 8799,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Frango, Bacon, Milho e Queijo",
+      "description": "",
+      "price": 13.0,
+      "category": "Salgadas",
+      "id": 8803,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Frango com Gueroaba, Milho e Tomate",
+      "description": "",
+      "price": 11.0,
+      "category": "Salgadas",
+      "id": 8797,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Frango com Queijo",
+      "description": "",
+      "price": 11.0,
+      "category": "Salgadas",
+      "id": 8796,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Frango Cremoso ao Curry",
+      "description": "",
+      "price": 11.0,
+      "category": "Salgadas",
+      "id": 8798,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Manteiga comum ou de garrafa",
+      "description": "",
+      "price": 4.0,
+      "category": "Salgadas",
+      "id": 8793,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Presunto, Queijo",
+      "description": "Recheio de presunto e queijo",
+      "price": 13.0,
+      "category": "Salgadas",
+      "id": 8794,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Presunto, Queijo e Ovo",
+      "description": "Recheio de presunto, queijo e ovo",
+      "price": 13.0,
+      "category": "Salgadas",
+      "id": 8795,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Tapiza",
+      "description": "",
+      "price": 10.0,
+      "category": "Salgadas",
+      "id": 8804,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Palmito com Tomate",
+      "description": "",
+      "price": 10.0,
+      "category": "Vegetarianas",
+      "id": 8805,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Rúcula, Tomate Seco e Palmito",
+      "description": "",
+      "price": 10.0,
+      "category": "Vegetarianas",
+      "id": 8806,
+      "bot_id": 1200,
+      "is_available": true
+    },
+    {
+      "name": "Tomate, Azeitona, Milho, Rúcula e Orégano",
+      "description": "",
+      "price": 7.0,
+      "category": "Vegetarianas",
+      "id": 8807,
+      "bot_id": 1200,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

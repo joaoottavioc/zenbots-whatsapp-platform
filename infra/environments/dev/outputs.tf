@@ -1,5 +1,6 @@
-output "alb_dns_name" {
-  value = module.alb.alb_dns_name
+output "api_endpoint_ip" {
+  description = "Public IP of the NAT instance running Caddy reverse proxy"
+  value       = module.nat.nat_eip_public_ip
 }
 
 output "rds_endpoint" {
@@ -7,7 +8,7 @@ output "rds_endpoint" {
 }
 
 output "redis_endpoint" {
-  value = module.elasticache.primary_endpoint
+  value = module.redis_ecs.redis_host
 }
 
 output "ecs_cluster_name" {
@@ -24,10 +25,6 @@ output "worker_service_name" {
 
 output "s3_bucket_name" {
   value = module.s3.bucket_name
-}
-
-output "secret_arns" {
-  value = module.secrets.secret_arns
 }
 
 # Outputs needed by CI/CD workflows (migration RunTask network config)

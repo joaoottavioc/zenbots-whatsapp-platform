@@ -20,7 +20,9 @@ variable "backend_service_name" {
 }
 
 variable "alb_arn_suffix" {
-  type = string
+  description = "ALB ARN suffix for alarms. Empty string disables ALB alarms (e.g. dev uses Caddy on NAT)."
+  type        = string
+  default     = ""
 }
 
 variable "worker_service_name" {
@@ -28,7 +30,9 @@ variable "worker_service_name" {
 }
 
 variable "target_group_arn_suffix" {
-  type = string
+  description = "Target group ARN suffix for alarms. Empty string disables ALB target group alarms."
+  type        = string
+  default     = ""
 }
 
 variable "rds_instance_id" {
@@ -36,5 +40,7 @@ variable "rds_instance_id" {
 }
 
 variable "elasticache_replication_group_id" {
-  type = string
+  description = "ElastiCache replication group ID for alarms. Empty string disables ElastiCache alarms (e.g. dev uses Redis on ECS)."
+  type        = string
+  default     = ""
 }

@@ -1,0 +1,176 @@
+{
+  "products": [
+    {
+      "name": "Água Garrafinha",
+      "description": "",
+      "price": 2.0,
+      "category": "Bebidas",
+      "id": 8535,
+      "bot_id": 1184,
+      "is_available": true
+    },
+    {
+      "name": "Cerveja Lata",
+      "description": "",
+      "price": 5.0,
+      "category": "Bebidas",
+      "id": 8543,
+      "bot_id": 1184,
+      "is_available": true
+    },
+    {
+      "name": "Chá Leão",
+      "description": "",
+      "price": 4.0,
+      "category": "Bebidas",
+      "id": 8540,
+      "bot_id": 1184,
+      "is_available": true
+    },
+    {
+      "name": "Del Valle Frut",
+      "description": "",
+      "price": 3.5,
+      "category": "Bebidas",
+      "id": 8539,
+      "bot_id": 1184,
+      "is_available": true
+    },
+    {
+      "name": "Gatorade",
+      "description": "",
+      "price": 4.5,
+      "category": "Bebidas",
+      "id": 8541,
+      "bot_id": 1184,
+      "is_available": true
+    },
+    {
+      "name": "H2O",
+      "description": "",
+      "price": 4.0,
+      "category": "Bebidas",
+      "id": 8542,
+      "bot_id": 1184,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante 200 300 400 500ml",
+      "description": "inclui Coca Cola",
+      "price": 3.5,
+      "category": "Bebidas",
+      "id": 8536,
+      "bot_id": 1184,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante (limão) 350ml",
+      "description": "",
+      "price": 3.5,
+      "category": "Bebidas",
+      "id": 8537,
+      "bot_id": 1184,
+      "is_available": true
+    },
+    {
+      "name": "Suco Lata",
+      "description": "",
+      "price": 4.0,
+      "category": "Bebidas",
+      "id": 8538,
+      "bot_id": 1184,
+      "is_available": true
+    },
+    {
+      "name": "Todynho",
+      "description": "",
+      "price": 2.0,
+      "category": "Bebidas",
+      "id": 8534,
+      "bot_id": 1184,
+      "is_available": true
+    },
+    {
+      "name": "Café com Leite",
+      "description": "",
+      "price": 2.0,
+      "category": "Café",
+      "id": 8533,
+      "bot_id": 1184,
+      "is_available": true
+    },
+    {
+      "name": "Cafézinho",
+      "description": "",
+      "price": 1.5,
+      "category": "Café",
+      "id": 8532,
+      "bot_id": 1184,
+      "is_available": true
+    },
+    {
+      "name": "Combo Box",
+      "description": "",
+      "price": 4.99,
+      "category": "Lanches",
+      "id": 8544,
+      "bot_id": 1184,
+      "is_available": true
+    },
+    {
+      "name": "Espetinho",
+      "description": "carne, frango e linguiça",
+      "price": 3.5,
+      "category": "Lanches",
+      "id": 8531,
+      "bot_id": 1184,
+      "is_available": true
+    },
+    {
+      "name": "Hot Dog Completo",
+      "description": "",
+      "price": 3.5,
+      "category": "Lanches",
+      "id": 8530,
+      "bot_id": 1184,
+      "is_available": true
+    },
+    {
+      "name": "Hot Dog Simples",
+      "description": "salsicha quente, mostarda e ketchup",
+      "price": 2.99,
+      "category": "Lanches",
+      "id": 8529,
+      "bot_id": 1184,
+      "is_available": true
+    },
+    {
+      "name": "Misto",
+      "description": "",
+      "price": 3.99,
+      "category": "Lanches",
+      "id": 8528,
+      "bot_id": 1184,
+      "is_available": true
+    },
+    {
+      "name": "X-Burger",
+      "description": "",
+      "price": 4.99,
+      "category": "Lanches",
+      "id": 8526,
+      "bot_id": 1184,
+      "is_available": true
+    },
+    {
+      "name": "X-Salada",
+      "description": "",
+      "price": 6.99,
+      "category": "Lanches",
+      "id": 8527,
+      "bot_id": 1184,
+      "is_available": true
+    }
+  ],
+  "category": "lanchonete"
+}

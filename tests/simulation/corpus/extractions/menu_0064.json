@@ -1,0 +1,140 @@
+{
+  "products": [
+    {
+      "name": "Água",
+      "description": "Água mineral",
+      "price": 3.0,
+      "category": "Bebidas",
+      "id": 8852,
+      "bot_id": 1202,
+      "is_available": true
+    },
+    {
+      "name": "Limonada Vermelha",
+      "description": "Limonada com frutas vermelhas",
+      "price": 12.0,
+      "category": "Bebidas",
+      "id": 8855,
+      "bot_id": 1202,
+      "is_available": true
+    },
+    {
+      "name": "Milk Shakes",
+      "description": "Milk shake de diversos sabores",
+      "price": 14.0,
+      "category": "Bebidas",
+      "id": 8856,
+      "bot_id": 1202,
+      "is_available": true
+    },
+    {
+      "name": "Ouh Ghad",
+      "description": "Bebida especial",
+      "price": 10.0,
+      "category": "Bebidas",
+      "id": 8854,
+      "bot_id": 1202,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerantes",
+      "description": "Refrigerantes variados",
+      "price": 5.0,
+      "category": "Bebidas",
+      "id": 8853,
+      "bot_id": 1202,
+      "is_available": true
+    },
+    {
+      "name": "Cheese Bacon",
+      "description": "Hamburguer com queijo e bacon",
+      "price": 25.0,
+      "category": "Hamburgueres",
+      "id": 8844,
+      "bot_id": 1202,
+      "is_available": true
+    },
+    {
+      "name": "Cheese Burger",
+      "description": "Hamburguer com queijo",
+      "price": 22.0,
+      "category": "Hamburgueres",
+      "id": 8842,
+      "bot_id": 1202,
+      "is_available": true
+    },
+    {
+      "name": "Cheese Salad",
+      "description": "Salada com queijo",
+      "price": 20.0,
+      "category": "Hamburgueres",
+      "id": 8843,
+      "bot_id": 1202,
+      "is_available": true
+    },
+    {
+      "name": "King Kong",
+      "description": "Hamburguer gigante",
+      "price": 27.0,
+      "category": "Hamburgueres",
+      "id": 8845,
+      "bot_id": 1202,
+      "is_available": true
+    },
+    {
+      "name": "Rondôdor",
+      "description": "Hamburguer especial",
+      "price": 21.0,
+      "category": "Hamburgueres",
+      "id": 8846,
+      "bot_id": 1202,
+      "is_available": true
+    },
+    {
+      "name": "Super Mário",
+      "description": "Hamburguer com acompanhamento",
+      "price": 33.0,
+      "category": "Hamburgueres",
+      "id": 8848,
+      "bot_id": 1202,
+      "is_available": true
+    },
+    {
+      "name": "Vegetariano",
+      "description": "Hamburguer vegetariano",
+      "price": 30.0,
+      "category": "Hamburgueres",
+      "id": 8847,
+      "bot_id": 1202,
+      "is_available": true
+    },
+    {
+      "name": "Asinhas - Frango",
+      "description": "Porção de asinhas de frango",
+      "price": 28.0,
+      "category": "Porções",
+      "id": 8850,
+      "bot_id": 1202,
+      "is_available": true
+    },
+    {
+      "name": "Batatas Rústicas",
+      "description": "Porção de batatas",
+      "price": 21.0,
+      "category": "Porções",
+      "id": 8849,
+      "bot_id": 1202,
+      "is_available": true
+    },
+    {
+      "name": "Pasteizinhos",
+      "description": "Porção de pasteizinhos",
+      "price": 19.0,
+      "category": "Porções",
+      "id": 8851,
+      "bot_id": 1202,
+      "is_available": true
+    }
+  ],
+  "category": "hamburgueria"
+}

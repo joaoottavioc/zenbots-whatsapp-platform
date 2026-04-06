@@ -1,0 +1,95 @@
+{
+  "products": [
+    {
+      "name": "Camarão I",
+      "description": "Camarão ao Molho e Mussarela",
+      "price": 50.0,
+      "category": "Pizzas",
+      "id": 8415,
+      "bot_id": 1176,
+      "is_available": true
+    },
+    {
+      "name": "Camarão II",
+      "description": "Camarão ao Molho e Catupiry",
+      "price": 49.0,
+      "category": "Pizzas",
+      "id": 8416,
+      "bot_id": 1176,
+      "is_available": true
+    },
+    {
+      "name": "Camarão III",
+      "description": "Camarão ao Molho, Brócolis e Catupiry",
+      "price": 52.0,
+      "category": "Pizzas",
+      "id": 8417,
+      "bot_id": 1176,
+      "is_available": true
+    },
+    {
+      "name": "Carne Seca",
+      "description": "Carne Seca, Cebola e Mussarela",
+      "price": 36.0,
+      "category": "Pizzas",
+      "id": 8421,
+      "bot_id": 1176,
+      "is_available": true
+    },
+    {
+      "name": "Catupiry",
+      "description": "Molho de Tomate, Catupiry, Orégano e Azeitona",
+      "price": 29.0,
+      "category": "Pizzas",
+      "id": 8418,
+      "bot_id": 1176,
+      "is_available": true
+    },
+    {
+      "name": "Catupri",
+      "description": "Mussarela e Catupiry",
+      "price": 36.0,
+      "category": "Pizzas",
+      "id": 8419,
+      "bot_id": 1176,
+      "is_available": true
+    },
+    {
+      "name": "Chileno",
+      "description": "Atum, Cebola e Catupiry",
+      "price": 38.0,
+      "category": "Pizzas",
+      "id": 8420,
+      "bot_id": 1176,
+      "is_available": true
+    },
+    {
+      "name": "Diet",
+      "description": "Brócolis, Palmito, Champignon, Tomate e Parmesão",
+      "price": 28.0,
+      "category": "Pizzas",
+      "id": 8422,
+      "bot_id": 1176,
+      "is_available": true
+    },
+    {
+      "name": "Escarola",
+      "description": "Escarola, Mussarela e Bacon",
+      "price": 32.0,
+      "category": "Pizzas",
+      "id": 8423,
+      "bot_id": 1176,
+      "is_available": true
+    },
+    {
+      "name": "Escarola II",
+      "description": "Escarola, Cebola e Bacon",
+      "price": 35.0,
+      "category": "Pizzas",
+      "id": 8424,
+      "bot_id": 1176,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

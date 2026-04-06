@@ -1,0 +1,95 @@
+{
+  "products": [
+    {
+      "name": "Café Gelado",
+      "description": "Com creme e leite condensado",
+      "price": 9.0,
+      "category": "Café Gelado",
+      "id": 8334,
+      "bot_id": 1167,
+      "is_available": true
+    },
+    {
+      "name": "Sorvete",
+      "description": "Sabor chocolate",
+      "price": 8.0,
+      "category": "Café Gelado",
+      "id": 8335,
+      "bot_id": 1167,
+      "is_available": true
+    },
+    {
+      "name": "Café Coado",
+      "description": "",
+      "price": 4.0,
+      "category": "Coffe",
+      "id": 8338,
+      "bot_id": 1167,
+      "is_available": true
+    },
+    {
+      "name": "Café com Creme",
+      "description": "",
+      "price": 6.0,
+      "category": "Coffe",
+      "id": 8339,
+      "bot_id": 1167,
+      "is_available": true
+    },
+    {
+      "name": "Café Expresso",
+      "description": "",
+      "price": 5.0,
+      "category": "Coffe",
+      "id": 8336,
+      "bot_id": 1167,
+      "is_available": true
+    },
+    {
+      "name": "Café Expresso Duplo",
+      "description": "",
+      "price": 6.0,
+      "category": "Coffe",
+      "id": 8337,
+      "bot_id": 1167,
+      "is_available": true
+    },
+    {
+      "name": "Café Expresso Machito",
+      "description": "",
+      "price": 6.0,
+      "category": "Coffe",
+      "id": 8340,
+      "bot_id": 1167,
+      "is_available": true
+    },
+    {
+      "name": "Prato Executivo",
+      "description": "Acompanhamentos: salada e farofa",
+      "price": 18.0,
+      "category": "Pratos Principais",
+      "id": 8333,
+      "bot_id": 1167,
+      "is_available": true
+    },
+    {
+      "name": "Promoção",
+      "description": "1 Salgado + Refrigerante/Guaravita",
+      "price": 5.0,
+      "category": "Promoções",
+      "id": 8341,
+      "bot_id": 1167,
+      "is_available": true
+    },
+    {
+      "name": "Tapioca",
+      "description": "Recheada com atum",
+      "price": 9.0,
+      "category": "Tapiocas",
+      "id": 8332,
+      "bot_id": 1167,
+      "is_available": true
+    }
+  ],
+  "category": "marmitaria"
+}

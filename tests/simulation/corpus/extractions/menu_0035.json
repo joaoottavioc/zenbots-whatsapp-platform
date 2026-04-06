@@ -1,0 +1,158 @@
+{
+  "products": [
+    {
+      "name": "ALCAPONE",
+      "description": "Molho de tomate, mussarela, palmito, rodelas de tomate.",
+      "price": 39.0,
+      "category": "Pratos Principais",
+      "id": 8499,
+      "bot_id": 1180,
+      "is_available": true
+    },
+    {
+      "name": "AMERICANA",
+      "description": "Molho de tomate, mussarela, bacon.",
+      "price": 36.0,
+      "category": "Pratos Principais",
+      "id": 8500,
+      "bot_id": 1180,
+      "is_available": true
+    },
+    {
+      "name": "ATUM ACEBOLADO",
+      "description": "Molho de tomate, mussarela, presunto, calabresa, milho verde, ovo.",
+      "price": 38.0,
+      "category": "Pratos Principais",
+      "id": 8501,
+      "bot_id": 1180,
+      "is_available": true
+    },
+    {
+      "name": "BACALHAU",
+      "description": "Molho de tomate, mussarela, bacon, rodelas de tomate e parmesão.",
+      "price": 36.0,
+      "category": "Pratos Principais",
+      "id": 8504,
+      "bot_id": 1180,
+      "is_available": true
+    },
+    {
+      "name": "BAIANA",
+      "description": "Molho de tomate, mussarela, calabresa moída, pimenta e catupiry.",
+      "price": 38.0,
+      "category": "Pratos Principais",
+      "id": 8505,
+      "bot_id": 1180,
+      "is_available": true
+    },
+    {
+      "name": "BARCELONA",
+      "description": "Molho de tomate, mussarela, calabresa, catupiry e cebola.",
+      "price": 36.0,
+      "category": "Pratos Principais",
+      "id": 8506,
+      "bot_id": 1180,
+      "is_available": true
+    },
+    {
+      "name": "BRASILEIRA",
+      "description": "Molho de tomate, presunto, calabresa, milho verde, ovo.",
+      "price": 38.0,
+      "category": "Pratos Principais",
+      "id": 8507,
+      "bot_id": 1180,
+      "is_available": true
+    },
+    {
+      "name": "BRÓCOLIS COM CARNE SECA",
+      "description": "Molho de tomate, mussarela, brócolis, catupiry, alho frito e carne seca.",
+      "price": 38.0,
+      "category": "Pratos Principais",
+      "id": 8508,
+      "bot_id": 1180,
+      "is_available": true
+    },
+    {
+      "name": "BRÓCOLIS COM CATUPIRY",
+      "description": "Molho de tomate, mussarela, catupiry, brócolis e frango.",
+      "price": 36.0,
+      "category": "Pratos Principais",
+      "id": 8509,
+      "bot_id": 1180,
+      "is_available": true
+    },
+    {
+      "name": "CALABRESA FORRADA",
+      "description": "Molho de tomate, mussarela, calabresa, catupiry e cebola.",
+      "price": 38.0,
+      "category": "Pratos Principais",
+      "id": 8510,
+      "bot_id": 1180,
+      "is_available": true
+    },
+    {
+      "name": "CARNE SECA",
+      "description": "Molho de tomate, mussarela, carne seca, rodelas de tomate.",
+      "price": 38.0,
+      "category": "Pratos Principais",
+      "id": 8511,
+      "bot_id": 1180,
+      "is_available": true
+    },
+    {
+      "name": "CINCO QUEIJOS",
+      "description": "Molho de tomate, mussarela, provolone, calabresa, gorgonzola e parmesão.",
+      "price": 38.0,
+      "category": "Pratos Principais",
+      "id": 8512,
+      "bot_id": 1180,
+      "is_available": true
+    },
+    {
+      "name": "CREME DE MILHO",
+      "description": "Molho de tomate, mussarela, lombo, milho, creme de milho.",
+      "price": 38.0,
+      "category": "Pratos Principais",
+      "id": 8513,
+      "bot_id": 1180,
+      "is_available": true
+    },
+    {
+      "name": "FRANGO COM CHEDDAR",
+      "description": "Molho de tomate, mussarela, frango e cheddar.",
+      "price": 38.0,
+      "category": "Pratos Principais",
+      "id": 8515,
+      "bot_id": 1180,
+      "is_available": true
+    },
+    {
+      "name": "LEITE DE COCO",
+      "description": "Molho de tomate, mussarela, brócolis, palmito, cebola e cobertor.",
+      "price": 38.0,
+      "category": "Pratos Principais",
+      "id": 8514,
+      "bot_id": 1180,
+      "is_available": true
+    },
+    {
+      "name": "MOLHO COM CATUPIRY",
+      "description": "Molho de tomate, mussarela, atum, catupiry e cebola.",
+      "price": 38.0,
+      "category": "Pratos Principais",
+      "id": 8503,
+      "bot_id": 1180,
+      "is_available": true
+    },
+    {
+      "name": "MOLHO DE TOMATE",
+      "description": "Molho de tomate, mussarela, atum, catupiry e cebola.",
+      "price": 36.0,
+      "category": "Pratos Principais",
+      "id": 8502,
+      "bot_id": 1180,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

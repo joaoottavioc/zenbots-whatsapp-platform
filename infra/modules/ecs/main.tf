@@ -259,13 +259,23 @@ resource "aws_ecs_service" "backend" {
     security_groups = [var.ecs_security_group_id]
   }
 
-  load_balancer {
-    target_group_arn = var.target_group_arn
-    container_name   = "backend"
-    container_port   = 8000
+  dynamic "load_balancer" {
+    for_each = var.enable_alb ? [1] : []
+    content {
+      target_group_arn = var.target_group_arn
+      container_name   = "backend"
+      container_port   = 8000
+    }
   }
 
-  health_check_grace_period_seconds = var.health_check_grace_period
+  dynamic "service_registries" {
+    for_each = var.service_discovery_arn != "" ? [1] : []
+    content {
+      registry_arn = var.service_discovery_arn
+    }
+  }
+
+  health_check_grace_period_seconds = var.enable_alb ? var.health_check_grace_period : null
 
   deployment_minimum_healthy_percent = var.minimum_healthy_percent
   deployment_maximum_percent         = var.maximum_percent

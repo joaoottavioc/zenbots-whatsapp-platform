@@ -1,0 +1,104 @@
+{
+  "products": [
+    {
+      "name": "DOG BACON",
+      "description": "",
+      "price": 10.0,
+      "category": "Lanches",
+      "id": 8659,
+      "bot_id": 1191,
+      "is_available": true
+    },
+    {
+      "name": "DOG BURGUER",
+      "description": "",
+      "price": 10.0,
+      "category": "Lanches",
+      "id": 8657,
+      "bot_id": 1191,
+      "is_available": true
+    },
+    {
+      "name": "DOG CALABRESA",
+      "description": "",
+      "price": 10.0,
+      "category": "Lanches",
+      "id": 8660,
+      "bot_id": 1191,
+      "is_available": true
+    },
+    {
+      "name": "DOG CHEDDAR",
+      "description": "",
+      "price": 10.0,
+      "category": "Lanches",
+      "id": 8658,
+      "bot_id": 1191,
+      "is_available": true
+    },
+    {
+      "name": "DOG COM LINGUIÇA",
+      "description": "",
+      "price": 10.0,
+      "category": "Lanches",
+      "id": 8662,
+      "bot_id": 1191,
+      "is_available": true
+    },
+    {
+      "name": "DOG DUPLO",
+      "description": "",
+      "price": 10.0,
+      "category": "Lanches",
+      "id": 8654,
+      "bot_id": 1191,
+      "is_available": true
+    },
+    {
+      "name": "DOG FRANGO",
+      "description": "",
+      "price": 10.0,
+      "category": "Lanches",
+      "id": 8655,
+      "bot_id": 1191,
+      "is_available": true
+    },
+    {
+      "name": "DOG FRANGO BACON",
+      "description": "",
+      "price": 10.0,
+      "category": "Lanches",
+      "id": 8656,
+      "bot_id": 1191,
+      "is_available": true
+    },
+    {
+      "name": "DOG PAULISTA",
+      "description": "",
+      "price": 10.0,
+      "category": "Lanches",
+      "id": 8661,
+      "bot_id": 1191,
+      "is_available": true
+    },
+    {
+      "name": "DOG SALADA",
+      "description": "",
+      "price": 10.0,
+      "category": "Lanches",
+      "id": 8663,
+      "bot_id": 1191,
+      "is_available": true
+    },
+    {
+      "name": "DOG SIMPLES",
+      "description": "",
+      "price": 10.0,
+      "category": "Lanches",
+      "id": 8653,
+      "bot_id": 1191,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

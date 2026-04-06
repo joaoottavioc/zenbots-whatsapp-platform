@@ -1,0 +1,104 @@
+{
+  "products": [
+    {
+      "name": "Arroz de Polvo",
+      "description": "Com Tentáculos Glaciados.",
+      "price": 139.93,
+      "category": "Pratos Principais",
+      "id": 8952,
+      "bot_id": 1211,
+      "is_available": true
+    },
+    {
+      "name": "Caldeirada de Frutos do Mar",
+      "description": "Acompanhado farofa de brócolis.",
+      "price": 119.93,
+      "category": "Pratos Principais",
+      "id": 8956,
+      "bot_id": 1211,
+      "is_available": true
+    },
+    {
+      "name": "Camarão à Black House",
+      "description": "Batata souflé, camarões, milanesa, arroz, geleia.",
+      "price": 129.93,
+      "category": "Pratos Principais",
+      "id": 8955,
+      "bot_id": 1211,
+      "is_available": true
+    },
+    {
+      "name": "Camarão à Grega",
+      "description": "Camarão envolto no frito empanado de farinha Panko.",
+      "price": 119.93,
+      "category": "Pratos Principais",
+      "id": 8954,
+      "bot_id": 1211,
+      "is_available": true
+    },
+    {
+      "name": "Camarão Cremoso",
+      "description": "Ao Molho de Queijos.",
+      "price": 119.93,
+      "category": "Pratos Principais",
+      "id": 8953,
+      "bot_id": 1211,
+      "is_available": true
+    },
+    {
+      "name": "Congrio à Belle Meuniere",
+      "description": "",
+      "price": 89.93,
+      "category": "Pratos Principais",
+      "id": 8958,
+      "bot_id": 1211,
+      "is_available": true
+    },
+    {
+      "name": "Congrio ao Molho de Nozes e Amêndoin",
+      "description": "",
+      "price": 89.93,
+      "category": "Pratos Principais",
+      "id": 8960,
+      "bot_id": 1211,
+      "is_available": true
+    },
+    {
+      "name": "Moqueca de Camarão e Jacaré",
+      "description": "",
+      "price": 109.93,
+      "category": "Pratos Principais",
+      "id": 8957,
+      "bot_id": 1211,
+      "is_available": true
+    },
+    {
+      "name": "Salmão ao Molho de Maracujá com Cuscuz Marroquino",
+      "description": "",
+      "price": 129.93,
+      "category": "Pratos Principais",
+      "id": 8962,
+      "bot_id": 1211,
+      "is_available": true
+    },
+    {
+      "name": "Salmão ao Molho de Mostarda e Mel",
+      "description": "",
+      "price": 129.93,
+      "category": "Pratos Principais",
+      "id": 8961,
+      "bot_id": 1211,
+      "is_available": true
+    },
+    {
+      "name": "Tilápia ao Molho de Alcaparras, Alecrim e Amêndoas",
+      "description": "",
+      "price": 89.93,
+      "category": "Pratos Principais",
+      "id": 8959,
+      "bot_id": 1211,
+      "is_available": true
+    }
+  ],
+  "category": "outros"
+}

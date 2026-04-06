@@ -1,0 +1,167 @@
+{
+  "products": [
+    {
+      "name": "A Moda",
+      "description": "Média de 8 fatias, Presunto, Queijo, Cebola e Oregano.",
+      "price": 39.9,
+      "category": "Pizzas",
+      "id": 8466,
+      "bot_id": 1178,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa",
+      "description": "Média de 8 fatias, Calabresa, Cebola, Azeitona e Oregano.",
+      "price": 39.9,
+      "category": "Pizzas",
+      "id": 8456,
+      "bot_id": 1178,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa Especial",
+      "description": "Média de 8 fatias, Calabresa, Cebola, Azeitona e Oregano.",
+      "price": 39.9,
+      "category": "Pizzas",
+      "id": 8470,
+      "bot_id": 1178,
+      "is_available": true
+    },
+    {
+      "name": "Canadense",
+      "description": "Média de 8 fatias, Presunto, Queijo e Oregano.",
+      "price": 39.9,
+      "category": "Pizzas",
+      "id": 8463,
+      "bot_id": 1178,
+      "is_available": true
+    },
+    {
+      "name": "Cinco Queijos",
+      "description": "Média de 8 fatias, Queijo Mussarela, Queijo Prato, Queijo Gorgonzola, Queijo Parmesão e Queijo Catupiry.",
+      "price": 39.9,
+      "category": "Pizzas",
+      "id": 8471,
+      "bot_id": 1178,
+      "is_available": true
+    },
+    {
+      "name": "Dom Quixote",
+      "description": "Média de 8 fatias, Presunto, Queijo, Cebola e Oregano.",
+      "price": 39.9,
+      "category": "Pizzas",
+      "id": 8464,
+      "bot_id": 1178,
+      "is_available": true
+    },
+    {
+      "name": "Franbon",
+      "description": "Média de 8 fatias, Presunto, Queijo e Oregano.",
+      "price": 39.9,
+      "category": "Pizzas",
+      "id": 8460,
+      "bot_id": 1178,
+      "is_available": true
+    },
+    {
+      "name": "Frango com Catupiry",
+      "description": "Média de 8 fatias, Frango desfiado, Catupiry e Oregano.",
+      "price": 39.9,
+      "category": "Pizzas",
+      "id": 8458,
+      "bot_id": 1178,
+      "is_available": true
+    },
+    {
+      "name": "Frango Especial",
+      "description": "Média de 8 fatias, Frango, Catupiry, Cebola e Oregano.",
+      "price": 39.9,
+      "category": "Pizzas",
+      "id": 8469,
+      "bot_id": 1178,
+      "is_available": true
+    },
+    {
+      "name": "Marguerita",
+      "description": "Média de 8 fatias, Mussarela, Tomate e Manjericão.",
+      "price": 39.9,
+      "category": "Pizzas",
+      "id": 8461,
+      "bot_id": 1178,
+      "is_available": true
+    },
+    {
+      "name": "Mussarela",
+      "description": "Média de 8 fatias, Mussarela e Oregano.",
+      "price": 39.9,
+      "category": "Pizzas",
+      "id": 8462,
+      "bot_id": 1178,
+      "is_available": true
+    },
+    {
+      "name": "Nordestina",
+      "description": "Média de 8 fatias, Carne de Sol, Queijo e Oregano.",
+      "price": 39.9,
+      "category": "Pizzas",
+      "id": 8465,
+      "bot_id": 1178,
+      "is_available": true
+    },
+    {
+      "name": "Pepperoni",
+      "description": "Média de 8 fatias, Pepperoni e Oregano.",
+      "price": 39.9,
+      "category": "Pizzas",
+      "id": 8467,
+      "bot_id": 1178,
+      "is_available": true
+    },
+    {
+      "name": "Pepperoni com Catupiry",
+      "description": "Média de 8 fatias, Pepperoni, Catupiry e Oregano.",
+      "price": 39.9,
+      "category": "Pizzas",
+      "id": 8468,
+      "bot_id": 1178,
+      "is_available": true
+    },
+    {
+      "name": "Portuguesa",
+      "description": "Média de 8 fatias, Presunto, Ovo, Cebola, Azeitona e Oregano.",
+      "price": 39.9,
+      "category": "Pizzas",
+      "id": 8457,
+      "bot_id": 1178,
+      "is_available": true
+    },
+    {
+      "name": "Quatro Carnes",
+      "description": "Média de 8 fatias, Calabresa, Presunto, Bacon e Carne Moída.",
+      "price": 39.9,
+      "category": "Pizzas",
+      "id": 8472,
+      "bot_id": 1178,
+      "is_available": true
+    },
+    {
+      "name": "Quatro Queijos",
+      "description": "Média de 8 fatias, Queijo Mussarela, Queijo Prato, Queijo Gorgonzola e Queijo Parmesão.",
+      "price": 39.9,
+      "category": "Pizzas",
+      "id": 8459,
+      "bot_id": 1178,
+      "is_available": true
+    },
+    {
+      "name": "Sertaneja",
+      "description": "Média de 8 fatias, Frango, Catupiry, Cebola e Oregano.",
+      "price": 39.9,
+      "category": "Pizzas",
+      "id": 8473,
+      "bot_id": 1178,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

@@ -1,0 +1,167 @@
+{
+  "products": [
+    {
+      "name": "Ovo Benedict Clássico",
+      "description": "",
+      "price": 22.0,
+      "category": "Benedicts Especiais",
+      "id": 8413,
+      "bot_id": 1175,
+      "is_available": true
+    },
+    {
+      "name": "Ovo Benedict de Florença",
+      "description": "",
+      "price": 22.0,
+      "category": "Benedicts Especiais",
+      "id": 8414,
+      "bot_id": 1175,
+      "is_available": true
+    },
+    {
+      "name": "Café com leite",
+      "description": "",
+      "price": 9.0,
+      "category": "Cafés",
+      "id": 8408,
+      "bot_id": 1175,
+      "is_available": true
+    },
+    {
+      "name": "Café gelado",
+      "description": "",
+      "price": 10.0,
+      "category": "Cafés",
+      "id": 8409,
+      "bot_id": 1175,
+      "is_available": true
+    },
+    {
+      "name": "Café latte",
+      "description": "",
+      "price": 9.0,
+      "category": "Cafés",
+      "id": 8407,
+      "bot_id": 1175,
+      "is_available": true
+    },
+    {
+      "name": "Café simples",
+      "description": "",
+      "price": 4.0,
+      "category": "Cafés",
+      "id": 8406,
+      "bot_id": 1175,
+      "is_available": true
+    },
+    {
+      "name": "Espresso duplo",
+      "description": "",
+      "price": 6.0,
+      "category": "Cafés",
+      "id": 8405,
+      "bot_id": 1175,
+      "is_available": true
+    },
+    {
+      "name": "Burrito de Café da Manhã",
+      "description": "Tortilha de Trigo, Chorizo, Abacate, Coentro e Ovos Mexidos",
+      "price": 20.0,
+      "category": "Pães e Ovos",
+      "id": 8412,
+      "bot_id": 1175,
+      "is_available": true
+    },
+    {
+      "name": "Dois Ovos Em Qualquer Estilo com Bacon, Bacon de Peru, Linguiça de Porco, Linguiça de Frango ou Presunto",
+      "description": "",
+      "price": 18.0,
+      "category": "Pães e Ovos",
+      "id": 8410,
+      "bot_id": 1175,
+      "is_available": true
+    },
+    {
+      "name": "Presunto Picado e Ovos com Cheddar",
+      "description": "3 Ovos Mexidos, Cheddar Envelhecido e Presunto Picado Coberto com Mel",
+      "price": 20.0,
+      "category": "Pães e Ovos",
+      "id": 8411,
+      "bot_id": 1175,
+      "is_available": true
+    },
+    {
+      "name": "Banana com Berries",
+      "description": "",
+      "price": 10.9,
+      "category": "Smoothies Light",
+      "id": 8401,
+      "bot_id": 1175,
+      "is_available": true
+    },
+    {
+      "name": "Manga",
+      "description": "",
+      "price": 9.0,
+      "category": "Smoothies Light",
+      "id": 8402,
+      "bot_id": 1175,
+      "is_available": true
+    },
+    {
+      "name": "Manga com Morango",
+      "description": "",
+      "price": 9.0,
+      "category": "Smoothies Light",
+      "id": 8403,
+      "bot_id": 1175,
+      "is_available": true
+    },
+    {
+      "name": "Morangos com Baunilha",
+      "description": "",
+      "price": 9.0,
+      "category": "Smoothies Light",
+      "id": 8404,
+      "bot_id": 1175,
+      "is_available": true
+    },
+    {
+      "name": "Suco de Laranja",
+      "description": "",
+      "price": 7.0,
+      "category": "Sucos e Leites",
+      "id": 8397,
+      "bot_id": 1175,
+      "is_available": true
+    },
+    {
+      "name": "Suco de Maçã",
+      "description": "",
+      "price": 8.0,
+      "category": "Sucos e Leites",
+      "id": 8399,
+      "bot_id": 1175,
+      "is_available": true
+    },
+    {
+      "name": "Suco de Morango com Leite",
+      "description": "",
+      "price": 9.0,
+      "category": "Sucos e Leites",
+      "id": 8400,
+      "bot_id": 1175,
+      "is_available": true
+    },
+    {
+      "name": "Suco de Toranja",
+      "description": "",
+      "price": 9.0,
+      "category": "Sucos e Leites",
+      "id": 8398,
+      "bot_id": 1175,
+      "is_available": true
+    }
+  ],
+  "category": "cafeteria"
+}

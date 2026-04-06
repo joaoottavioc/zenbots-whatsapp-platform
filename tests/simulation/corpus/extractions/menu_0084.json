@@ -1,0 +1,95 @@
+{
+  "products": [
+    {
+      "name": "Brigadeiro",
+      "description": "Chocolate com Granulados",
+      "price": 8.0,
+      "category": "Tapioquas Doces",
+      "id": 9131,
+      "bot_id": 1226,
+      "is_available": true
+    },
+    {
+      "name": "Doce de Leite",
+      "description": "Leite Cremoso com Coco",
+      "price": 7.0,
+      "category": "Tapioquas Doces",
+      "id": 9133,
+      "bot_id": 1226,
+      "is_available": true
+    },
+    {
+      "name": "Especial da Casa",
+      "description": "Leite Condensado Morango",
+      "price": 8.0,
+      "category": "Tapioquas Doces",
+      "id": 9134,
+      "bot_id": 1226,
+      "is_available": true
+    },
+    {
+      "name": "Leite Condensado",
+      "description": "Leite Condensado com Coco",
+      "price": 7.0,
+      "category": "Tapioquas Doces",
+      "id": 9130,
+      "bot_id": 1226,
+      "is_available": true
+    },
+    {
+      "name": "Romeu e Julieta",
+      "description": "Queijo com Goiabada",
+      "price": 7.0,
+      "category": "Tapioquas Doces",
+      "id": 9132,
+      "bot_id": 1226,
+      "is_available": true
+    },
+    {
+      "name": "10º Queijo",
+      "description": "Mussarela com Azeite",
+      "price": 7.0,
+      "category": "Tapioquas Salgadas",
+      "id": 9138,
+      "bot_id": 1226,
+      "is_available": true
+    },
+    {
+      "name": "Frango com Catupiry",
+      "description": "",
+      "price": 7.0,
+      "category": "Tapioquas Salgadas",
+      "id": 9135,
+      "bot_id": 1226,
+      "is_available": true
+    },
+    {
+      "name": "Marguerita",
+      "description": "Mussarela tomate orégano azeite",
+      "price": 7.0,
+      "category": "Tapioquas Salgadas",
+      "id": 9136,
+      "bot_id": 1226,
+      "is_available": true
+    },
+    {
+      "name": "Mineira",
+      "description": "Queijo Minas Milho e azeite",
+      "price": 7.0,
+      "category": "Tapioquas Salgadas",
+      "id": 9137,
+      "bot_id": 1226,
+      "is_available": true
+    },
+    {
+      "name": "Vegetariana",
+      "description": "Brócolis Mussarela Azeite e Azeite",
+      "price": 7.0,
+      "category": "Tapioquas Salgadas",
+      "id": 9139,
+      "bot_id": 1226,
+      "is_available": true
+    }
+  ],
+  "category": "doceria"
+}

@@ -35,4 +35,4 @@ docs/
 **/.terraform/
 *.tfstate
 *.tfstate.backup
-*.tfplan
+*.tfplan.qa_report_tmp.json

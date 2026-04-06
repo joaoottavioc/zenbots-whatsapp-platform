@@ -1,0 +1,158 @@
+{
+  "products": [
+    {
+      "name": "Cackleberry",
+      "description": "bacon bits, egg, cheese, lettuce",
+      "price": 4.3,
+      "category": "Lanches",
+      "id": 9027,
+      "bot_id": 1218,
+      "is_available": true
+    },
+    {
+      "name": "Canolly",
+      "description": "ham, cheese, egg",
+      "price": 3.9,
+      "category": "Lanches",
+      "id": 9031,
+      "bot_id": 1218,
+      "is_available": true
+    },
+    {
+      "name": "Cheese Chix",
+      "description": "chicken, cheese, lettuce, tomato",
+      "price": 4.3,
+      "category": "Lanches",
+      "id": 9033,
+      "bot_id": 1218,
+      "is_available": true
+    },
+    {
+      "name": "Jessie's Special",
+      "description": "mushroom, cheese, the works",
+      "price": 4.3,
+      "category": "Lanches",
+      "id": 9029,
+      "bot_id": 1218,
+      "is_available": true
+    },
+    {
+      "name": "Mama Mia",
+      "description": "ham, cheese, pineapple",
+      "price": 4.3,
+      "category": "Lanches",
+      "id": 9028,
+      "bot_id": 1218,
+      "is_available": true
+    },
+    {
+      "name": "Ramly",
+      "description": "beef, cheese, egg",
+      "price": 4.3,
+      "category": "Lanches",
+      "id": 9032,
+      "bot_id": 1218,
+      "is_available": true
+    },
+    {
+      "name": "Tuna Melt",
+      "description": "tuna, cheese, lettuce",
+      "price": 4.3,
+      "category": "Lanches",
+      "id": 9034,
+      "bot_id": 1218,
+      "is_available": true
+    },
+    {
+      "name": "Veggie Maya Salad",
+      "description": "lettuce, tomato, cheese",
+      "price": 3.9,
+      "category": "Lanches",
+      "id": 9030,
+      "bot_id": 1218,
+      "is_available": true
+    },
+    {
+      "name": "Cheesy Choco",
+      "description": "nutella, cheese",
+      "price": 3.5,
+      "category": "Sobremesas",
+      "id": 9023,
+      "bot_id": 1218,
+      "is_available": true
+    },
+    {
+      "name": "Cheesy Momo",
+      "description": "cheese, condensed milk",
+      "price": 3.5,
+      "category": "Sobremesas",
+      "id": 9020,
+      "bot_id": 1218,
+      "is_available": true
+    },
+    {
+      "name": "Choco Berry",
+      "description": "nutella, strawberry",
+      "price": 3.5,
+      "category": "Sobremesas",
+      "id": 9022,
+      "bot_id": 1218,
+      "is_available": true
+    },
+    {
+      "name": "Choco Nutty",
+      "description": "nutella, peanut butter",
+      "price": 4.1,
+      "category": "Sobremesas",
+      "id": 9018,
+      "bot_id": 1218,
+      "is_available": true
+    },
+    {
+      "name": "Choco-on-the-go",
+      "description": "nutella, banana",
+      "price": 2.9,
+      "category": "Sobremesas",
+      "id": 9021,
+      "bot_id": 1218,
+      "is_available": true
+    },
+    {
+      "name": "Marshmallow Choco",
+      "description": "nutella, marshmallow",
+      "price": 3.5,
+      "category": "Sobremesas",
+      "id": 9024,
+      "bot_id": 1218,
+      "is_available": true
+    },
+    {
+      "name": "Mocha Brown",
+      "description": "nutella, condensed milk",
+      "price": 4.1,
+      "category": "Sobremesas",
+      "id": 9019,
+      "bot_id": 1218,
+      "is_available": true
+    },
+    {
+      "name": "Nutty Delight",
+      "description": "peanut butter, nutella",
+      "price": 3.5,
+      "category": "Sobremesas",
+      "id": 9025,
+      "bot_id": 1218,
+      "is_available": true
+    },
+    {
+      "name": "Nutty Maple",
+      "description": "peanut butter, maple syrup",
+      "price": 3.5,
+      "category": "Sobremesas",
+      "id": 9026,
+      "bot_id": 1218,
+      "is_available": true
+    }
+  ],
+  "category": "lanchonete"
+}

@@ -1,21 +1,21 @@
 {
   "rand0": {
-    "bot_id": 1120,
-    "phone_number_id": "rand-test-0-1775441719",
+    "bot_id": 1257,
+    "phone_number_id": "rand-test-0-1775506062",
     "name": "Cardápio - Santiago Padaria Artesanal",
     "category": "cafeteria",
     "scenarios": {
-      "add_single_msg": "joga um pão de queijo no pedido",
+      "add_single_msg": "vou de omelete (presunto e queijo branco)",
       "add_single_expected": [
         [
-          "Pão de queijo",
+          "Omelete (presunto e queijo branco)",
           1
         ]
       ],
-      "add_multi_msg": "bota 2 salada santiago e me vê um água com gás",
+      "add_multi_msg": "coloca 2 pão de queijo e 1 água com gás",
       "add_multi_expected": [
         [
-          "Salada Santiago",
+          "Pão de queijo",
           2
         ],
         [
@@ -23,240 +23,240 @@
           1
         ]
       ],
-      "remove_add_msg": "vou querer 2 risoto de camarão",
+      "remove_add_msg": "bota 2 bowl pequeno de salada de folhas",
       "remove_add_expected": [
-        "Risoto de camarão",
+        "Bowl pequeno de salada de folhas",
         2
       ],
-      "remove_msg": "não quero mais o risoto de camarão",
-      "suggestion_msg": "to indeciso, me ajuda",
-      "checkout_product_msg": "me vê 1 café coado",
+      "remove_msg": "não quero mais o bowl pequeno de salada de folhas",
+      "suggestion_msg": "quais as opções?",
+      "checkout_product_msg": "joga um salada caesar no pedido",
       "checkout_product_expected": [
-        "Café coado",
+        "Salada Caesar",
         1
       ],
       "abbreviation_product": "Água com gás",
-      "abbreviation_msg": "manda um com gás",
-      "double_add_product": "Omelete (presunto e queijo branco)",
-      "double_add_msg_1": "manda 1 omelete (presunto e queijo branco)",
-      "double_add_msg_2": "1 omelete (presunto e queijo branco)",
-      "question_product": "Muffin de chocolate",
-      "question_msg": "aceita pix?",
-      "add_remove_product": "Pão de queijo",
-      "add_remove_add_msg": "quero um pão de queijo",
-      "add_remove_remove_msg": "tira o pão de queijo",
-      "greeting_msg": "voltei",
-      "unavailable_msg": "1 espaguete ao sogo com polpetone e bota 1 espaguete alfreddo",
-      "unavailable_available": "Espaguete Alfreddo",
-      "unavailable_name": "Espaguete ao sogo com polpetone"
+      "abbreviation_msg": "me arruma um com gás",
+      "double_add_product": "Brownie",
+      "double_add_msg_1": "tu manda 1 brownie",
+      "double_add_msg_2": "vou querer um brownie",
+      "question_product": "Café coado",
+      "question_msg": "quanto custa o café coado?",
+      "add_remove_product": "Omelete (presunto e queijo branco)",
+      "add_remove_add_msg": "manda 1 omelete (presunto e queijo branco)",
+      "add_remove_remove_msg": "remove o omelete (presunto e queijo branco)",
+      "greeting_msg": "boa noite",
+      "unavailable_msg": "me vê um espresso e coloca 1 aperol spritz",
+      "unavailable_available": "Aperol Spritz",
+      "unavailable_name": "Espresso"
     }
   },
   "rand1": {
-    "bot_id": 1121,
-    "phone_number_id": "rand-test-1-1775441721",
-    "name": "Cardápio de Lanches: +27 Modelos Lindos e Passo a ",
-    "category": "hamburgueria",
+    "bot_id": 1258,
+    "phone_number_id": "rand-test-1-1775506064",
+    "name": "Modelos de cardápio de sorvete",
+    "category": "padaria",
     "scenarios": {
-      "add_single_msg": "vou querer um big especial hambúrguer",
+      "add_single_msg": "coloca um piña colada",
       "add_single_expected": [
         [
-          "BIG ESPECIAL HAMBÚRGUER",
+          "Piña colada",
           1
         ]
       ],
-      "add_multi_msg": "quero 2 big especial hamb. de picanha e um big especial lombo por favor",
+      "add_multi_msg": "bota 2 red velvet e coloca um framboesa",
       "add_multi_expected": [
         [
-          "BIG ESPECIAL HAMB. DE PICANHA",
+          "Red velvet",
           2
         ],
         [
-          "BIG ESPECIAL LOMBO",
+          "Framboesa",
           1
         ]
       ],
-      "remove_add_msg": "manda 2 itália",
+      "remove_add_msg": "amendoim",
       "remove_add_expected": [
-        "ITÁLIA",
+        "Amendoim",
         2
       ],
-      "remove_msg": "não quero mais o itália",
-      "suggestion_msg": "o que tem aí?",
-      "checkout_product_msg": "pode mandar 1 suíça",
+      "remove_msg": "tira o amendoim",
+      "suggestion_msg": "quais as opções?",
+      "checkout_product_msg": "1 coco",
       "checkout_product_expected": [
-        "SUÍÇA",
+        "Coco",
         1
       ],
-      "abbreviation_product": "BIG ESPECIAL FRANGO",
-      "abbreviation_msg": "vou querer 1 frango",
-      "double_add_product": "HAMBÚRGUER",
-      "double_add_msg_1": "pode mandar um hambúrguer",
-      "double_add_msg_2": "pode ser 1 hambúrguer",
-      "question_product": "INGLATERRA",
-      "question_msg": "quanto é o inglaterra?",
-      "add_remove_product": "BIG ESPECIAL HAMBÚRGUER",
-      "add_remove_add_msg": "um big especial hambúrguer por favor",
-      "add_remove_remove_msg": "não manda o big especial hambúrguer não",
-      "greeting_msg": "fala",
-      "unavailable_msg": "bota um big especial filé e vou de alemanha",
-      "unavailable_available": "ALEMANHA",
-      "unavailable_name": "BIG ESPECIAL FILÉ"
+      "abbreviation_product": "Bolo de sorvete",
+      "abbreviation_msg": "vou querer um bolo",
+      "double_add_product": "Chocolate",
+      "double_add_msg_1": "manda um chocolate",
+      "double_add_msg_2": "to querendo um chocolate",
+      "question_product": "Bolo de sorvete",
+      "question_msg": "o bolo de sorvete vem com o quê?",
+      "add_remove_product": "Piña colada",
+      "add_remove_add_msg": "manda 1 piña colada",
+      "add_remove_remove_msg": "não manda o piña colada não",
+      "greeting_msg": "oi",
+      "unavailable_msg": "1 chocolate com menta e manda um sorvete de laranja",
+      "unavailable_available": "Sorvete de laranja",
+      "unavailable_name": "Chocolate com menta"
     }
   },
   "rand2": {
-    "bot_id": 1122,
-    "phone_number_id": "rand-test-2-1775441722",
-    "name": "Menu em Doce Café Cafeteria, Linhares",
-    "category": "doceria",
+    "bot_id": 1259,
+    "phone_number_id": "rand-test-2-1775506065",
+    "name": "Cardápio de Restaurante - Como Fazer? + 22 Ideias ",
+    "category": "outros",
     "scenarios": {
-      "add_single_msg": "pode ser 1 chocolate quente tipo europa",
+      "add_single_msg": "bota um camarão cremoso",
       "add_single_expected": [
         [
-          "CHOCOLATE QUENTE TIPO EUROPA",
+          "Camarão Cremoso",
           1
         ]
       ],
-      "add_multi_msg": "coloca 2 chocolate tradicional e me arruma 1 soda italiana",
+      "add_multi_msg": "2 congrio à belle meuniere e pode mandar um tilápia ao molho de alcaparras, alecrim e amêndoas",
       "add_multi_expected": [
         [
-          "CHOCOLATE TRADICIONAL",
+          "Congrio à Belle Meuniere",
           2
         ],
         [
-          "SODA ITALIANA",
+          "Tilápia ao Molho de Alcaparras, Alecrim e Amêndoas",
           1
         ]
       ],
-      "remove_add_msg": "manda 2 bolo no pote",
+      "remove_add_msg": "me vê 2 arroz de polvo",
       "remove_add_expected": [
-        "BOLO NO POTE",
+        "Arroz de Polvo",
         2
       ],
-      "remove_msg": "remove o bolo no pote",
-      "suggestion_msg": "o que tem de bom?",
-      "checkout_product_msg": "tu manda um taça tentação",
+      "remove_msg": "cancela o arroz de polvo",
+      "suggestion_msg": "sugestão?",
+      "checkout_product_msg": "me vê um salmão ao molho de mostarda e mel",
       "checkout_product_expected": [
-        "TAÇA TENTAÇÃO",
+        "Salmão ao Molho de Mostarda e Mel",
         1
       ],
-      "abbreviation_product": "ÁGUA MINERAL",
-      "abbreviation_msg": "me arruma 1 mineral",
-      "double_add_product": "PUDIM",
-      "double_add_msg_1": "bota 1 pudim",
-      "double_add_msg_2": "quero 1 pudim",
-      "question_product": "FROZEN CHOCOLATE",
-      "question_msg": "quanto tá o frozen chocolate?",
-      "add_remove_product": "CHOCOLATE QUENTE TIPO EUROPA",
-      "add_remove_add_msg": "pode ser um chocolate quente tipo europa",
-      "add_remove_remove_msg": "cancela o chocolate quente tipo europa",
-      "greeting_msg": "oi gente",
-      "unavailable_msg": "joga 1 capuccino crocante no pedido e manda 1 refri lata",
-      "unavailable_available": "REFRI LATA",
-      "unavailable_name": "CAPUCCINO CROCANTE"
+      "abbreviation_product": "Arroz de Polvo",
+      "abbreviation_msg": "quero 1 arroz",
+      "double_add_product": "Salmão ao Molho de Maracujá com Cuscuz Marroquino",
+      "double_add_msg_1": "coloca um salmão ao molho de maracujá com cuscuz marroquino",
+      "double_add_msg_2": "vou de salmão ao molho de maracujá com cuscuz marroquino",
+      "question_product": "Moqueca de Camarão e Jacaré",
+      "question_msg": "qual o tamanho do moqueca de camarão e jacaré?",
+      "add_remove_product": "Camarão Cremoso",
+      "add_remove_add_msg": "bota um camarão cremoso",
+      "add_remove_remove_msg": "tira o camarão cremoso",
+      "greeting_msg": "oi",
+      "unavailable_msg": "quero 1 camarão à black house e me faz 1 camarão à grega",
+      "unavailable_available": "Camarão à Grega",
+      "unavailable_name": "Camarão à Black House"
     }
   },
   "rand3": {
-    "bot_id": 1123,
-    "phone_number_id": "rand-test-3-1775441725",
-    "name": "Pin by GP1011 on Favorite Foods | Hot dog recipes,",
-    "category": "lanchonete",
+    "bot_id": 1260,
+    "phone_number_id": "rand-test-3-1775506066",
+    "name": "Arte Cartao Digital para Delivery de Acai Modelo 2",
+    "category": "açaiteria",
     "scenarios": {
-      "add_single_msg": "bota um nathan's tex mex dog",
+      "add_single_msg": "pode mandar um paca",
       "add_single_expected": [
         [
-          "Nathan's Tex Mex Dog",
+          "Paca",
           1
         ]
       ],
-      "add_multi_msg": "nathan's chicago dog e me arruma um nathan's new york dog",
+      "add_multi_msg": "me vê 2 leite em pó e to querendo um leite condensado",
       "add_multi_expected": [
         [
-          "Nathan's Chicago Dog",
+          "Leite em pó",
           2
         ],
         [
-          "Nathan's New York Dog",
+          "Leite condensado",
           1
         ]
       ],
-      "remove_add_msg": "quero 2 nathan's dog",
+      "remove_add_msg": "me faz 2 morango",
       "remove_add_expected": [
-        "Nathan's Dog",
+        "Morango",
         2
       ],
-      "remove_msg": "cancela o nathan's dog",
-      "suggestion_msg": "o que tem de bom?",
-      "checkout_product_msg": "pode ser 1 nathan's salsa dog",
+      "remove_msg": "cancela o morango",
+      "suggestion_msg": "to indeciso, me ajuda",
+      "checkout_product_msg": "to querendo 1 nutella",
       "checkout_product_expected": [
-        "Nathan's Salsa Dog",
+        "Nutella",
         1
       ],
-      "abbreviation_product": "Nathan's Chicago Dog",
-      "abbreviation_msg": "1 nathan's",
-      "double_add_product": "Nathan's Dog",
-      "double_add_msg_1": "me faz um nathan's dog",
-      "double_add_msg_2": "quero pedir um nathan's dog",
-      "question_product": "Nathan's Chicago Dog",
-      "question_msg": "quanto é o nathan's chicago dog?",
-      "add_remove_product": "Nathan's Tex Mex Dog",
-      "add_remove_add_msg": "quero um nathan's tex mex dog",
-      "add_remove_remove_msg": "não quero mais o nathan's tex mex dog",
-      "greeting_msg": "boa noite",
-      "unavailable_msg": "vou querer 1 nathan's chili & cheese dog e um nathan's salsa dog",
-      "unavailable_available": "Nathan's Salsa Dog",
-      "unavailable_name": "Nathan's Chili & Cheese Dog"
+      "abbreviation_product": "Leite condensado",
+      "abbreviation_msg": "quero 1 leite",
+      "double_add_product": "Açaí 500ml",
+      "double_add_msg_1": "manda um açaí 500ml",
+      "double_add_msg_2": "me arruma um açaí 500ml",
+      "question_product": "Abacaxi",
+      "question_msg": "quanto fica o abacaxi?",
+      "add_remove_product": "Paca",
+      "add_remove_add_msg": "to querendo 1 paca",
+      "add_remove_remove_msg": "pode tirar o paca",
+      "greeting_msg": "boa tarde",
+      "unavailable_msg": "pode mandar um banana e quero um chocolat",
+      "unavailable_available": "Chocolat",
+      "unavailable_name": "Banana"
     }
   },
   "rand4": {
-    "bot_id": 1124,
-    "phone_number_id": "rand-test-4-1775441725",
-    "name": "Menu em Pastelaria Imperial pub & Bar, Garanhuns",
-    "category": "outros",
+    "bot_id": 1261,
+    "phone_number_id": "rand-test-4-1775506067",
+    "name": "Menu em Hot Dog do Lú restaurante, Três Lagoas",
+    "category": "pizzaria",
     "scenarios": {
-      "add_single_msg": "quero 1 jatobá tutti frutti",
+      "add_single_msg": "1 acrescimo de mussarela",
       "add_single_expected": [
         [
-          "Jatobá tutti frutti",
+          "ACRESCIMO DE MUSSARELA",
           1
         ]
       ],
-      "add_multi_msg": "vou querer 2 goiaba e me arruma 1 fanta 2l",
+      "add_multi_msg": "manda 2 hot dog duplo e manda 1 suco fruthas 510ml",
       "add_multi_expected": [
         [
-          "Goiaba",
+          "HOT DOG DUPLO",
           2
         ],
         [
-          "Fanta 2l",
+          "SUCO FRUTHAS 510ml",
           1
         ]
       ],
-      "remove_add_msg": "me arruma 2 sprite mini 250ml",
+      "remove_add_msg": "manda 2 hot dog triplo",
       "remove_add_expected": [
-        "Sprite mini 250ml",
+        "HOT DOG TRIPLO",
         2
       ],
-      "remove_msg": "cancela o sprite mini 250ml",
-      "suggestion_msg": "quais as opções?",
-      "checkout_product_msg": "quero um coca-cola lata",
+      "remove_msg": "pode tirar o hot dog triplo",
+      "suggestion_msg": "o que é bom aí?",
+      "checkout_product_msg": "manda 1 acrescimo de mussarela",
       "checkout_product_expected": [
-        "Coca-cola lata",
+        "ACRESCIMO DE MUSSARELA",
         1
       ],
-      "abbreviation_product": "Coca-cola 1l",
-      "abbreviation_msg": "me faz 1 coca",
-      "double_add_product": "Coca-cola 1l",
-      "double_add_msg_1": "me faz 1 coca-cola 1l",
-      "double_add_msg_2": "quero um coca-cola 1l",
-      "question_product": "Coca-cola mini 250ml",
-      "question_msg": "quanto fica o coca-cola mini 250ml?",
-      "add_remove_product": "Jatobá tutti frutti",
-      "add_remove_add_msg": "manda um jatobá tutti frutti",
-      "add_remove_remove_msg": "cancela o jatobá tutti frutti",
-      "greeting_msg": "boa",
-      "unavailable_msg": "manda um cajá e vou querer um graviola",
-      "unavailable_available": "Graviola",
-      "unavailable_name": "Cajá"
+      "abbreviation_product": "ACRESCIMO DE MUSSARELA",
+      "abbreviation_msg": "vou querer 1 acrescimo",
+      "double_add_product": "SUCO FRUTHAS 510ml",
+      "double_add_msg_1": "manda 1 suco fruthas 510ml",
+      "double_add_msg_2": "coloca 1 suco fruthas 510ml",
+      "question_product": "ÁGUA MINERAL 500ml",
+      "question_msg": "quanto custa o água mineral 500ml?",
+      "add_remove_product": "ACRESCIMO DE MUSSARELA",
+      "add_remove_add_msg": "me vê 1 acrescimo de mussarela",
+      "add_remove_remove_msg": "pode tirar o acrescimo de mussarela",
+      "greeting_msg": "fala",
+      "unavailable_msg": "hot dog quadruplo e to querendo um lata 220ml",
+      "unavailable_available": "LATA 220ml",
+      "unavailable_name": "HOT DOG QUADRUPLO"
     }
   }
 }

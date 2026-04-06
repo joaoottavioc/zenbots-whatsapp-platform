@@ -1,0 +1,77 @@
+{
+  "products": [
+    {
+      "name": "Adicionais",
+      "description": "(cada)",
+      "price": 5.0,
+      "category": "Adicionais",
+      "id": 9298,
+      "bot_id": 1237,
+      "is_available": true
+    },
+    {
+      "name": "Frango com Catupiry",
+      "description": "Frango desfiado, catupiry e muçarela",
+      "price": 46.9,
+      "category": "Especiais",
+      "id": 9295,
+      "bot_id": 1237,
+      "is_available": true
+    },
+    {
+      "name": "Pepperoni Lovers",
+      "description": "Muçarela, pepperoni e queijo parmesão",
+      "price": 49.9,
+      "category": "Especiais",
+      "id": 9296,
+      "bot_id": 1237,
+      "is_available": true
+    },
+    {
+      "name": "Quatro Queijos",
+      "description": "Muçarela, provolone, gorgonzola e parmesão",
+      "price": 36.9,
+      "category": "Especiais",
+      "id": 9294,
+      "bot_id": 1237,
+      "is_available": true
+    },
+    {
+      "name": "Borda recheada",
+      "description": "teafurky, cheddar ou outra opção",
+      "price": 7.0,
+      "category": "Extras & Bordas",
+      "id": 9297,
+      "bot_id": 1237,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa",
+      "description": "Calabresa fatiada, cebola roxa, pimentão, ervilhas, muçarela e orégano",
+      "price": 39.9,
+      "category": "Tradicionais",
+      "id": 9292,
+      "bot_id": 1237,
+      "is_available": true
+    },
+    {
+      "name": "Margherita",
+      "description": "Malho de tomate artesanal, muçarela, rodelas de tomate e manjericão fresco",
+      "price": 29.9,
+      "category": "Tradicionais",
+      "id": 9291,
+      "bot_id": 1237,
+      "is_available": true
+    },
+    {
+      "name": "Portuguesa",
+      "description": "Presunto, ovos, cebola, pimentão, ervilhas, muçarela e azeitonas",
+      "price": 49.9,
+      "category": "Tradicionais",
+      "id": 9293,
+      "bot_id": 1237,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

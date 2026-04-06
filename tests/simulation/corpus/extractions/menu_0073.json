@@ -1,0 +1,86 @@
+{
+  "products": [
+    {
+      "name": "ACRESCIMO DE MUSSARELA",
+      "description": "",
+      "price": 3.0,
+      "category": "Adicionais",
+      "id": 9377,
+      "bot_id": 1245,
+      "is_available": true
+    },
+    {
+      "name": "ÁGUA MINERAL 500ml",
+      "description": "",
+      "price": 3.0,
+      "category": "Bebidas",
+      "id": 9381,
+      "bot_id": 1245,
+      "is_available": true
+    },
+    {
+      "name": "LATA 220ml",
+      "description": "COCA COLA",
+      "price": 2.5,
+      "category": "Bebidas",
+      "id": 9380,
+      "bot_id": 1245,
+      "is_available": true
+    },
+    {
+      "name": "LATA 350ml",
+      "description": "COCA COLA, GUARANÁ ANTÁRTICA, SPRITE E FANTA",
+      "price": 3.5,
+      "category": "Bebidas",
+      "id": 9379,
+      "bot_id": 1245,
+      "is_available": true
+    },
+    {
+      "name": "SUCO FRUTHAS 510ml",
+      "description": "",
+      "price": 6.0,
+      "category": "Bebidas",
+      "id": 9378,
+      "bot_id": 1245,
+      "is_available": true
+    },
+    {
+      "name": "HOT DOG DUPLO",
+      "description": "( PÃO, 2 SALSICHAS, MOLHO DE TOMATE, MUSSARELA E BATATA )",
+      "price": 11.0,
+      "category": "Lanches",
+      "id": 9374,
+      "bot_id": 1245,
+      "is_available": true
+    },
+    {
+      "name": "HOT DOG QUADRUPLO",
+      "description": "( PÃO, 4 SALSICHAS, MOLHO DE TOMATE, MUSSARELA E BATATA )",
+      "price": 13.0,
+      "category": "Lanches",
+      "id": 9376,
+      "bot_id": 1245,
+      "is_available": true
+    },
+    {
+      "name": "HOT DOG SIMPLES",
+      "description": "( PÃO, 1 SALSICHA, MOLHO DE TOMATE, MUSSARELA E BATATA )",
+      "price": 10.0,
+      "category": "Lanches",
+      "id": 9373,
+      "bot_id": 1245,
+      "is_available": true
+    },
+    {
+      "name": "HOT DOG TRIPLO",
+      "description": "( PÃO, 3 SALSICHAS, MOLHO DE TOMATE, MUSSARELA E BATATA )",
+      "price": 12.0,
+      "category": "Lanches",
+      "id": 9375,
+      "bot_id": 1245,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

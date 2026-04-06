@@ -1,0 +1,104 @@
+{
+  "products": [
+    {
+      "name": "CALABRESA",
+      "description": "Tomate pelati, mozzarella especial, linguiça calabresa e orégano.",
+      "price": 59.0,
+      "category": "Pizzas",
+      "id": 9091,
+      "bot_id": 1222,
+      "is_available": true
+    },
+    {
+      "name": "CIPOLLA",
+      "description": "Tomate pelati, mozzarella especial, cebola e orégano.",
+      "price": 58.0,
+      "category": "Pizzas",
+      "id": 9094,
+      "bot_id": 1222,
+      "is_available": true
+    },
+    {
+      "name": "MARGHERITA",
+      "description": "Tomate pelati, queijo, tomate cereja, manjericão fresco e orégano.",
+      "price": 55.0,
+      "category": "Pizzas",
+      "id": 9087,
+      "bot_id": 1222,
+      "is_available": true
+    },
+    {
+      "name": "MARGHERITA SPECIAL",
+      "description": "Tomate pelati, mozzarella especial, presunto, azeitonas pretas e orégano.",
+      "price": 58.0,
+      "category": "Pizzas",
+      "id": 9092,
+      "bot_id": 1222,
+      "is_available": true
+    },
+    {
+      "name": "MOZZARELLA",
+      "description": "Tomate pelati, mozzarella especial e orégano.",
+      "price": 49.0,
+      "category": "Pizzas",
+      "id": 9085,
+      "bot_id": 1222,
+      "is_available": true
+    },
+    {
+      "name": "MOZZARELLA E AGLIO",
+      "description": "Tomate pelati, mozzarella especial, alho crocante e orégano.",
+      "price": 51.0,
+      "category": "Pizzas",
+      "id": 9086,
+      "bot_id": 1222,
+      "is_available": true
+    },
+    {
+      "name": "NORCIA",
+      "description": "Tomate pelati, mozzarella especial, linguiça calabresa e orégano.",
+      "price": 59.0,
+      "category": "Pizzas",
+      "id": 9090,
+      "bot_id": 1222,
+      "is_available": true
+    },
+    {
+      "name": "PEPPERONI",
+      "description": "Tomate pelati, mozzarella especial, pepperoni, orégano.",
+      "price": 59.0,
+      "category": "Pizzas",
+      "id": 9093,
+      "bot_id": 1222,
+      "is_available": true
+    },
+    {
+      "name": "PORTUGUESA",
+      "description": "Tomate pelati, mozzarella especial, presunto, ovos, cebola, azeitonas pretas e orégano.",
+      "price": 58.0,
+      "category": "Pizzas",
+      "id": 9088,
+      "bot_id": 1222,
+      "is_available": true
+    },
+    {
+      "name": "QUATRO FORMAGGI",
+      "description": "Tomate pelati, mozzarella especial, presunto, queijo gorgonzola, queijo parmesão e orégano.",
+      "price": 59.0,
+      "category": "Pizzas",
+      "id": 9089,
+      "bot_id": 1222,
+      "is_available": true
+    },
+    {
+      "name": "VOLCANO",
+      "description": "Tomate pelati, mozzarella especial, pimenta e orégano.",
+      "price": 59.0,
+      "category": "Pizzas",
+      "id": 9095,
+      "bot_id": 1222,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

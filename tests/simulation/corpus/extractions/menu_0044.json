@@ -1,0 +1,149 @@
+{
+  "products": [
+    {
+      "name": "Monte Sua Pizza",
+      "description": "A pizza vem com molho de tomate e mussarela.",
+      "price": 16.0,
+      "category": "Lanches",
+      "id": 8318,
+      "bot_id": 1165,
+      "is_available": true
+    },
+    {
+      "name": "X-Bacon",
+      "description": "",
+      "price": 8.0,
+      "category": "Lanches",
+      "id": 8310,
+      "bot_id": 1165,
+      "is_available": true
+    },
+    {
+      "name": "X-Burguer",
+      "description": "",
+      "price": 8.0,
+      "category": "Lanches",
+      "id": 8313,
+      "bot_id": 1165,
+      "is_available": true
+    },
+    {
+      "name": "X-Calabresa",
+      "description": "",
+      "price": 8.0,
+      "category": "Lanches",
+      "id": 8311,
+      "bot_id": 1165,
+      "is_available": true
+    },
+    {
+      "name": "X-Egg",
+      "description": "",
+      "price": 8.0,
+      "category": "Lanches",
+      "id": 8314,
+      "bot_id": 1165,
+      "is_available": true
+    },
+    {
+      "name": "X-Francês",
+      "description": "",
+      "price": 8.0,
+      "category": "Lanches",
+      "id": 8315,
+      "bot_id": 1165,
+      "is_available": true
+    },
+    {
+      "name": "X-Frango",
+      "description": "",
+      "price": 8.0,
+      "category": "Lanches",
+      "id": 8312,
+      "bot_id": 1165,
+      "is_available": true
+    },
+    {
+      "name": "X-Maurício",
+      "description": "",
+      "price": 8.0,
+      "category": "Lanches",
+      "id": 8316,
+      "bot_id": 1165,
+      "is_available": true
+    },
+    {
+      "name": "X-Salada",
+      "description": "",
+      "price": 5.5,
+      "category": "Lanches",
+      "id": 8308,
+      "bot_id": 1165,
+      "is_available": true
+    },
+    {
+      "name": "X-Sanduíche Quente",
+      "description": "",
+      "price": 5.5,
+      "category": "Lanches",
+      "id": 8317,
+      "bot_id": 1165,
+      "is_available": true
+    },
+    {
+      "name": "X-Tudo",
+      "description": "",
+      "price": 7.0,
+      "category": "Lanches",
+      "id": 8309,
+      "bot_id": 1165,
+      "is_available": true
+    },
+    {
+      "name": "Batata frita",
+      "description": "Batata frita com queijo",
+      "price": 10.0,
+      "category": "Porções",
+      "id": 8303,
+      "bot_id": 1165,
+      "is_available": true
+    },
+    {
+      "name": "Bolinho de bacalhau",
+      "description": "",
+      "price": 12.0,
+      "category": "Porções",
+      "id": 8307,
+      "bot_id": 1165,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa acebolada",
+      "description": "",
+      "price": 12.0,
+      "category": "Porções",
+      "id": 8305,
+      "bot_id": 1165,
+      "is_available": true
+    },
+    {
+      "name": "Iscas de frango a milanesa",
+      "description": "",
+      "price": 14.0,
+      "category": "Porções",
+      "id": 8306,
+      "bot_id": 1165,
+      "is_available": true
+    },
+    {
+      "name": "Polenta frita",
+      "description": "",
+      "price": 12.0,
+      "category": "Porções",
+      "id": 8304,
+      "bot_id": 1165,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

@@ -292,6 +292,84 @@ The LLM doesn't see the full menu. Products are found via RAG search, and the LL
 
 ---
 
+## Corpus Pipeline — Step by Step
+
+The full pipeline to expand and test the corpus has 3 steps. Each step has a Claude Code slash command.
+
+**Prerequisites:** Docker services must be running (`docker compose up -d`).
+
+### Step 1: Collect Images (`/corpus-game`)
+
+Classify menu images from DuckDuckGo results using the browser game. Accepted images are downloaded to `corpus/images/`.
+
+```bash
+python tests/simulation/corpus/classifier_server.py
+```
+
+1. Open **http://localhost:8888/classifier_game.html** in your browser
+2. Use keyboard controls:
+   - **→ or Enter** = accept image (downloads it to corpus)
+   - **← or S** = skip
+   - **Z** = undo last action
+3. Each "level" = 30 accepted images
+4. Progress auto-saves to browser localStorage
+5. Aim for **10-20 new images** per session for a meaningful batch
+6. Close the browser tab and **Ctrl+C** the server when done
+
+**Output:** New images in `corpus/images/`, new entries in `manifest.json` (with `validated: false`).
+
+### Step 2: Validate & Extract Products (`/corpus-validate`)
+
+Send each new (unvalidated) image through the Cadastro Mágico extraction pipeline. Uses gpt-4o vision to extract product names, prices, and categories.
+
+```bash
+python tests/simulation/corpus/validate_corpus.py
+```
+
+- Images with **≥5 products** are validated → extraction saved to `corpus/extractions/{id}.json`
+- Images with **<5 products** are rejected → moved to `corpus/rejected/`
+- Category is auto-detected from product names (pizzaria, hamburgueria, sushi, etc.)
+- **Cost:** ~$0.03 per image (one gpt-4o vision call)
+- **Requires:** Backend running at `localhost:8000` with valid `OPENAI_API_KEY`
+
+**Output:** Updated `manifest.json`, new extraction files in `corpus/extractions/`.
+
+### Step 3: Run QA Tests (`/corpus-test`)
+
+Run the 7 test scenarios against 5 randomly selected validated corpus images.
+
+```bash
+python tests/simulation/corpus/run_corpus_qa.py
+```
+
+For each selected restaurant:
+1. Creates a bot with products from the cached extraction
+2. Marks 2 random products as unavailable
+3. Runs 7 scenarios: add_single, add_multi, unavailable, remove, suggestions, checkout, greeting
+4. Reports per-scenario pass/fail
+5. Cleans up all test data from DB
+
+**Target:** ≥85% pass rate (30/35+). Compare with [Historical Results](#historical-results).
+
+### Full Pipeline Example
+
+```bash
+# 1. Collect images (interactive — do this in your browser)
+python tests/simulation/corpus/classifier_server.py
+# → open http://localhost:8888/classifier_game.html
+# → accept 10-20 images, then Ctrl+C the server
+
+# 2. Extract products from new images (~$0.03/image)
+python tests/simulation/corpus/validate_corpus.py
+
+# 3. Run QA tests
+python tests/simulation/corpus/run_corpus_qa.py
+```
+
+Or use the slash commands: `/corpus-game` → `/corpus-validate` → `/corpus-test`
+
+---
+
 ## Quick Reference
 
 ```bash

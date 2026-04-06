@@ -1,0 +1,131 @@
+{
+  "products": [
+    {
+      "name": "ALEMÃO",
+      "description": "Carne de porco, queijo mussarela, cebola, bacon e ovos.",
+      "price": 27.0,
+      "category": "Pastéis",
+      "id": 8272,
+      "bot_id": 1162,
+      "is_available": true
+    },
+    {
+      "name": "CARNE",
+      "description": "Carne bovina moída, sem picado.",
+      "price": 21.0,
+      "category": "Pastéis",
+      "id": 8263,
+      "bot_id": 1162,
+      "is_available": true
+    },
+    {
+      "name": "CARNE DE PANELA I",
+      "description": "Carne de panela picada e queijo mussarela.",
+      "price": 25.0,
+      "category": "Pastéis",
+      "id": 8265,
+      "bot_id": 1162,
+      "is_available": true
+    },
+    {
+      "name": "CARNE DE PANELA II",
+      "description": "Carne de panela picada, queijo mussarela e azeitonas.",
+      "price": 27.0,
+      "category": "Pastéis",
+      "id": 8266,
+      "bot_id": 1162,
+      "is_available": true
+    },
+    {
+      "name": "CARNE E QUEIJO",
+      "description": "Carne bovina moída, queijo mussarela.",
+      "price": 23.0,
+      "category": "Pastéis",
+      "id": 8264,
+      "bot_id": 1162,
+      "is_available": true
+    },
+    {
+      "name": "DA CASA CARNE",
+      "description": "Carne de boi, queijo mussarela, cebola e azeitonas.",
+      "price": 27.0,
+      "category": "Pastéis",
+      "id": 8276,
+      "bot_id": 1162,
+      "is_available": true
+    },
+    {
+      "name": "FRANGO",
+      "description": "Frango desfiado.",
+      "price": 25.0,
+      "category": "Pastéis",
+      "id": 8268,
+      "bot_id": 1162,
+      "is_available": true
+    },
+    {
+      "name": "FRANGO E CATUPIRY",
+      "description": "Frango desfiado, catupiry.",
+      "price": 27.0,
+      "category": "Pastéis",
+      "id": 8270,
+      "bot_id": 1162,
+      "is_available": true
+    },
+    {
+      "name": "FRANGO E QUEIJO",
+      "description": "Frango desfiado, queijo mussarela.",
+      "price": 25.0,
+      "category": "Pastéis",
+      "id": 8269,
+      "bot_id": 1162,
+      "is_available": true
+    },
+    {
+      "name": "LOMBINHO E QUEIJO",
+      "description": "Lombinho, queijo mussarela.",
+      "price": 27.0,
+      "category": "Pastéis",
+      "id": 8271,
+      "bot_id": 1162,
+      "is_available": true
+    },
+    {
+      "name": "NAPOLITANO",
+      "description": "Carne de porco, queijo mussarela, tomate e pimentão.",
+      "price": 27.0,
+      "category": "Pastéis",
+      "id": 8273,
+      "bot_id": 1162,
+      "is_available": true
+    },
+    {
+      "name": "PORTUGUESA",
+      "description": "Calabresa, queijo mussarela, cebola, tomate e pimentão.",
+      "price": 27.0,
+      "category": "Pastéis",
+      "id": 8274,
+      "bot_id": 1162,
+      "is_available": true
+    },
+    {
+      "name": "PORTUGUESA I",
+      "description": "Calabresa, queijo mussarela, cebola e pimentão.",
+      "price": 27.0,
+      "category": "Pastéis",
+      "id": 8275,
+      "bot_id": 1162,
+      "is_available": true
+    },
+    {
+      "name": "STROGONOFF DE CARNE",
+      "description": "Carne bovina com molho de creme de leite, mostarda e champignon.",
+      "price": 31.0,
+      "category": "Pastéis",
+      "id": 8267,
+      "bot_id": 1162,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

@@ -1,0 +1,167 @@
+{
+  "products": [
+    {
+      "name": "TR30 ESTROGONOFE DE CARNE III",
+      "description": "Recheada com queijo, estrogonofe de carne, ovo e rúcula.",
+      "price": 17.4,
+      "category": "Pratos Principais",
+      "id": 9140,
+      "bot_id": 1227,
+      "is_available": true
+    },
+    {
+      "name": "TR31 ESTROGONOFE DE CARNE IV",
+      "description": "Recheada com queijo, estrogonofe de carne, ovo e rúcula.",
+      "price": 18.0,
+      "category": "Pratos Principais",
+      "id": 9141,
+      "bot_id": 1227,
+      "is_available": true
+    },
+    {
+      "name": "TD10 DOCE DE LEITE II",
+      "description": "Recheada com doce de leite e queijo.",
+      "price": 11.5,
+      "category": "TAPIOCAS DOCES",
+      "id": 9151,
+      "bot_id": 1227,
+      "is_available": true
+    },
+    {
+      "name": "TD11 BANANADA II",
+      "description": "Recheada com doce de banana e queijo.",
+      "price": 11.5,
+      "category": "TAPIOCAS DOCES",
+      "id": 9152,
+      "bot_id": 1227,
+      "is_available": true
+    },
+    {
+      "name": "TD12 BANANA FRITA V",
+      "description": "Recheada com banana frita e leite condensado.",
+      "price": 11.5,
+      "category": "TAPIOCAS DOCES",
+      "id": 9153,
+      "bot_id": 1227,
+      "is_available": true
+    },
+    {
+      "name": "TD13 BANANA FRITA VI",
+      "description": "Recheada com banana frita e leite condensado.",
+      "price": 11.5,
+      "category": "TAPIOCAS DOCES",
+      "id": 9154,
+      "bot_id": 1227,
+      "is_available": true
+    },
+    {
+      "name": "TD14 BANANA FRITA VII",
+      "description": "Recheada com banana frita e leite condensado.",
+      "price": 11.5,
+      "category": "TAPIOCAS DOCES",
+      "id": 9155,
+      "bot_id": 1227,
+      "is_available": true
+    },
+    {
+      "name": "TD15 BANANA FRITA VIII",
+      "description": "Recheada com banana frita e leite condensado.",
+      "price": 11.5,
+      "category": "TAPIOCAS DOCES",
+      "id": 9156,
+      "bot_id": 1227,
+      "is_available": true
+    },
+    {
+      "name": "TD16 MORANGO",
+      "description": "Recheada com fatias de morango e creme de chocolate e queijo.",
+      "price": 11.5,
+      "category": "TAPIOCAS DOCES",
+      "id": 9157,
+      "bot_id": 1227,
+      "is_available": true
+    },
+    {
+      "name": "TD1 BANANADA",
+      "description": "Recheada com doce de banana e queijo.",
+      "price": 11.5,
+      "category": "TAPIOCAS DOCES",
+      "id": 9142,
+      "bot_id": 1227,
+      "is_available": true
+    },
+    {
+      "name": "TD2 ROMEU E JULIETA",
+      "description": "Recheada com doce de goiabada e queijo.",
+      "price": 11.5,
+      "category": "TAPIOCAS DOCES",
+      "id": 9143,
+      "bot_id": 1227,
+      "is_available": true
+    },
+    {
+      "name": "TD3 LEITE CONDENSADO",
+      "description": "Recheada com leite condensado, queijo e açúcar.",
+      "price": 11.5,
+      "category": "TAPIOCAS DOCES",
+      "id": 9144,
+      "bot_id": 1227,
+      "is_available": true
+    },
+    {
+      "name": "TD4 BANANA FRITA I",
+      "description": "Recheada com banana frita, castanha moída e mel de abelha.",
+      "price": 11.5,
+      "category": "TAPIOCAS DOCES",
+      "id": 9145,
+      "bot_id": 1227,
+      "is_available": true
+    },
+    {
+      "name": "TD5 BANANA FRITA II",
+      "description": "Recheada com banana frita, leite condensado e canela.",
+      "price": 11.5,
+      "category": "TAPIOCAS DOCES",
+      "id": 9146,
+      "bot_id": 1227,
+      "is_available": true
+    },
+    {
+      "name": "TD6 BANANA FRITA III",
+      "description": "Recheada com banana frita, açúcar e canela.",
+      "price": 11.5,
+      "category": "TAPIOCAS DOCES",
+      "id": 9147,
+      "bot_id": 1227,
+      "is_available": true
+    },
+    {
+      "name": "TD7 BANANA FRITA IV",
+      "description": "Recheada com banana frita, leite condensado e canela.",
+      "price": 11.5,
+      "category": "TAPIOCAS DOCES",
+      "id": 9148,
+      "bot_id": 1227,
+      "is_available": true
+    },
+    {
+      "name": "TD8 LEITE CONDENSADO II",
+      "description": "Recheada com leite condensado e queijo.",
+      "price": 11.5,
+      "category": "TAPIOCAS DOCES",
+      "id": 9149,
+      "bot_id": 1227,
+      "is_available": true
+    },
+    {
+      "name": "TD9 DOCE DE LEITE I",
+      "description": "Recheada com banana frita, leite condensado e canela.",
+      "price": 11.5,
+      "category": "TAPIOCAS DOCES",
+      "id": 9150,
+      "bot_id": 1227,
+      "is_available": true
+    }
+  ],
+  "category": "tapiocaria"
+}

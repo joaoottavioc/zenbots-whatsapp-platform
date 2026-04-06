@@ -1,0 +1,131 @@
+{
+  "products": [
+    {
+      "name": "Abobrinha",
+      "description": "Mussarela, abobrinha marinada em azeite, cebola",
+      "price": 30.0,
+      "category": "Pizzas",
+      "id": 8289,
+      "bot_id": 1164,
+      "is_available": true
+    },
+    {
+      "name": "Abobrinha Especial",
+      "description": "Mussarela, abobrinha marinada em azeite, parmesão e provolone",
+      "price": 30.0,
+      "category": "Pizzas",
+      "id": 8290,
+      "bot_id": 1164,
+      "is_available": true
+    },
+    {
+      "name": "Alho Torrado",
+      "description": "Mussarela, finalizado com alho torrado",
+      "price": 30.0,
+      "category": "Pizzas",
+      "id": 8298,
+      "bot_id": 1164,
+      "is_available": true
+    },
+    {
+      "name": "Bacon com Ovos",
+      "description": "Mussarela, bacon, ovos, cebola",
+      "price": 30.0,
+      "category": "Pizzas",
+      "id": 8299,
+      "bot_id": 1164,
+      "is_available": true
+    },
+    {
+      "name": "Brócolis",
+      "description": "Mussarela, brócolis, cebola",
+      "price": 30.0,
+      "category": "Pizzas",
+      "id": 8291,
+      "bot_id": 1164,
+      "is_available": true
+    },
+    {
+      "name": "Brócolis com Bacon",
+      "description": "Mussarela, brócolis, bacon",
+      "price": 30.0,
+      "category": "Pizzas",
+      "id": 8300,
+      "bot_id": 1164,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa",
+      "description": "Calabresa, mussarela, azeitona, cebola",
+      "price": 30.0,
+      "category": "Pizzas",
+      "id": 8292,
+      "bot_id": 1164,
+      "is_available": true
+    },
+    {
+      "name": "Gratinata",
+      "description": "Requeijão, provolone",
+      "price": 30.0,
+      "category": "Pizzas",
+      "id": 8293,
+      "bot_id": 1164,
+      "is_available": true
+    },
+    {
+      "name": "Light",
+      "description": "Cream cheese, peito de peru, palmito, tomate, cebola, alho poró, azeitonas",
+      "price": 30.0,
+      "category": "Pizzas",
+      "id": 8294,
+      "bot_id": 1164,
+      "is_available": true
+    },
+    {
+      "name": "Lombo",
+      "description": "Mussarela, lombo, requeijão de catupiry",
+      "price": 30.0,
+      "category": "Pizzas",
+      "id": 8301,
+      "bot_id": 1164,
+      "is_available": true
+    },
+    {
+      "name": "Marguerita",
+      "description": "Mussarela, tomate, manjericão",
+      "price": 30.0,
+      "category": "Pizzas",
+      "id": 8295,
+      "bot_id": 1164,
+      "is_available": true
+    },
+    {
+      "name": "Milho Verde",
+      "description": "Mussarela, milho verde",
+      "price": 30.0,
+      "category": "Pizzas",
+      "id": 8302,
+      "bot_id": 1164,
+      "is_available": true
+    },
+    {
+      "name": "Mista",
+      "description": "Calabresa, presunto, mussarela",
+      "price": 30.0,
+      "category": "Pizzas",
+      "id": 8296,
+      "bot_id": 1164,
+      "is_available": true
+    },
+    {
+      "name": "Mussarela",
+      "description": "Mussarela",
+      "price": 30.0,
+      "category": "Pizzas",
+      "id": 8297,
+      "bot_id": 1164,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

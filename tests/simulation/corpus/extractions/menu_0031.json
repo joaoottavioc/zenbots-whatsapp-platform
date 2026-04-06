@@ -1,0 +1,167 @@
+{
+  "products": [
+    {
+      "name": "Abobrinha",
+      "description": "Abobrinha grelhada em conserva com parmesão",
+      "price": 96.0,
+      "category": "Pizzas",
+      "id": 8371,
+      "bot_id": 1172,
+      "is_available": true
+    },
+    {
+      "name": "Alho",
+      "description": "Alho frito, parmesão e azeitonas verdes",
+      "price": 90.0,
+      "category": "Pizzas",
+      "id": 8368,
+      "bot_id": 1172,
+      "is_available": true
+    },
+    {
+      "name": "Bacon",
+      "description": "Mussarela com bacon e azeitonas verdes",
+      "price": 90.0,
+      "category": "Pizzas",
+      "id": 8363,
+      "bot_id": 1172,
+      "is_available": true
+    },
+    {
+      "name": "Brocolis",
+      "description": "Brócolis, bacon e azeitonas verdes",
+      "price": 90.0,
+      "category": "Pizzas",
+      "id": 8364,
+      "bot_id": 1172,
+      "is_available": true
+    },
+    {
+      "name": "Búfala",
+      "description": "Mussarela de búfala",
+      "price": 90.0,
+      "category": "Pizzas",
+      "id": 8366,
+      "bot_id": 1172,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa",
+      "description": "Calabresa, cebola e azeitonas verdes",
+      "price": 90.0,
+      "category": "Pizzas",
+      "id": 8365,
+      "bot_id": 1172,
+      "is_available": true
+    },
+    {
+      "name": "Catupiry",
+      "description": "Catupiry com molho de tomate",
+      "price": 90.0,
+      "category": "Pizzas",
+      "id": 8369,
+      "bot_id": 1172,
+      "is_available": true
+    },
+    {
+      "name": "Escarola",
+      "description": "Escarola temperada com azeitona, cebola, mussarela e azeitonas verdes",
+      "price": 96.0,
+      "category": "Pizzas",
+      "id": 8372,
+      "bot_id": 1172,
+      "is_available": true
+    },
+    {
+      "name": "Margarida",
+      "description": "Mussarela, parmesão, rodelas de tomate e manjericão",
+      "price": 96.0,
+      "category": "Pizzas",
+      "id": 8373,
+      "bot_id": 1172,
+      "is_available": true
+    },
+    {
+      "name": "Milho",
+      "description": "Catupiry coberto de milho",
+      "price": 96.0,
+      "category": "Pizzas",
+      "id": 8374,
+      "bot_id": 1172,
+      "is_available": true
+    },
+    {
+      "name": "Moda da Casa",
+      "description": "Presunto, azeitonas verdes picadas",
+      "price": 96.0,
+      "category": "Pizzas",
+      "id": 8375,
+      "bot_id": 1172,
+      "is_available": true
+    },
+    {
+      "name": "Mussarela",
+      "description": "Mussarela com molho de tomate temperado",
+      "price": 84.0,
+      "category": "Pizzas",
+      "id": 8361,
+      "bot_id": 1172,
+      "is_available": true
+    },
+    {
+      "name": "Napolitana",
+      "description": "Mussarela, parmesão, presunto e azeitonas verdes",
+      "price": 96.0,
+      "category": "Pizzas",
+      "id": 8376,
+      "bot_id": 1172,
+      "is_available": true
+    },
+    {
+      "name": "Portuguesa",
+      "description": "Presunto, ovo, cebola e azeitonas verdes",
+      "price": 90.0,
+      "category": "Pizzas",
+      "id": 8367,
+      "bot_id": 1172,
+      "is_available": true
+    },
+    {
+      "name": "Provolone",
+      "description": "Provolone com molho de tomate",
+      "price": 96.0,
+      "category": "Pizzas",
+      "id": 8377,
+      "bot_id": 1172,
+      "is_available": true
+    },
+    {
+      "name": "Ricota",
+      "description": "Ricota com molho de tomate",
+      "price": 84.0,
+      "category": "Pizzas",
+      "id": 8362,
+      "bot_id": 1172,
+      "is_available": true
+    },
+    {
+      "name": "Sardela",
+      "description": "Ela de cavala, berinjela curtida, cebola e azeitonas verdes",
+      "price": 96.0,
+      "category": "Pizzas",
+      "id": 8378,
+      "bot_id": 1172,
+      "is_available": true
+    },
+    {
+      "name": "Vegetariana",
+      "description": "Champignon, palmito, brócolis e parmesão",
+      "price": 96.0,
+      "category": "Pizzas",
+      "id": 8370,
+      "bot_id": 1172,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

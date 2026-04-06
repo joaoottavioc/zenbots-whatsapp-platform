@@ -12,11 +12,17 @@ import json
 import random
 import re
 import subprocess
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
+
+# Ensure app module is importable when running as a script inside Docker
+_project_root = Path(__file__).resolve().parent.parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 
 CORPUS = Path(__file__).parent
 PROJECT_ROOT = CORPUS.parent.parent.parent
@@ -58,7 +64,7 @@ def load_extraction(image_id):
 
 def gen_scenarios(products, unavail_indices):
     available = [p for i, p in enumerate(products) if i not in unavail_indices]
-    if len(available) < 5:
+    if len(available) < 6:
         return None
 
     picks = pick_random_products(products, set(unavail_indices))
@@ -127,66 +133,168 @@ def gen_scenarios(products, unavail_indices):
     return sc
 
 
-def run_sql(sql):
-    subprocess.run(
-        [
-            "docker",
-            "compose",
-            "exec",
-            "-T",
-            "db",
-            "psql",
-            "-U",
-            "postgres",
-            "-d",
-            "botbuilder",
-            "-c",
-            sql,
-        ],
-        cwd=str(PROJECT_ROOT),
-        capture_output=True,
-        text=True,
-    )
+async def run_sql(sql):
+    """Execute SQL — tries docker psql first, falls back to app DB engine."""
+    import shutil
+
+    if shutil.which("docker"):
+        subprocess.run(
+            [
+                "docker",
+                "compose",
+                "exec",
+                "-T",
+                "db",
+                "psql",
+                "-U",
+                "postgres",
+                "-d",
+                "botbuilder",
+                "-c",
+                sql,
+            ],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+        )
+    else:
+        await _run_sql_direct(sql)
 
 
-def pre_cleanup():
-    run_sql("""DO $$ DECLARE _bids int[]; _cids int[]; _carts int[];
-    BEGIN
-      SELECT ARRAY(SELECT id FROM bot WHERE (phone_number_id LIKE 'rand-test-%'
-        OR phone_number_id LIKE 'corpus-build-%') AND id != 74) INTO _bids;
-      IF array_length(_bids,1) IS NULL THEN RETURN; END IF;
-      SELECT ARRAY(SELECT id FROM contact WHERE bot_id=ANY(_bids)) INTO _cids;
-      SELECT ARRAY(SELECT id FROM shoppingcart WHERE contact_id=ANY(_cids)) INTO _carts;
-      DELETE FROM orderitem WHERE order_id IN (SELECT id FROM "order" WHERE contact_id=ANY(_cids));
-      DELETE FROM "order" WHERE contact_id=ANY(_cids);
-      DELETE FROM cartitem WHERE cart_id=ANY(_carts);
-      DELETE FROM shoppingcart WHERE id=ANY(_carts);
-      DELETE FROM conversationhistory WHERE bot_id=ANY(_bids);
-      DELETE FROM contact WHERE id=ANY(_cids);
-      DELETE FROM product WHERE bot_id=ANY(_bids);
-      DELETE FROM subscription WHERE bot_id=ANY(_bids);
-      DELETE FROM bot WHERE id=ANY(_bids);
-    END $$;""")
+async def _run_sql_direct(sql):
+    """Execute SQL via app DB engine (for running inside Docker)."""
+    from sqlalchemy import text as sa_text
+    from app.database import async_session
+
+    async with async_session() as session:
+        for stmt in sql.split(";"):
+            stmt = stmt.strip()
+            if stmt and not stmt.startswith("--"):
+                await session.execute(sa_text(stmt))
+        await session.commit()
 
 
-def cleanup_bots(bot_ids):
+async def _run_cleanup_direct(bot_ids: list[int]):
+    """Clean up bots via app DB engine using simple DELETEs (no PL/pgSQL)."""
+    from sqlalchemy import text as sa_text
+    from app.database import async_session
+
     if not bot_ids:
         return
-    ids = ",".join(str(x) for x in bot_ids)
-    run_sql(f"""DO $$ DECLARE _bids int[]:=ARRAY[{ids}]; _cids int[]; _carts int[];
-    BEGIN
-      SELECT ARRAY(SELECT id FROM contact WHERE bot_id=ANY(_bids)) INTO _cids;
-      SELECT ARRAY(SELECT id FROM shoppingcart WHERE contact_id=ANY(_cids)) INTO _carts;
-      DELETE FROM orderitem WHERE order_id IN (SELECT id FROM "order" WHERE contact_id=ANY(_cids));
-      DELETE FROM "order" WHERE contact_id=ANY(_cids);
-      DELETE FROM cartitem WHERE cart_id=ANY(_carts);
-      DELETE FROM shoppingcart WHERE id=ANY(_carts);
-      DELETE FROM conversationhistory WHERE bot_id=ANY(_bids);
-      DELETE FROM contact WHERE id=ANY(_cids);
-      DELETE FROM product WHERE bot_id=ANY(_bids);
-      DELETE FROM subscription WHERE bot_id=ANY(_bids);
-      DELETE FROM bot WHERE id=ANY(_bids);
-    END $$;""")
+
+    ids_str = ",".join(str(x) for x in bot_ids)
+
+    async with async_session() as session:
+        r = await session.execute(
+            sa_text(f"SELECT id FROM contact WHERE bot_id IN ({ids_str})")
+        )
+        contact_ids = [row[0] for row in r.fetchall()]
+
+        if contact_ids:
+            cids = ",".join(str(x) for x in contact_ids)
+            r2 = await session.execute(
+                sa_text(f"SELECT id FROM shoppingcart WHERE contact_id IN ({cids})")
+            )
+            cart_ids = [row[0] for row in r2.fetchall()]
+
+            if cart_ids:
+                cartids = ",".join(str(x) for x in cart_ids)
+                await session.execute(
+                    sa_text(f"DELETE FROM cartitem WHERE cart_id IN ({cartids})")
+                )
+                await session.execute(
+                    sa_text(f"DELETE FROM shoppingcart WHERE id IN ({cartids})")
+                )
+
+            await session.execute(
+                sa_text(
+                    f'DELETE FROM orderitem WHERE order_id IN (SELECT id FROM "order" WHERE contact_id IN ({cids}))'
+                )
+            )
+            await session.execute(
+                sa_text(f'DELETE FROM "order" WHERE contact_id IN ({cids})')
+            )
+            # Delete conversation history by contact_id BEFORE deleting contacts
+            await session.execute(
+                sa_text(f"DELETE FROM conversationhistory WHERE contact_id IN ({cids})")
+            )
+            await session.execute(sa_text(f"DELETE FROM contact WHERE id IN ({cids})"))
+
+        # Also clean any orphaned conversation history by bot_id
+        await session.execute(
+            sa_text(f"DELETE FROM conversationhistory WHERE bot_id IN ({ids_str})")
+        )
+        await session.execute(
+            sa_text(f"DELETE FROM product WHERE bot_id IN ({ids_str})")
+        )
+        await session.execute(
+            sa_text(f"DELETE FROM subscription WHERE bot_id IN ({ids_str})")
+        )
+        await session.execute(sa_text(f"DELETE FROM bot WHERE id IN ({ids_str})"))
+        await session.commit()
+
+
+async def pre_cleanup():
+    import shutil
+
+    if shutil.which("docker"):
+        await run_sql("""DO $$ DECLARE _bids int[]; _cids int[]; _carts int[];
+        BEGIN
+          SELECT ARRAY(SELECT id FROM bot WHERE (phone_number_id LIKE 'rand-test-%'
+            OR phone_number_id LIKE 'corpus-build-%') AND id != 74) INTO _bids;
+          IF array_length(_bids,1) IS NULL THEN RETURN; END IF;
+          SELECT ARRAY(SELECT id FROM contact WHERE bot_id=ANY(_bids)) INTO _cids;
+          SELECT ARRAY(SELECT id FROM shoppingcart WHERE contact_id=ANY(_cids)) INTO _carts;
+          DELETE FROM orderitem WHERE order_id IN (SELECT id FROM "order" WHERE contact_id=ANY(_cids));
+          DELETE FROM "order" WHERE contact_id=ANY(_cids);
+          DELETE FROM cartitem WHERE cart_id=ANY(_carts);
+          DELETE FROM shoppingcart WHERE id=ANY(_carts);
+          DELETE FROM conversationhistory WHERE bot_id=ANY(_bids);
+          DELETE FROM contact WHERE id=ANY(_cids);
+          DELETE FROM product WHERE bot_id=ANY(_bids);
+          DELETE FROM subscription WHERE bot_id=ANY(_bids);
+          DELETE FROM bot WHERE id=ANY(_bids);
+        END $$;""")
+    else:
+        from sqlalchemy import text as sa_text
+        from app.database import async_session
+
+        async with async_session() as session:
+            r = await session.execute(
+                sa_text(
+                    "SELECT id FROM bot WHERE (phone_number_id LIKE 'rand-test-%' "
+                    "OR phone_number_id LIKE 'corpus-build-%') AND id != 74"
+                )
+            )
+            orphan_ids = [row[0] for row in r.fetchall()]
+
+        if orphan_ids:
+            await _run_cleanup_direct(orphan_ids)
+
+
+async def cleanup_bots(bot_ids):
+    if not bot_ids:
+        return
+    import shutil
+
+    if shutil.which("docker"):
+        ids = ",".join(str(x) for x in bot_ids)
+        run_sql(f"""DO $$ DECLARE _bids int[]:=ARRAY[{ids}]; _cids int[]; _carts int[];
+        BEGIN
+          SELECT ARRAY(SELECT id FROM contact WHERE bot_id=ANY(_bids)) INTO _cids;
+          SELECT ARRAY(SELECT id FROM shoppingcart WHERE contact_id=ANY(_cids)) INTO _carts;
+          DELETE FROM orderitem WHERE order_id IN (SELECT id FROM "order" WHERE contact_id=ANY(_cids));
+          DELETE FROM "order" WHERE contact_id=ANY(_cids);
+          DELETE FROM cartitem WHERE cart_id=ANY(_carts);
+          DELETE FROM shoppingcart WHERE id=ANY(_carts);
+          DELETE FROM conversationhistory WHERE bot_id=ANY(_bids);
+          DELETE FROM contact WHERE id=ANY(_cids);
+          DELETE FROM product WHERE bot_id=ANY(_bids);
+          DELETE FROM subscription WHERE bot_id=ANY(_bids);
+          DELETE FROM bot WHERE id=ANY(_bids);
+        END $$;""")
+    else:
+        await _run_cleanup_direct(bot_ids)
 
 
 async def main():
@@ -223,7 +331,7 @@ async def main():
     print()
 
     print("Pre-run cleanup...")
-    pre_cleanup()
+    await pre_cleanup()
 
     bots = {}
 
@@ -318,7 +426,7 @@ async def main():
         f"'2027-04-02',NOW(),NOW(),'pro')"
         for b in bots.values()
     )
-    run_sql(
+    await run_sql(
         "INSERT INTO subscription (bot_id,user_id,mp_subscription_id,"
         f"status,current_period_end,created_at,updated_at,plan_type) VALUES {vals};"
     )
@@ -343,8 +451,10 @@ async def main():
 
     started_at = datetime.now(timezone.utc).isoformat()
 
-    result = subprocess.run(
-        [
+    import shutil
+
+    if shutil.which("docker"):
+        test_cmd = [
             "docker",
             "compose",
             "exec",
@@ -354,7 +464,18 @@ async def main():
             "tests/simulation/test_random_restaurants.py",
             "-v",
             "--tb=short",
-        ],
+        ]
+    else:
+        # Running inside Docker — call pytest directly
+        test_cmd = [
+            "pytest",
+            "tests/simulation/test_random_restaurants.py",
+            "-v",
+            "--tb=short",
+        ]
+
+    result = subprocess.run(
+        test_cmd,
         cwd=str(PROJECT_ROOT),
         capture_output=True,
         timeout=300,
@@ -375,7 +496,7 @@ async def main():
 
     # Cleanup
     print("\nCleaning up...")
-    cleanup_bots([b["bot_id"] for b in bots.values()])
+    await cleanup_bots([b["bot_id"] for b in bots.values()])
     print("Done!")
 
 
@@ -478,14 +599,12 @@ def _parse_results(output: str, bots: dict, started_at: str, finished_at: str) -
             else:
                 total_skipped += 1
 
-    # Extract failure details
+    # Extract failure details (only FAILED lines, not warnings)
     failure_lines = []
-    in_failures = False
     for line in output.splitlines():
-        if "FAILURES" in line or "short test summary" in line:
-            in_failures = True
-        if in_failures:
-            failure_lines.append(line)
+        stripped = line.strip()
+        if stripped.startswith("FAILED "):
+            failure_lines.append(stripped)
 
     total = total_passed + total_failed + total_skipped
     return {
@@ -503,28 +622,40 @@ def _parse_results(output: str, bots: dict, started_at: str, finished_at: str) -
 
 
 def _upload_report(report: dict):
-    """Upload report to S3 via Docker exec into the backend container, or save locally."""
+    """Upload report to S3 — tries direct import first, falls back to docker exec."""
+    import shutil
+
     try:
-        # Write report to a temp file, then docker exec reads it from the volume mount
-        tmp_path = PROJECT_ROOT / ".qa_report_tmp.json"
-        tmp_path.write_text(
-            json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        cmd = (
-            "from app.qa_reports import upload_qa_report; "
-            "import json; "
-            "report = json.loads(open('/code/.qa_report_tmp.json', encoding='utf-8').read()); "
-            "key = upload_qa_report(report); "
-            "print(f'S3_KEY:{key}' if key else 'S3_FAIL')"
-        )
-        result = subprocess.run(
-            ["docker", "compose", "exec", "-T", "backend", "python", "-c", cmd],
-            capture_output=True,
-            text=True,
-            cwd=str(PROJECT_ROOT),
-            timeout=30,
-        )
-        tmp_path.unlink(missing_ok=True)
+        if not shutil.which("docker"):
+            # Inside Docker — import directly
+            from app.qa_reports import upload_qa_report
+
+            key = upload_qa_report(report)
+            if key:
+                print(f"\nReport uploaded to S3: {key}")
+            else:
+                print("\nS3 upload returned None (bucket not configured?)")
+        else:
+            # Outside Docker — use docker exec
+            tmp_path = PROJECT_ROOT / ".qa_report_tmp.json"
+            tmp_path.write_text(
+                json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            cmd = (
+                "from app.qa_reports import upload_qa_report; "
+                "import json; "
+                "report = json.loads(open('/code/.qa_report_tmp.json', encoding='utf-8').read()); "
+                "key = upload_qa_report(report); "
+                "print(f'S3_KEY:{key}' if key else 'S3_FAIL')"
+            )
+            result = subprocess.run(
+                ["docker", "compose", "exec", "-T", "backend", "python", "-c", cmd],
+                capture_output=True,
+                text=True,
+                cwd=str(PROJECT_ROOT),
+                timeout=30,
+            )
+            tmp_path.unlink(missing_ok=True)
         combined = result.stdout + result.stderr
         if "S3_KEY:" in combined:
             key = combined.split("S3_KEY:")[1].strip().split("\n")[0]

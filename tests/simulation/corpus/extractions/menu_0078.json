@@ -1,0 +1,149 @@
+{
+  "products": [
+    {
+      "name": "Amendoim",
+      "description": "",
+      "price": 6.5,
+      "category": "Sabores",
+      "id": 9073,
+      "bot_id": 1220,
+      "is_available": true
+    },
+    {
+      "name": "Arco-íris",
+      "description": "",
+      "price": 5.0,
+      "category": "Sabores",
+      "id": 9063,
+      "bot_id": 1220,
+      "is_available": true
+    },
+    {
+      "name": "Baunilha",
+      "description": "",
+      "price": 4.0,
+      "category": "Sabores",
+      "id": 9058,
+      "bot_id": 1220,
+      "is_available": true
+    },
+    {
+      "name": "Bolo de sorvete",
+      "description": "",
+      "price": 8.5,
+      "category": "Sabores",
+      "id": 9071,
+      "bot_id": 1220,
+      "is_available": true
+    },
+    {
+      "name": "Chocolate",
+      "description": "",
+      "price": 4.0,
+      "category": "Sabores",
+      "id": 9059,
+      "bot_id": 1220,
+      "is_available": true
+    },
+    {
+      "name": "Chocolate com menta",
+      "description": "",
+      "price": 4.5,
+      "category": "Sabores",
+      "id": 9061,
+      "bot_id": 1220,
+      "is_available": true
+    },
+    {
+      "name": "Coco",
+      "description": "",
+      "price": 5.0,
+      "category": "Sabores",
+      "id": 9069,
+      "bot_id": 1220,
+      "is_available": true
+    },
+    {
+      "name": "Cookies e creme",
+      "description": "",
+      "price": 4.5,
+      "category": "Sabores",
+      "id": 9062,
+      "bot_id": 1220,
+      "is_available": true
+    },
+    {
+      "name": "Framboesa",
+      "description": "",
+      "price": 5.0,
+      "category": "Sabores",
+      "id": 9067,
+      "bot_id": 1220,
+      "is_available": true
+    },
+    {
+      "name": "Massa de cookie",
+      "description": "",
+      "price": 5.0,
+      "category": "Sabores",
+      "id": 9065,
+      "bot_id": 1220,
+      "is_available": true
+    },
+    {
+      "name": "Mel",
+      "description": "",
+      "price": 5.0,
+      "category": "Sabores",
+      "id": 9068,
+      "bot_id": 1220,
+      "is_available": true
+    },
+    {
+      "name": "Morango",
+      "description": "",
+      "price": 4.0,
+      "category": "Sabores",
+      "id": 9060,
+      "bot_id": 1220,
+      "is_available": true
+    },
+    {
+      "name": "Pacoquinha",
+      "description": "",
+      "price": 5.0,
+      "category": "Sabores",
+      "id": 9064,
+      "bot_id": 1220,
+      "is_available": true
+    },
+    {
+      "name": "Piña colada",
+      "description": "",
+      "price": 6.0,
+      "category": "Sabores",
+      "id": 9070,
+      "bot_id": 1220,
+      "is_available": true
+    },
+    {
+      "name": "Red velvet",
+      "description": "",
+      "price": 6.5,
+      "category": "Sabores",
+      "id": 9072,
+      "bot_id": 1220,
+      "is_available": true
+    },
+    {
+      "name": "Sorvete de laranja",
+      "description": "",
+      "price": 5.0,
+      "category": "Sabores",
+      "id": 9066,
+      "bot_id": 1220,
+      "is_available": true
+    }
+  ],
+  "category": "padaria"
+}

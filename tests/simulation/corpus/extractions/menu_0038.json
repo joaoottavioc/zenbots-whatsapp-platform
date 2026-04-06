@@ -1,0 +1,185 @@
+{
+  "products": [
+    {
+      "name": "Maionese de cenoura",
+      "description": "",
+      "price": 5.0,
+      "category": "Adicionais",
+      "id": 8236,
+      "bot_id": 1159,
+      "is_available": true
+    },
+    {
+      "name": "Maionese ervas",
+      "description": "",
+      "price": 5.0,
+      "category": "Adicionais",
+      "id": 8237,
+      "bot_id": 1159,
+      "is_available": true
+    },
+    {
+      "name": "Molho de alho",
+      "description": "",
+      "price": 5.0,
+      "category": "Adicionais",
+      "id": 8239,
+      "bot_id": 1159,
+      "is_available": true
+    },
+    {
+      "name": "Mostarda e mel",
+      "description": "",
+      "price": 5.0,
+      "category": "Adicionais",
+      "id": 8240,
+      "bot_id": 1159,
+      "is_available": true
+    },
+    {
+      "name": "Pimenta agridoce",
+      "description": "",
+      "price": 5.0,
+      "category": "Adicionais",
+      "id": 8238,
+      "bot_id": 1159,
+      "is_available": true
+    },
+    {
+      "name": "Água",
+      "description": "",
+      "price": 5.0,
+      "category": "Bebidas",
+      "id": 8241,
+      "bot_id": 1159,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante",
+      "description": "",
+      "price": 5.0,
+      "category": "Bebidas",
+      "id": 8242,
+      "bot_id": 1159,
+      "is_available": true
+    },
+    {
+      "name": "Americano",
+      "description": "",
+      "price": 15.0,
+      "category": "Lanches",
+      "id": 8234,
+      "bot_id": 1159,
+      "is_available": true
+    },
+    {
+      "name": "Bacon",
+      "description": "",
+      "price": 12.5,
+      "category": "Lanches",
+      "id": 8224,
+      "bot_id": 1159,
+      "is_available": true
+    },
+    {
+      "name": "Bacon c/ Catupiry",
+      "description": "",
+      "price": 12.5,
+      "category": "Lanches",
+      "id": 8225,
+      "bot_id": 1159,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa",
+      "description": "",
+      "price": 12.5,
+      "category": "Lanches",
+      "id": 8226,
+      "bot_id": 1159,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa c/ Catupiry",
+      "description": "",
+      "price": 15.0,
+      "category": "Lanches",
+      "id": 8227,
+      "bot_id": 1159,
+      "is_available": true
+    },
+    {
+      "name": "Carne Seca",
+      "description": "",
+      "price": 12.5,
+      "category": "Lanches",
+      "id": 8232,
+      "bot_id": 1159,
+      "is_available": true
+    },
+    {
+      "name": "Carne Seca c/ Catupiry",
+      "description": "",
+      "price": 15.0,
+      "category": "Lanches",
+      "id": 8233,
+      "bot_id": 1159,
+      "is_available": true
+    },
+    {
+      "name": "Completo",
+      "description": "",
+      "price": 20.0,
+      "category": "Lanches",
+      "id": 8235,
+      "bot_id": 1159,
+      "is_available": true
+    },
+    {
+      "name": "Costela",
+      "description": "",
+      "price": 17.0,
+      "category": "Lanches",
+      "id": 8228,
+      "bot_id": 1159,
+      "is_available": true
+    },
+    {
+      "name": "Costela c/ Catupiry",
+      "description": "",
+      "price": 17.0,
+      "category": "Lanches",
+      "id": 8229,
+      "bot_id": 1159,
+      "is_available": true
+    },
+    {
+      "name": "Frango",
+      "description": "",
+      "price": 12.5,
+      "category": "Lanches",
+      "id": 8230,
+      "bot_id": 1159,
+      "is_available": true
+    },
+    {
+      "name": "Frango c/ Catupiry",
+      "description": "",
+      "price": 15.0,
+      "category": "Lanches",
+      "id": 8231,
+      "bot_id": 1159,
+      "is_available": true
+    },
+    {
+      "name": "Tradicional",
+      "description": "",
+      "price": 10.0,
+      "category": "Lanches",
+      "id": 8223,
+      "bot_id": 1159,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

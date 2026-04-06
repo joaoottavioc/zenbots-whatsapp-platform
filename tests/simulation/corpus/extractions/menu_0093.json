@@ -1,0 +1,194 @@
+{
+  "products": [
+    {
+      "name": "Adicional de Requeijão",
+      "description": "",
+      "price": 1.0,
+      "category": "Adicionais",
+      "id": 9249,
+      "bot_id": 1235,
+      "is_available": true
+    },
+    {
+      "name": "Café",
+      "description": "",
+      "price": 1.0,
+      "category": "Cafés",
+      "id": 9241,
+      "bot_id": 1235,
+      "is_available": true
+    },
+    {
+      "name": "Café com Leite",
+      "description": "",
+      "price": 2.0,
+      "category": "Cafés",
+      "id": 9242,
+      "bot_id": 1235,
+      "is_available": true
+    },
+    {
+      "name": "Cuzcuz com Carne Moída",
+      "description": "",
+      "price": 6.0,
+      "category": "Cuzcuz",
+      "id": 9259,
+      "bot_id": 1235,
+      "is_available": true
+    },
+    {
+      "name": "Cuzcuz com Manteiga",
+      "description": "",
+      "price": 4.0,
+      "category": "Cuzcuz",
+      "id": 9256,
+      "bot_id": 1235,
+      "is_available": true
+    },
+    {
+      "name": "Cuzcuz com Ovo",
+      "description": "",
+      "price": 5.0,
+      "category": "Cuzcuz",
+      "id": 9257,
+      "bot_id": 1235,
+      "is_available": true
+    },
+    {
+      "name": "Cuzcuz com Presunto",
+      "description": "",
+      "price": 5.0,
+      "category": "Cuzcuz",
+      "id": 9258,
+      "bot_id": 1235,
+      "is_available": true
+    },
+    {
+      "name": "Misto Quente",
+      "description": "",
+      "price": 6.0,
+      "category": "Pães",
+      "id": 9255,
+      "bot_id": 1235,
+      "is_available": true
+    },
+    {
+      "name": "Pão com Carne e Queijo",
+      "description": "",
+      "price": 6.0,
+      "category": "Pães",
+      "id": 9254,
+      "bot_id": 1235,
+      "is_available": true
+    },
+    {
+      "name": "Pão com Carne Moída",
+      "description": "",
+      "price": 5.0,
+      "category": "Pães",
+      "id": 9253,
+      "bot_id": 1235,
+      "is_available": true
+    },
+    {
+      "name": "Pão com Manteiga",
+      "description": "",
+      "price": 2.0,
+      "category": "Pães",
+      "id": 9250,
+      "bot_id": 1235,
+      "is_available": true
+    },
+    {
+      "name": "Pão com Ovo",
+      "description": "",
+      "price": 4.0,
+      "category": "Pães",
+      "id": 9252,
+      "bot_id": 1235,
+      "is_available": true
+    },
+    {
+      "name": "Pão na Chapa com Manteiga",
+      "description": "",
+      "price": 3.0,
+      "category": "Pães",
+      "id": 9251,
+      "bot_id": 1235,
+      "is_available": true
+    },
+    {
+      "name": "Caldo",
+      "description": "",
+      "price": 4.0,
+      "category": "Sopas e Caldos",
+      "id": 9261,
+      "bot_id": 1235,
+      "is_available": true
+    },
+    {
+      "name": "Sopa",
+      "description": "",
+      "price": 4.0,
+      "category": "Sopas e Caldos",
+      "id": 9260,
+      "bot_id": 1235,
+      "is_available": true
+    },
+    {
+      "name": "Tapioca com Calabresa",
+      "description": "",
+      "price": 5.0,
+      "category": "Tapiocas",
+      "id": 9248,
+      "bot_id": 1235,
+      "is_available": true
+    },
+    {
+      "name": "Tapioca com Carne Moída",
+      "description": "",
+      "price": 5.0,
+      "category": "Tapiocas",
+      "id": 9247,
+      "bot_id": 1235,
+      "is_available": true
+    },
+    {
+      "name": "Tapioca com Manteiga",
+      "description": "",
+      "price": 2.0,
+      "category": "Tapiocas",
+      "id": 9243,
+      "bot_id": 1235,
+      "is_available": true
+    },
+    {
+      "name": "Tapioca com Ovo",
+      "description": "",
+      "price": 4.0,
+      "category": "Tapiocas",
+      "id": 9244,
+      "bot_id": 1235,
+      "is_available": true
+    },
+    {
+      "name": "Tapioca com Presunto",
+      "description": "",
+      "price": 4.0,
+      "category": "Tapiocas",
+      "id": 9246,
+      "bot_id": 1235,
+      "is_available": true
+    },
+    {
+      "name": "Tapioca com Queijo",
+      "description": "",
+      "price": 4.0,
+      "category": "Tapiocas",
+      "id": 9245,
+      "bot_id": 1235,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

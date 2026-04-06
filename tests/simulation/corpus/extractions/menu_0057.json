@@ -1,0 +1,257 @@
+{
+  "products": [
+    {
+      "name": "Filé de Frango Empanado 200 Grs",
+      "description": "",
+      "price": 21.5,
+      "category": "A La Carte Especial",
+      "id": 8621,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Medalhão de Filé de Frango 220 Grs",
+      "description": "",
+      "price": 25.0,
+      "category": "A La Carte Especial",
+      "id": 8622,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Picanha Grelhada em Posta de Queijo 220 Grs",
+      "description": "",
+      "price": 25.0,
+      "category": "A La Carte Especial",
+      "id": 8620,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Água Mineral 1 L",
+      "description": "",
+      "price": 5.0,
+      "category": "Bebidas",
+      "id": 8636,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Água Mineral 500 Ml",
+      "description": "",
+      "price": 3.0,
+      "category": "Bebidas",
+      "id": 8635,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Coca-Cola 350 Ml",
+      "description": "",
+      "price": 5.0,
+      "category": "Bebidas",
+      "id": 8631,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Coca-Cola 600 Ml",
+      "description": "",
+      "price": 7.0,
+      "category": "Bebidas",
+      "id": 8632,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Guaraná 350 Ml",
+      "description": "",
+      "price": 5.0,
+      "category": "Bebidas",
+      "id": 8633,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Guaraná 600 Ml",
+      "description": "",
+      "price": 7.0,
+      "category": "Bebidas",
+      "id": 8634,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante 1 L",
+      "description": "",
+      "price": 7.0,
+      "category": "Bebidas",
+      "id": 8638,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante Lata",
+      "description": "",
+      "price": 5.0,
+      "category": "Bebidas",
+      "id": 8637,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Creme de Abacate",
+      "description": "",
+      "price": 5.0,
+      "category": "Creme",
+      "id": 8629,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Creme de Morango",
+      "description": "",
+      "price": 5.0,
+      "category": "Creme",
+      "id": 8630,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Batata Frita Tradicional 600 Grs",
+      "description": "",
+      "price": 16.0,
+      "category": "Porções",
+      "id": 8615,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Costelinha Grelhada 600 Grs",
+      "description": "",
+      "price": 29.9,
+      "category": "Porções",
+      "id": 8613,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Filé Mignon a Palha na Chapa 600 Grs",
+      "description": "",
+      "price": 43.0,
+      "category": "Porções",
+      "id": 8611,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Frango a Chapa 600 Grs",
+      "description": "",
+      "price": 24.9,
+      "category": "Porções",
+      "id": 8612,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Mandioquinha Frita",
+      "description": "",
+      "price": 14.9,
+      "category": "Porções",
+      "id": 8616,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Panqueca a Passarinho",
+      "description": "",
+      "price": 24.9,
+      "category": "Porções",
+      "id": 8614,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Carne de Sol Acebolada 600 Grs",
+      "description": "",
+      "price": 29.9,
+      "category": "Pratos Especiais",
+      "id": 8624,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Carne de Sol na Chapa 600 Grs",
+      "description": "",
+      "price": 29.9,
+      "category": "Pratos Especiais",
+      "id": 8625,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Coxinha da Asa de Frango 600 Grs",
+      "description": "",
+      "price": 20.0,
+      "category": "Pratos Especiais",
+      "id": 8623,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Bife de Alcatra Acebolado",
+      "description": "",
+      "price": 17.0,
+      "category": "Refeições",
+      "id": 8617,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Bife de Filé Mignon",
+      "description": "",
+      "price": 21.0,
+      "category": "Refeições",
+      "id": 8618,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Filé de Peixe",
+      "description": "",
+      "price": 16.0,
+      "category": "Refeições",
+      "id": 8619,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Suco de Abacaxi",
+      "description": "",
+      "price": 4.5,
+      "category": "Sucos",
+      "id": 8626,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Suco de Laranja",
+      "description": "",
+      "price": 4.5,
+      "category": "Sucos",
+      "id": 8627,
+      "bot_id": 1188,
+      "is_available": true
+    },
+    {
+      "name": "Suco de Limão",
+      "description": "",
+      "price": 4.5,
+      "category": "Sucos",
+      "id": 8628,
+      "bot_id": 1188,
+      "is_available": true
+    }
+  ],
+  "category": "churrascaria"
+}

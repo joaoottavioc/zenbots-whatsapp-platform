@@ -1,0 +1,266 @@
+{
+  "products": [
+    {
+      "name": "Água",
+      "description": "",
+      "price": 3.0,
+      "category": "Bebidas",
+      "id": 9280,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Água com gás",
+      "description": "",
+      "price": 3.0,
+      "category": "Bebidas",
+      "id": 9281,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Energético",
+      "description": "",
+      "price": 10.0,
+      "category": "Bebidas",
+      "id": 9285,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante Lata",
+      "description": "",
+      "price": 3.0,
+      "category": "Bebidas",
+      "id": 9282,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante Mini",
+      "description": "",
+      "price": 3.0,
+      "category": "Bebidas",
+      "id": 9283,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Suco DelVale",
+      "description": "",
+      "price": 7.0,
+      "category": "Bebidas",
+      "id": 9284,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Antarctica Boa",
+      "description": "",
+      "price": 7.5,
+      "category": "Cervejas",
+      "id": 9286,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Chopp 300ml",
+      "description": "",
+      "price": 5.5,
+      "category": "Cervejas",
+      "id": 9290,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Conti",
+      "description": "",
+      "price": 5.5,
+      "category": "Cervejas",
+      "id": 9288,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Long Neck",
+      "description": "",
+      "price": 6.0,
+      "category": "Cervejas",
+      "id": 9289,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Skol",
+      "description": "",
+      "price": 8.5,
+      "category": "Cervejas",
+      "id": 9287,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "À Bolonhesa",
+      "description": "",
+      "price": 14.0,
+      "category": "Macarrão",
+      "id": 9275,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Alho e Óleo c/ Brócolis",
+      "description": "",
+      "price": 14.0,
+      "category": "Macarrão",
+      "id": 9276,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Ao Suco",
+      "description": "",
+      "price": 13.0,
+      "category": "Macarrão",
+      "id": 9279,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Atum",
+      "description": "",
+      "price": 14.0,
+      "category": "Macarrão",
+      "id": 9277,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Milho Branco e Bacon",
+      "description": "",
+      "price": 14.0,
+      "category": "Macarrão",
+      "id": 9278,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Batata Frita",
+      "description": "",
+      "price": 21.0,
+      "category": "Porções",
+      "id": 9266,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Batata Frita Especial",
+      "description": "",
+      "price": 21.0,
+      "category": "Porções",
+      "id": 9267,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Bolinho de Arroz",
+      "description": "",
+      "price": 21.0,
+      "category": "Porções",
+      "id": 9268,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Bolinho de Carne",
+      "description": "",
+      "price": 35.0,
+      "category": "Porções",
+      "id": 9272,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Frango a Passarinho",
+      "description": "",
+      "price": 28.0,
+      "category": "Porções",
+      "id": 9269,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Isca de Tilápia",
+      "description": "",
+      "price": 28.0,
+      "category": "Porções",
+      "id": 9270,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Tábua de Frios",
+      "description": "",
+      "price": 35.0,
+      "category": "Porções",
+      "id": 9271,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Bife à Cavalo",
+      "description": "",
+      "price": 13.0,
+      "category": "Pratos",
+      "id": 9263,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Bife Acebolado",
+      "description": "",
+      "price": 13.0,
+      "category": "Pratos",
+      "id": 9262,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Bife à Parmegiana",
+      "description": "",
+      "price": 13.0,
+      "category": "Pratos",
+      "id": 9264,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Contra-Filé Acebolado",
+      "description": "",
+      "price": 36.0,
+      "category": "Pratos",
+      "id": 9273,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Filé de Frango",
+      "description": "",
+      "price": 13.0,
+      "category": "Pratos",
+      "id": 9265,
+      "bot_id": 1236,
+      "is_available": true
+    },
+    {
+      "name": "Picanha Acebolada",
+      "description": "",
+      "price": 40.0,
+      "category": "Pratos",
+      "id": 9274,
+      "bot_id": 1236,
+      "is_available": true
+    }
+  ],
+  "category": "padaria"
+}

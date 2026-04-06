@@ -1,0 +1,140 @@
+{
+  "products": [
+    {
+      "name": "Camarão e purê de mandioca",
+      "description": "",
+      "price": 7.0,
+      "category": "Camarão",
+      "id": 9177,
+      "bot_id": 1229,
+      "is_available": true
+    },
+    {
+      "name": "Camarão e queijo",
+      "description": "",
+      "price": 6.0,
+      "category": "Camarão",
+      "id": 9176,
+      "bot_id": 1229,
+      "is_available": true
+    },
+    {
+      "name": "Camarão, queijo, vinagrete, milho e azeitona",
+      "description": "",
+      "price": 8.0,
+      "category": "Camarão",
+      "id": 9178,
+      "bot_id": 1229,
+      "is_available": true
+    },
+    {
+      "name": "Carne seca e queijo",
+      "description": "",
+      "price": 5.0,
+      "category": "Carne seca",
+      "id": 9171,
+      "bot_id": 1229,
+      "is_available": true
+    },
+    {
+      "name": "Carne seca, purê de mandioca e banana frita",
+      "description": "",
+      "price": 7.0,
+      "category": "Carne seca",
+      "id": 9174,
+      "bot_id": 1229,
+      "is_available": true
+    },
+    {
+      "name": "Carne seca, queijo e banana frita",
+      "description": "",
+      "price": 6.0,
+      "category": "Carne seca",
+      "id": 9173,
+      "bot_id": 1229,
+      "is_available": true
+    },
+    {
+      "name": "Carne seca, queijo e purê de mandioca",
+      "description": "",
+      "price": 6.0,
+      "category": "Carne seca",
+      "id": 9172,
+      "bot_id": 1229,
+      "is_available": true
+    },
+    {
+      "name": "Carne seca, vinagrete, milho, azeitona e palmito",
+      "description": "",
+      "price": 10.0,
+      "category": "Carne seca",
+      "id": 9175,
+      "bot_id": 1229,
+      "is_available": true
+    },
+    {
+      "name": "Frango com queijo",
+      "description": "",
+      "price": 4.0,
+      "category": "Frango",
+      "id": 9166,
+      "bot_id": 1229,
+      "is_available": true
+    },
+    {
+      "name": "Frango, queijo, bacon, vinagrete, milho e azeitona",
+      "description": "",
+      "price": 6.0,
+      "category": "Frango",
+      "id": 9168,
+      "bot_id": 1229,
+      "is_available": true
+    },
+    {
+      "name": "Frango, queijo, calabresa, bacon, vinagrete, milho e azeitona",
+      "description": "",
+      "price": 7.0,
+      "category": "Frango",
+      "id": 9169,
+      "bot_id": 1229,
+      "is_available": true
+    },
+    {
+      "name": "Frango, queijo, calabresa, bacon, vinagrete, milho, palmito e azeitona",
+      "description": "",
+      "price": 8.0,
+      "category": "Frango",
+      "id": 9170,
+      "bot_id": 1229,
+      "is_available": true
+    },
+    {
+      "name": "Frango, queijo e presunto",
+      "description": "",
+      "price": 5.0,
+      "category": "Frango",
+      "id": 9167,
+      "bot_id": 1229,
+      "is_available": true
+    },
+    {
+      "name": "Presunto e queijo",
+      "description": "",
+      "price": 3.0,
+      "category": "Presunto",
+      "id": 9179,
+      "bot_id": 1229,
+      "is_available": true
+    },
+    {
+      "name": "Presunto, queijo, vinagrete, milho e azeitona",
+      "description": "",
+      "price": 7.0,
+      "category": "Presunto",
+      "id": 9180,
+      "bot_id": 1229,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

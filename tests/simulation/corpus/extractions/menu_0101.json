@@ -1,0 +1,176 @@
+{
+  "products": [
+    {
+      "name": "Água Mineral",
+      "description": "",
+      "price": 19.9,
+      "category": "Bebidas",
+      "id": 9367,
+      "bot_id": 1243,
+      "is_available": true
+    },
+    {
+      "name": "Limonada",
+      "description": "",
+      "price": 19.9,
+      "category": "Bebidas",
+      "id": 9370,
+      "bot_id": 1243,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante 1L",
+      "description": "",
+      "price": 19.9,
+      "category": "Bebidas",
+      "id": 9368,
+      "bot_id": 1243,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante 2L",
+      "description": "",
+      "price": 19.9,
+      "category": "Bebidas",
+      "id": 9369,
+      "bot_id": 1243,
+      "is_available": true
+    },
+    {
+      "name": "Suco de Fruta",
+      "description": "",
+      "price": 19.9,
+      "category": "Bebidas",
+      "id": 9366,
+      "bot_id": 1243,
+      "is_available": true
+    },
+    {
+      "name": "Misto Quente",
+      "description": "",
+      "price": 19.9,
+      "category": "Lanches",
+      "id": 9358,
+      "bot_id": 1243,
+      "is_available": true
+    },
+    {
+      "name": "Pão com Ovo",
+      "description": "",
+      "price": 19.9,
+      "category": "Lanches",
+      "id": 9359,
+      "bot_id": 1243,
+      "is_available": true
+    },
+    {
+      "name": "X-Bacon",
+      "description": "",
+      "price": 19.9,
+      "category": "Lanches",
+      "id": 9354,
+      "bot_id": 1243,
+      "is_available": true
+    },
+    {
+      "name": "X-Burger",
+      "description": "",
+      "price": 19.9,
+      "category": "Lanches",
+      "id": 9352,
+      "bot_id": 1243,
+      "is_available": true
+    },
+    {
+      "name": "X-Calabresa",
+      "description": "",
+      "price": 19.9,
+      "category": "Lanches",
+      "id": 9357,
+      "bot_id": 1243,
+      "is_available": true
+    },
+    {
+      "name": "X-Frango",
+      "description": "",
+      "price": 19.9,
+      "category": "Lanches",
+      "id": 9356,
+      "bot_id": 1243,
+      "is_available": true
+    },
+    {
+      "name": "X-Salada",
+      "description": "",
+      "price": 19.9,
+      "category": "Lanches",
+      "id": 9355,
+      "bot_id": 1243,
+      "is_available": true
+    },
+    {
+      "name": "X-Tudo",
+      "description": "",
+      "price": 19.9,
+      "category": "Lanches",
+      "id": 9353,
+      "bot_id": 1243,
+      "is_available": true
+    },
+    {
+      "name": "Batata com Bacon",
+      "description": "",
+      "price": 19.9,
+      "category": "Porções",
+      "id": 9362,
+      "bot_id": 1243,
+      "is_available": true
+    },
+    {
+      "name": "Batata Frita M",
+      "description": "",
+      "price": 19.9,
+      "category": "Porções",
+      "id": 9361,
+      "bot_id": 1243,
+      "is_available": true
+    },
+    {
+      "name": "Batata Frita P",
+      "description": "",
+      "price": 19.9,
+      "category": "Porções",
+      "id": 9360,
+      "bot_id": 1243,
+      "is_available": true
+    },
+    {
+      "name": "Coxinhas",
+      "description": "",
+      "price": 19.9,
+      "category": "Porções",
+      "id": 9365,
+      "bot_id": 1243,
+      "is_available": true
+    },
+    {
+      "name": "Pastel Frito",
+      "description": "",
+      "price": 19.9,
+      "category": "Porções",
+      "id": 9364,
+      "bot_id": 1243,
+      "is_available": true
+    },
+    {
+      "name": "Salada Completa",
+      "description": "",
+      "price": 19.9,
+      "category": "Porções",
+      "id": 9363,
+      "bot_id": 1243,
+      "is_available": true
+    }
+  ],
+  "category": "lanchonete"
+}

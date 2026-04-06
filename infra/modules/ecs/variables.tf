@@ -25,7 +25,20 @@ variable "ecs_security_group_id" {
 }
 
 variable "target_group_arn" {
-  type = string
+  type    = string
+  default = ""
+}
+
+variable "enable_alb" {
+  description = "Whether to attach ALB load_balancer block to backend service. False for dev (Caddy on NAT)."
+  type        = bool
+  default     = true
+}
+
+variable "service_discovery_arn" {
+  description = "Cloud Map service ARN for backend service discovery. Empty string disables service registries."
+  type        = string
+  default     = ""
 }
 
 # --- Cluster ---

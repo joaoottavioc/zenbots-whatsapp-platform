@@ -94,6 +94,7 @@ resource "aws_cloudwatch_metric_alarm" "worker_memory_high" {
 # ------------------ ALB Alarms ------------------
 
 resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
+  count               = var.alb_arn_suffix != "" ? 1 : 0
   alarm_name          = "${var.project}-${var.environment}-alb-5xx"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
@@ -167,6 +168,7 @@ resource "aws_cloudwatch_metric_alarm" "rds_connections_high" {
 # ------------------ ALB Additional Alarms ------------------
 
 resource "aws_cloudwatch_metric_alarm" "alb_unhealthy_hosts" {
+  count               = var.alb_arn_suffix != "" ? 1 : 0
   alarm_name          = "${var.project}-${var.environment}-alb-unhealthy-hosts"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
@@ -186,6 +188,7 @@ resource "aws_cloudwatch_metric_alarm" "alb_unhealthy_hosts" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "alb_latency_high" {
+  count               = var.alb_arn_suffix != "" ? 1 : 0
   alarm_name          = "${var.project}-${var.environment}-alb-latency-high"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 3
@@ -203,9 +206,10 @@ resource "aws_cloudwatch_metric_alarm" "alb_latency_high" {
   }
 }
 
-# ------------------ ElastiCache Alarms ------------------
+# ------------------ ElastiCache Alarms (only when using managed ElastiCache) --
 
 resource "aws_cloudwatch_metric_alarm" "redis_cpu_high" {
+  count               = var.elasticache_replication_group_id != "" ? 1 : 0
   alarm_name          = "${var.project}-${var.environment}-redis-cpu-high"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 3
@@ -223,6 +227,7 @@ resource "aws_cloudwatch_metric_alarm" "redis_cpu_high" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "redis_memory_high" {
+  count               = var.elasticache_replication_group_id != "" ? 1 : 0
   alarm_name          = "${var.project}-${var.environment}-redis-memory-high"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
@@ -240,6 +245,7 @@ resource "aws_cloudwatch_metric_alarm" "redis_memory_high" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "redis_evictions" {
+  count               = var.elasticache_replication_group_id != "" ? 1 : 0
   alarm_name          = "${var.project}-${var.environment}-redis-evictions"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2

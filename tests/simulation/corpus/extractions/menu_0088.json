@@ -1,0 +1,239 @@
+{
+  "products": [
+    {
+      "name": "Alpin",
+      "description": "",
+      "price": 16.0,
+      "category": "Di Beliscar",
+      "id": 9184,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Batata Frita",
+      "description": "",
+      "price": 16.0,
+      "category": "Di Beliscar",
+      "id": 9185,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Bolinho de Alpin (8 und.)",
+      "description": "",
+      "price": 22.0,
+      "category": "Di Beliscar",
+      "id": 9191,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Bolinho de Arroz Nordestino (10 und.)",
+      "description": "",
+      "price": 22.0,
+      "category": "Di Beliscar",
+      "id": 9190,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Bolinho de Feijão (4 und.)",
+      "description": "",
+      "price": 20.0,
+      "category": "Di Beliscar",
+      "id": 9189,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa Acebolada",
+      "description": "",
+      "price": 22.0,
+      "category": "Di Beliscar",
+      "id": 9181,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Camarão Empanado Recheado (6 und.)",
+      "description": "",
+      "price": 39.0,
+      "category": "Di Beliscar",
+      "id": 9188,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Caranguejo (5 und.)",
+      "description": "",
+      "price": 39.0,
+      "category": "Di Beliscar",
+      "id": 9195,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Carne de Sol com Alpin",
+      "description": "",
+      "price": 39.0,
+      "category": "Di Beliscar",
+      "id": 9183,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Carne de Sol na Tábua",
+      "description": "(Icanha)",
+      "price": 39.0,
+      "category": "Di Beliscar",
+      "id": 9193,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Carne Seca com Alpin",
+      "description": "",
+      "price": 39.0,
+      "category": "Di Beliscar",
+      "id": 9182,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Gurjão de Frango (5 und.)",
+      "description": "",
+      "price": 39.0,
+      "category": "Di Beliscar",
+      "id": 9194,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Pastel à Moda Nordestina",
+      "description": "",
+      "price": 29.0,
+      "category": "Di Beliscar",
+      "id": 9192,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Queijo Coalho",
+      "description": "",
+      "price": 18.0,
+      "category": "Di Beliscar",
+      "id": 9187,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Torresmo",
+      "description": "",
+      "price": 18.0,
+      "category": "Di Beliscar",
+      "id": 9186,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Baixão de Dois",
+      "description": "baião, arroz e molho",
+      "price": 59.9,
+      "category": "Di Cumê",
+      "id": 9196,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Bobo de Camarão",
+      "description": "arroz, farofa, batata palha",
+      "price": 69.9,
+      "category": "Di Cumê",
+      "id": 9201,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Frango Com Quiabo",
+      "description": "",
+      "price": 39.9,
+      "category": "Di Cumê",
+      "id": 9198,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Lingua Arretada",
+      "description": "arroz, feijão e farofa",
+      "price": 39.9,
+      "category": "Di Cumê",
+      "id": 9197,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Moqueca de Peixe",
+      "description": "arroz, pirão e salada",
+      "price": 69.9,
+      "category": "Di Cumê",
+      "id": 9200,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Peixe Frito",
+      "description": "arroz, farofa, batata frita",
+      "price": 59.9,
+      "category": "Di Cumê",
+      "id": 9202,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Prato Infantil",
+      "description": "",
+      "price": 19.9,
+      "category": "Di Cumê",
+      "id": 9203,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Sarapatel",
+      "description": "arroz, farofa ou farofa",
+      "price": 39.9,
+      "category": "Di Cumê",
+      "id": 9199,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Arroz",
+      "description": "",
+      "price": 9.0,
+      "category": "Guarnições",
+      "id": 9204,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Ovo",
+      "description": "",
+      "price": 9.0,
+      "category": "Guarnições",
+      "id": 9206,
+      "bot_id": 1230,
+      "is_available": true
+    },
+    {
+      "name": "Salada",
+      "description": "",
+      "price": 9.0,
+      "category": "Guarnições",
+      "id": 9205,
+      "bot_id": 1230,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

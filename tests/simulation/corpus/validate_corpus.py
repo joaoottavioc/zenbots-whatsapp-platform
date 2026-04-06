@@ -10,10 +10,16 @@ Run: python tests/simulation/corpus/validate_corpus.py
 import asyncio
 import json
 import subprocess
+import sys
 import time
 from pathlib import Path
 
 import httpx
+
+# Ensure app module is importable when running as a script inside Docker
+_project_root = Path(__file__).resolve().parent.parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 
 CORPUS = Path(__file__).parent
 MANIFEST = CORPUS / "manifest.json"
@@ -112,43 +118,90 @@ def detect_category(products: list) -> str:
     return best if scores[best] > 0 else "outros"
 
 
-def delete_bot(bot_id: int):
-    sql = f"""DO $$ DECLARE _bid int := {bot_id}; _cids int[]; _carts int[];
-    BEGIN
-      SELECT ARRAY(SELECT id FROM contact WHERE bot_id=_bid) INTO _cids;
-      SELECT ARRAY(SELECT id FROM shoppingcart WHERE contact_id=ANY(_cids)) INTO _carts;
-      DELETE FROM cartitem WHERE cart_id=ANY(_carts);
-      DELETE FROM shoppingcart WHERE id=ANY(_carts);
-      DELETE FROM conversationhistory WHERE bot_id=_bid;
-      DELETE FROM contact WHERE id=ANY(_cids);
-      DELETE FROM product WHERE bot_id=_bid;
-      DELETE FROM subscription WHERE bot_id=_bid;
-      DELETE FROM bot WHERE id=_bid;
-    END $$;"""
-    subprocess.run(
-        [
-            "docker",
-            "compose",
-            "exec",
-            "-T",
-            "db",
-            "psql",
-            "-U",
-            "postgres",
-            "-d",
-            "botbuilder",
-            "-c",
-            sql,
-        ],
-        cwd=str(PROJECT_ROOT),
-        capture_output=True,
-        text=True,
-    )
+async def delete_bot(bot_id: int):
+    import shutil
+
+    if shutil.which("docker"):
+        sql = f"""DO $$ DECLARE _bid int := {bot_id}; _cids int[]; _carts int[];
+        BEGIN
+          SELECT ARRAY(SELECT id FROM contact WHERE bot_id=_bid) INTO _cids;
+          SELECT ARRAY(SELECT id FROM shoppingcart WHERE contact_id=ANY(_cids)) INTO _carts;
+          DELETE FROM cartitem WHERE cart_id=ANY(_carts);
+          DELETE FROM shoppingcart WHERE id=ANY(_carts);
+          DELETE FROM conversationhistory WHERE bot_id=_bid;
+          DELETE FROM contact WHERE id=ANY(_cids);
+          DELETE FROM product WHERE bot_id=_bid;
+          DELETE FROM subscription WHERE bot_id=_bid;
+          DELETE FROM bot WHERE id=_bid;
+        END $$;"""
+        subprocess.run(
+            [
+                "docker",
+                "compose",
+                "exec",
+                "-T",
+                "db",
+                "psql",
+                "-U",
+                "postgres",
+                "-d",
+                "botbuilder",
+                "-c",
+                sql,
+            ],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+        )
+    else:
+        from sqlalchemy import text as sa_text
+        from app.database import async_session
+
+        async with async_session() as session:
+            r = await session.execute(
+                sa_text(f"SELECT id FROM contact WHERE bot_id = {bot_id}")
+            )
+            cids = [row[0] for row in r.fetchall()]
+            if cids:
+                cids_str = ",".join(str(x) for x in cids)
+                r2 = await session.execute(
+                    sa_text(
+                        f"SELECT id FROM shoppingcart WHERE contact_id IN ({cids_str})"
+                    )
+                )
+                cart_ids = [row[0] for row in r2.fetchall()]
+                if cart_ids:
+                    carts_str = ",".join(str(x) for x in cart_ids)
+                    await session.execute(
+                        sa_text(f"DELETE FROM cartitem WHERE cart_id IN ({carts_str})")
+                    )
+                    await session.execute(
+                        sa_text(f"DELETE FROM shoppingcart WHERE id IN ({carts_str})")
+                    )
+                await session.execute(
+                    sa_text(
+                        f"DELETE FROM conversationhistory WHERE contact_id IN ({cids_str})"
+                    )
+                )
+                await session.execute(
+                    sa_text(f"DELETE FROM contact WHERE id IN ({cids_str})")
+                )
+            await session.execute(
+                sa_text(f"DELETE FROM conversationhistory WHERE bot_id = {bot_id}")
+            )
+            await session.execute(
+                sa_text(f"DELETE FROM product WHERE bot_id = {bot_id}")
+            )
+            await session.execute(
+                sa_text(f"DELETE FROM subscription WHERE bot_id = {bot_id}")
+            )
+            await session.execute(sa_text(f"DELETE FROM bot WHERE id = {bot_id}"))
+            await session.commit()
 
 
 async def validate_all():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    unvalidated = [e for e in manifest if not e.get("validated")]
+    unvalidated = [e for e in manifest if e.get("validated") is None]
 
     if not unvalidated:
         print("All images already validated!")
@@ -222,7 +275,7 @@ async def validate_all():
                 )
                 products = prod_resp.json() if prod_resp.status_code == 200 else []
 
-                if len(products) >= 5:
+                if len(products) >= 8:
                     category = detect_category(products)
                     entry["validated"] = True
                     entry["product_count"] = len(products)
@@ -253,7 +306,7 @@ async def validate_all():
                     print(f"REJECTED -- only {len(products)} products")
 
             finally:
-                delete_bot(bot_id)
+                await delete_bot(bot_id)
 
         MANIFEST.write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"

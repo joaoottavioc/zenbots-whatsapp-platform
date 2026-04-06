@@ -1,0 +1,104 @@
+{
+  "products": [
+    {
+      "name": "CARNE DE HAMBURGER",
+      "description": "",
+      "price": 3.0,
+      "category": "Adicionais",
+      "id": 8483,
+      "bot_id": 1179,
+      "is_available": true
+    },
+    {
+      "name": "OVO",
+      "description": "",
+      "price": 3.0,
+      "category": "Adicionais",
+      "id": 8484,
+      "bot_id": 1179,
+      "is_available": true
+    },
+    {
+      "name": "EGG BURGER",
+      "description": "Pão, carne, ovo, alface, tomate, milho, salada de batata, batata palha.",
+      "price": 8.0,
+      "category": "Lanches",
+      "id": 8475,
+      "bot_id": 1179,
+      "is_available": true
+    },
+    {
+      "name": "HAMBURGER ESPECIAL",
+      "description": "Pão, carne, 2 presuntos, alface, tomate, milho, batata palha.",
+      "price": 7.0,
+      "category": "Lanches",
+      "id": 8474,
+      "bot_id": 1179,
+      "is_available": true
+    },
+    {
+      "name": "X-BACON",
+      "description": "Pão, carne, ovo, bacon, queijo, alface, tomate, milho, ozeitona, ovo de codorna, salada de batata, batata palha.",
+      "price": 12.0,
+      "category": "Lanches",
+      "id": 8478,
+      "bot_id": 1179,
+      "is_available": true
+    },
+    {
+      "name": "X-BURGER",
+      "description": "Pão, carne, queijo, alface, tomate, milho, salada de batata, batata palha.",
+      "price": 8.5,
+      "category": "Lanches",
+      "id": 8476,
+      "bot_id": 1179,
+      "is_available": true
+    },
+    {
+      "name": "X-EGG",
+      "description": "Pão, carne, ovo, queijo, alface, tomate, milho, salada de batata, batata palha.",
+      "price": 9.0,
+      "category": "Lanches",
+      "id": 8477,
+      "bot_id": 1179,
+      "is_available": true
+    },
+    {
+      "name": "X-EGG BACON",
+      "description": "Pão, carne, ovo, bacon, queijo, alface, tomate, milho, ozeitona, ovo de codorna, salada de batata, batata palha.",
+      "price": 11.0,
+      "category": "Lanches",
+      "id": 8479,
+      "bot_id": 1179,
+      "is_available": true
+    },
+    {
+      "name": "X-FRANGO BACON",
+      "description": "Pão, filé de frango, ovo, alface, queijo, tomate, milho, salada de batata, batata palha.",
+      "price": 15.0,
+      "category": "Lanches",
+      "id": 8481,
+      "bot_id": 1179,
+      "is_available": true
+    },
+    {
+      "name": "X-TONELADA",
+      "description": "2 carnes, 2 ovos, bacon, presunto, alface, tomate, milho, ozeitona, salada de batata, batata palha.",
+      "price": 23.0,
+      "category": "Lanches",
+      "id": 8482,
+      "bot_id": 1179,
+      "is_available": true
+    },
+    {
+      "name": "X-TUDO",
+      "description": "Pão, carne, presunto, queijo, bacon, alface, tomate, milho, ozeitona, ovo de codorna, salada de batata, batata palha.",
+      "price": 12.99,
+      "category": "Lanches",
+      "id": 8480,
+      "bot_id": 1179,
+      "is_available": true
+    }
+  ],
+  "category": "lanchonete"
+}

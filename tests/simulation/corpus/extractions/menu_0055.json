@@ -1,0 +1,113 @@
+{
+  "products": [
+    {
+      "name": "Barca",
+      "description": "",
+      "price": 4.5,
+      "category": "Salgados",
+      "id": 8571,
+      "bot_id": 1185,
+      "is_available": true
+    },
+    {
+      "name": "Burguer",
+      "description": "",
+      "price": 4.5,
+      "category": "Salgados",
+      "id": 8569,
+      "bot_id": 1185,
+      "is_available": true
+    },
+    {
+      "name": "Coxinha Frango",
+      "description": "",
+      "price": 4.5,
+      "category": "Salgados",
+      "id": 8563,
+      "bot_id": 1185,
+      "is_available": true
+    },
+    {
+      "name": "Coxinha Frango c/ Catupiry",
+      "description": "",
+      "price": 4.5,
+      "category": "Salgados",
+      "id": 8564,
+      "bot_id": 1185,
+      "is_available": true
+    },
+    {
+      "name": "Empada",
+      "description": "",
+      "price": 4.5,
+      "category": "Salgados",
+      "id": 8573,
+      "bot_id": 1185,
+      "is_available": true
+    },
+    {
+      "name": "Enfihrra de Carne",
+      "description": "",
+      "price": 4.5,
+      "category": "Salgados",
+      "id": 8567,
+      "bot_id": 1185,
+      "is_available": true
+    },
+    {
+      "name": "Enrolado de Salsicha",
+      "description": "",
+      "price": 4.5,
+      "category": "Salgados",
+      "id": 8570,
+      "bot_id": 1185,
+      "is_available": true
+    },
+    {
+      "name": "Esfirra de Frango",
+      "description": "",
+      "price": 4.5,
+      "category": "Salgados",
+      "id": 8566,
+      "bot_id": 1185,
+      "is_available": true
+    },
+    {
+      "name": "Hot Dog",
+      "description": "",
+      "price": 4.5,
+      "category": "Salgados",
+      "id": 8568,
+      "bot_id": 1185,
+      "is_available": true
+    },
+    {
+      "name": "Pão de Queijo",
+      "description": "",
+      "price": 4.5,
+      "category": "Salgados",
+      "id": 8572,
+      "bot_id": 1185,
+      "is_available": true
+    },
+    {
+      "name": "Pastel",
+      "description": "",
+      "price": 5.0,
+      "category": "Salgados",
+      "id": 8574,
+      "bot_id": 1185,
+      "is_available": true
+    },
+    {
+      "name": "Quibe",
+      "description": "",
+      "price": 4.5,
+      "category": "Salgados",
+      "id": 8565,
+      "bot_id": 1185,
+      "is_available": true
+    }
+  ],
+  "category": "pastelaria"
+}

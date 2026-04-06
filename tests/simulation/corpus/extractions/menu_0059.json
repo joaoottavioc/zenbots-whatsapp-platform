@@ -1,0 +1,230 @@
+{
+  "products": [
+    {
+      "name": "Bacon com Fritas",
+      "description": "",
+      "price": 7.0,
+      "category": "Acompanhamento",
+      "id": 8688,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "Batata Frita",
+      "description": "",
+      "price": 5.0,
+      "category": "Acompanhamento",
+      "id": 8686,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa com Fritas",
+      "description": "",
+      "price": 6.0,
+      "category": "Acompanhamento",
+      "id": 8687,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante (1 litro)",
+      "description": "",
+      "price": 4.0,
+      "category": "Bebidas",
+      "id": 8695,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "Suco (500ml)",
+      "description": "",
+      "price": 6.0,
+      "category": "Bebidas",
+      "id": 8694,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "Pastel Bacon",
+      "description": "",
+      "price": 5.0,
+      "category": "Pastel",
+      "id": 8691,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "Pastel Calabresa",
+      "description": "",
+      "price": 5.0,
+      "category": "Pastel",
+      "id": 8689,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "Pastel Frango (com cheddar ou catupiry)",
+      "description": "",
+      "price": 5.0,
+      "category": "Pastel",
+      "id": 8692,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "Pastel Mussarela",
+      "description": "",
+      "price": 5.0,
+      "category": "Pastel",
+      "id": 8690,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "Pastel Portuguesa",
+      "description": "",
+      "price": 5.0,
+      "category": "Pastel",
+      "id": 8693,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "Pizza 3 Queijos",
+      "description": "",
+      "price": 15.0,
+      "category": "Pizzas",
+      "id": 8685,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "Pizza Bacon",
+      "description": "",
+      "price": 15.0,
+      "category": "Pizzas",
+      "id": 8681,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "Pizza Calabresa",
+      "description": "",
+      "price": 15.0,
+      "category": "Pizzas",
+      "id": 8680,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "Pizza Frango com Catupiry",
+      "description": "",
+      "price": 15.0,
+      "category": "Pizzas",
+      "id": 8682,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "Pizza Frango com Cheddar",
+      "description": "",
+      "price": 15.0,
+      "category": "Pizzas",
+      "id": 8683,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "Pizza Mista (Mussarela e Calabresa)",
+      "description": "",
+      "price": 15.0,
+      "category": "Pizzas",
+      "id": 8679,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "Pizza Mussarela",
+      "description": "",
+      "price": 15.0,
+      "category": "Pizzas",
+      "id": 8678,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "Pizza Portuguesa",
+      "description": "",
+      "price": 15.0,
+      "category": "Pizzas",
+      "id": 8684,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "Rango Chicken",
+      "description": "",
+      "price": 8.0,
+      "category": "Sanduíches",
+      "id": 8675,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "Rango de Tudo (x-tudo)",
+      "description": "",
+      "price": 8.0,
+      "category": "Sanduíches",
+      "id": 8677,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "R-Bacon",
+      "description": "",
+      "price": 6.0,
+      "category": "Sanduíches",
+      "id": 8674,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "R-Burger Simples",
+      "description": "",
+      "price": 4.0,
+      "category": "Sanduíches",
+      "id": 8671,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "R-Calabresa",
+      "description": "",
+      "price": 6.0,
+      "category": "Sanduíches",
+      "id": 8672,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "R-Frango",
+      "description": "",
+      "price": 8.0,
+      "category": "Sanduíches",
+      "id": 8676,
+      "bot_id": 1193,
+      "is_available": true
+    },
+    {
+      "name": "Triplo Rango",
+      "description": "",
+      "price": 8.0,
+      "category": "Sanduíches",
+      "id": 8673,
+      "bot_id": 1193,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

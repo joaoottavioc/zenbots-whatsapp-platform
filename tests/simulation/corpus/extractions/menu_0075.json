@@ -1,0 +1,77 @@
+{
+  "products": [
+    {
+      "name": "Hot Dog Cheddar",
+      "description": "Pão, Salsicha, Milho, Ketchup, Maionese, Queijo Cheddar e Palha",
+      "price": 4.5,
+      "category": "Lanches",
+      "id": 9014,
+      "bot_id": 1217,
+      "is_available": true
+    },
+    {
+      "name": "Hot Dog Completo",
+      "description": "Pão, Salsicha, Milho, Ketchup, Maionese, Mostarda, Queijo Ralado e Batata Palha",
+      "price": 5.5,
+      "category": "Lanches",
+      "id": 9017,
+      "bot_id": 1217,
+      "is_available": true
+    },
+    {
+      "name": "Hot Dog de Frango",
+      "description": "Pão, Salsicha de Peru, Milho, Ketchup, Maionese e Queijo Mussarela",
+      "price": 4.5,
+      "category": "Lanches",
+      "id": 9015,
+      "bot_id": 1217,
+      "is_available": true
+    },
+    {
+      "name": "Hot Dog Duplo",
+      "description": "Pão, 2 Salsichas, Milho, Ketchup, Maionese, Mostarda e Queijo Ralado",
+      "price": 4.0,
+      "category": "Lanches",
+      "id": 9012,
+      "bot_id": 1217,
+      "is_available": true
+    },
+    {
+      "name": "Hot Dog Especial",
+      "description": "Pão, Salsicha, Milho, Ketchup, Maionese, Mostarda, Queijo Ralado e Palha",
+      "price": 4.5,
+      "category": "Lanches",
+      "id": 9013,
+      "bot_id": 1217,
+      "is_available": true
+    },
+    {
+      "name": "Hot Dog Médio",
+      "description": "Pão, Salsicha, Milho, Ketchup, Maionese, Mostarda e Queijo Ralado",
+      "price": 3.0,
+      "category": "Lanches",
+      "id": 9011,
+      "bot_id": 1217,
+      "is_available": true
+    },
+    {
+      "name": "Hot Dog Simples",
+      "description": "Pão, Salsicha, Milho, Ketchup, Maionese, Mostarda e Queijo Ralado",
+      "price": 2.0,
+      "category": "Lanches",
+      "id": 9010,
+      "bot_id": 1217,
+      "is_available": true
+    },
+    {
+      "name": "Hot Dog Vegetariano",
+      "description": "Pão, Salsicha Vegetariana, Milho, Ketchup, Maionese e Queijo Mussarela",
+      "price": 4.5,
+      "category": "Lanches",
+      "id": 9016,
+      "bot_id": 1217,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

@@ -1,0 +1,158 @@
+{
+  "products": [
+    {
+      "name": "Jantinha Acomp",
+      "description": "",
+      "price": 2.0,
+      "category": "Acompanhamentos",
+      "id": 9390,
+      "bot_id": 1246,
+      "is_available": true
+    },
+    {
+      "name": "Jantinha A Parte",
+      "description": "",
+      "price": 4.0,
+      "category": "Acompanhamentos",
+      "id": 9391,
+      "bot_id": 1246,
+      "is_available": true
+    },
+    {
+      "name": "Vinagrete",
+      "description": "",
+      "price": 2.0,
+      "category": "Acompanhamentos",
+      "id": 9392,
+      "bot_id": 1246,
+      "is_available": true
+    },
+    {
+      "name": "Caipirinha",
+      "description": "",
+      "price": 10.0,
+      "category": "Bebidas",
+      "id": 9398,
+      "bot_id": 1246,
+      "is_available": true
+    },
+    {
+      "name": "Cerveja Lata",
+      "description": "",
+      "price": 5.0,
+      "category": "Bebidas",
+      "id": 9397,
+      "bot_id": 1246,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante 1L",
+      "description": "",
+      "price": 9.0,
+      "category": "Bebidas",
+      "id": 9393,
+      "bot_id": 1246,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante 600ml",
+      "description": "",
+      "price": 6.0,
+      "category": "Bebidas",
+      "id": 9394,
+      "bot_id": 1246,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante Lata",
+      "description": "",
+      "price": 5.0,
+      "category": "Bebidas",
+      "id": 9395,
+      "bot_id": 1246,
+      "is_available": true
+    },
+    {
+      "name": "Suco Lata",
+      "description": "",
+      "price": 5.0,
+      "category": "Bebidas",
+      "id": 9396,
+      "bot_id": 1246,
+      "is_available": true
+    },
+    {
+      "name": "Apimentada",
+      "description": "",
+      "price": 6.0,
+      "category": "Espetos",
+      "id": 9388,
+      "bot_id": 1246,
+      "is_available": true
+    },
+    {
+      "name": "Carne",
+      "description": "",
+      "price": 6.0,
+      "category": "Espetos",
+      "id": 9382,
+      "bot_id": 1246,
+      "is_available": true
+    },
+    {
+      "name": "Coraçãozinho",
+      "description": "",
+      "price": 6.0,
+      "category": "Espetos",
+      "id": 9383,
+      "bot_id": 1246,
+      "is_available": true
+    },
+    {
+      "name": "Frango",
+      "description": "",
+      "price": 6.0,
+      "category": "Espetos",
+      "id": 9385,
+      "bot_id": 1246,
+      "is_available": true
+    },
+    {
+      "name": "Linguiça",
+      "description": "",
+      "price": 6.0,
+      "category": "Espetos",
+      "id": 9387,
+      "bot_id": 1246,
+      "is_available": true
+    },
+    {
+      "name": "Panceta",
+      "description": "",
+      "price": 6.0,
+      "category": "Espetos",
+      "id": 9389,
+      "bot_id": 1246,
+      "is_available": true
+    },
+    {
+      "name": "Pão de Alho",
+      "description": "",
+      "price": 5.0,
+      "category": "Espetos",
+      "id": 9384,
+      "bot_id": 1246,
+      "is_available": true
+    },
+    {
+      "name": "Queijo",
+      "description": "",
+      "price": 5.0,
+      "category": "Espetos",
+      "id": 9386,
+      "bot_id": 1246,
+      "is_available": true
+    }
+  ],
+  "category": "padaria"
+}

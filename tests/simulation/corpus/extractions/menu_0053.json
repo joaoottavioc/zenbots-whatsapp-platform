@@ -1,0 +1,95 @@
+{
+  "products": [
+    {
+      "name": "Atum",
+      "description": "Queijo, atum, cebola, tomate, pimentão e azeitona.",
+      "price": 30.0,
+      "category": "Pizzas Especiais",
+      "id": 8521,
+      "bot_id": 1182,
+      "is_available": true
+    },
+    {
+      "name": "Banana",
+      "description": "Queijo, banana e canela.",
+      "price": 30.0,
+      "category": "Pizzas Especiais",
+      "id": 8524,
+      "bot_id": 1182,
+      "is_available": true
+    },
+    {
+      "name": "Brasileira",
+      "description": "Queijo, catupiry, presunto, cebola, tomate, pimentão e azeitona.",
+      "price": 30.0,
+      "category": "Pizzas Especiais",
+      "id": 8522,
+      "bot_id": 1182,
+      "is_available": true
+    },
+    {
+      "name": "Chocolate com disquete",
+      "description": "Queijo, chocolate e disquete.",
+      "price": 30.0,
+      "category": "Pizzas Especiais",
+      "id": 8525,
+      "bot_id": 1182,
+      "is_available": true
+    },
+    {
+      "name": "Frango",
+      "description": "Queijo, frango, cebola, tomate, pimentão e azeitona.",
+      "price": 30.0,
+      "category": "Pizzas Especiais",
+      "id": 8520,
+      "bot_id": 1182,
+      "is_available": true
+    },
+    {
+      "name": "Portuguesa Especial",
+      "description": "Queijo, presunto, catupiry, ervilha, cebola, tomate, pimentão e azeitona.",
+      "price": 30.0,
+      "category": "Pizzas Especiais",
+      "id": 8523,
+      "bot_id": 1182,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa",
+      "description": "Queijo, calabresa, cebola, tomate, pimentão e azeitona.",
+      "price": 20.0,
+      "category": "Pizzas Tradicionais",
+      "id": 8517,
+      "bot_id": 1182,
+      "is_available": true
+    },
+    {
+      "name": "Milho",
+      "description": "Queijo, milho, cebola, tomate, pimentão e azeitona.",
+      "price": 20.0,
+      "category": "Pizzas Tradicionais",
+      "id": 8519,
+      "bot_id": 1182,
+      "is_available": true
+    },
+    {
+      "name": "Mussarela",
+      "description": "Queijo, cebola, tomate, pimentão e azeitona.",
+      "price": 20.0,
+      "category": "Pizzas Tradicionais",
+      "id": 8518,
+      "bot_id": 1182,
+      "is_available": true
+    },
+    {
+      "name": "Portuguesa",
+      "description": "Queijo, presunto, milho, ervilha, ovo, cebola, tomate, pimentão e azeitona.",
+      "price": 20.0,
+      "category": "Pizzas Tradicionais",
+      "id": 8516,
+      "bot_id": 1182,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

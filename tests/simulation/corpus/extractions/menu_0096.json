@@ -1,0 +1,131 @@
+{
+  "products": [
+    {
+      "name": "Carne",
+      "description": "",
+      "price": 4.0,
+      "category": "Pastéis",
+      "id": 9300,
+      "bot_id": 1238,
+      "is_available": true
+    },
+    {
+      "name": "Carne com Queijo",
+      "description": "",
+      "price": 5.0,
+      "category": "Pastéis",
+      "id": 9302,
+      "bot_id": 1238,
+      "is_available": true
+    },
+    {
+      "name": "Carne de Sol com Ovo",
+      "description": "",
+      "price": 7.0,
+      "category": "Pastéis",
+      "id": 9311,
+      "bot_id": 1238,
+      "is_available": true
+    },
+    {
+      "name": "Carne de Sol com Queijo",
+      "description": "",
+      "price": 5.0,
+      "category": "Pastéis",
+      "id": 9310,
+      "bot_id": 1238,
+      "is_available": true
+    },
+    {
+      "name": "Carne de Sol, Ovo, Catupiry, Tomate e Cebola",
+      "description": "",
+      "price": 7.0,
+      "category": "Pastéis",
+      "id": 9312,
+      "bot_id": 1238,
+      "is_available": true
+    },
+    {
+      "name": "Carne, Queijo, Ovo de Codorna",
+      "description": "",
+      "price": 7.0,
+      "category": "Pastéis",
+      "id": 9309,
+      "bot_id": 1238,
+      "is_available": true
+    },
+    {
+      "name": "Frango",
+      "description": "",
+      "price": 4.0,
+      "category": "Pastéis",
+      "id": 9299,
+      "bot_id": 1238,
+      "is_available": true
+    },
+    {
+      "name": "Frango com Catupiry",
+      "description": "",
+      "price": 5.0,
+      "category": "Pastéis",
+      "id": 9303,
+      "bot_id": 1238,
+      "is_available": true
+    },
+    {
+      "name": "Frango, Queijo, Milho, Cebola",
+      "description": "",
+      "price": 7.0,
+      "category": "Pastéis",
+      "id": 9308,
+      "bot_id": 1238,
+      "is_available": true
+    },
+    {
+      "name": "Palmito com Carne",
+      "description": "",
+      "price": 5.0,
+      "category": "Pastéis",
+      "id": 9304,
+      "bot_id": 1238,
+      "is_available": true
+    },
+    {
+      "name": "Palmito com Frango",
+      "description": "",
+      "price": 5.0,
+      "category": "Pastéis",
+      "id": 9305,
+      "bot_id": 1238,
+      "is_available": true
+    },
+    {
+      "name": "Palmito com Queijo",
+      "description": "",
+      "price": 6.0,
+      "category": "Pastéis",
+      "id": 9306,
+      "bot_id": 1238,
+      "is_available": true
+    },
+    {
+      "name": "Palmito com Queijo, Carne, Milho, Azeitona, Cebola",
+      "description": "",
+      "price": 7.0,
+      "category": "Pastéis",
+      "id": 9307,
+      "bot_id": 1238,
+      "is_available": true
+    },
+    {
+      "name": "Queijo",
+      "description": "",
+      "price": 4.0,
+      "category": "Pastéis",
+      "id": 9301,
+      "bot_id": 1238,
+      "is_available": true
+    }
+  ],
+  "category": "outros"
+}

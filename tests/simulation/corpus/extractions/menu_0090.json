@@ -1,0 +1,104 @@
+{
+  "products": [
+    {
+      "name": "Café Gelado",
+      "description": "",
+      "price": 4.5,
+      "category": "Cafés Gelados",
+      "id": 9212,
+      "bot_id": 1232,
+      "is_available": true
+    },
+    {
+      "name": "Café Gelado com Baunilha",
+      "description": "",
+      "price": 4.75,
+      "category": "Cafés Gelados",
+      "id": 9213,
+      "bot_id": 1232,
+      "is_available": true
+    },
+    {
+      "name": "Mocha Latte",
+      "description": "",
+      "price": 4.0,
+      "category": "Cafés Gelados",
+      "id": 9214,
+      "bot_id": 1232,
+      "is_available": true
+    },
+    {
+      "name": "Americano",
+      "description": "",
+      "price": 4.5,
+      "category": "Cafés Quentes",
+      "id": 9216,
+      "bot_id": 1232,
+      "is_available": true
+    },
+    {
+      "name": "Choco Mocha",
+      "description": "",
+      "price": 4.75,
+      "category": "Cafés Quentes",
+      "id": 9218,
+      "bot_id": 1232,
+      "is_available": true
+    },
+    {
+      "name": "Espresso do Barista",
+      "description": "",
+      "price": 4.0,
+      "category": "Cafés Quentes",
+      "id": 9215,
+      "bot_id": 1232,
+      "is_available": true
+    },
+    {
+      "name": "Latte Caramelo",
+      "description": "",
+      "price": 4.5,
+      "category": "Cafés Quentes",
+      "id": 9217,
+      "bot_id": 1232,
+      "is_available": true
+    },
+    {
+      "name": "Shot de Espresso",
+      "description": "",
+      "price": 4.0,
+      "category": "Cafés Quentes",
+      "id": 9219,
+      "bot_id": 1232,
+      "is_available": true
+    },
+    {
+      "name": "Chá de Limão com Mel",
+      "description": "",
+      "price": 4.25,
+      "category": "Chás",
+      "id": 9221,
+      "bot_id": 1232,
+      "is_available": true
+    },
+    {
+      "name": "Chá de Maracujá",
+      "description": "",
+      "price": 4.2,
+      "category": "Chás",
+      "id": 9222,
+      "bot_id": 1232,
+      "is_available": true
+    },
+    {
+      "name": "Chá Verde",
+      "description": "",
+      "price": 4.0,
+      "category": "Chás",
+      "id": 9220,
+      "bot_id": 1232,
+      "is_available": true
+    }
+  ],
+  "category": "cafeteria"
+}

@@ -1,0 +1,167 @@
+{
+  "products": [
+    {
+      "name": "A Moda da Casa",
+      "description": "Molho, mussarela, frango, catupiry, azeitona",
+      "price": 10.0,
+      "category": "Pizzas",
+      "id": 8550,
+      "bot_id": 1183,
+      "is_available": true
+    },
+    {
+      "name": "Atum",
+      "description": "Molho, mussarela, atum, cebola, azeitona",
+      "price": 10.0,
+      "category": "Pizzas",
+      "id": 8558,
+      "bot_id": 1183,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa",
+      "description": "Molho, mussarela, calabresa",
+      "price": 10.0,
+      "category": "Pizzas",
+      "id": 8546,
+      "bot_id": 1183,
+      "is_available": true
+    },
+    {
+      "name": "Dois Queijos",
+      "description": "Molho, mussarela, provolone, azeitona",
+      "price": 10.0,
+      "category": "Pizzas",
+      "id": 8556,
+      "bot_id": 1183,
+      "is_available": true
+    },
+    {
+      "name": "Frango",
+      "description": "Molho, mussarela, frango, milho, azeitona",
+      "price": 10.0,
+      "category": "Pizzas",
+      "id": 8548,
+      "bot_id": 1183,
+      "is_available": true
+    },
+    {
+      "name": "Frango C/ Catupiry",
+      "description": "Molho, mussarela, frango, catupiry",
+      "price": 10.0,
+      "category": "Pizzas",
+      "id": 8549,
+      "bot_id": 1183,
+      "is_available": true
+    },
+    {
+      "name": "Mista",
+      "description": "Molho, mussarela, calabresa, presunto, frango",
+      "price": 10.0,
+      "category": "Pizzas",
+      "id": 8553,
+      "bot_id": 1183,
+      "is_available": true
+    },
+    {
+      "name": "Mussarela",
+      "description": "Molho, mussarela, orégano",
+      "price": 10.0,
+      "category": "Pizzas",
+      "id": 8545,
+      "bot_id": 1183,
+      "is_available": true
+    },
+    {
+      "name": "Nordestina",
+      "description": "Molho, mussarela, calabresa, milho, ovo",
+      "price": 10.0,
+      "category": "Pizzas",
+      "id": 8547,
+      "bot_id": 1183,
+      "is_available": true
+    },
+    {
+      "name": "Portuguesa",
+      "description": "Molho, mussarela, presunto, ovo, cebola, azeitona",
+      "price": 10.0,
+      "category": "Pizzas",
+      "id": 8555,
+      "bot_id": 1183,
+      "is_available": true
+    },
+    {
+      "name": "Presunto",
+      "description": "Molho, mussarela, presunto, milho, azeitona",
+      "price": 10.0,
+      "category": "Pizzas",
+      "id": 8551,
+      "bot_id": 1183,
+      "is_available": true
+    },
+    {
+      "name": "Quatro Estações",
+      "description": "Quatro sabores, frango, calabresa, presunto, milho",
+      "price": 10.0,
+      "category": "Pizzas",
+      "id": 8552,
+      "bot_id": 1183,
+      "is_available": true
+    },
+    {
+      "name": "Quatro Queijos",
+      "description": "Molho, mussarela, provolone, azeitona",
+      "price": 10.0,
+      "category": "Pizzas",
+      "id": 8559,
+      "bot_id": 1183,
+      "is_available": true
+    },
+    {
+      "name": "Salame",
+      "description": "Molho, atum, tomate, cebola, azeitona",
+      "price": 10.0,
+      "category": "Pizzas",
+      "id": 8557,
+      "bot_id": 1183,
+      "is_available": true
+    },
+    {
+      "name": "Toscana",
+      "description": "Molho, mussarela, ovo, cebola, azeitona",
+      "price": 10.0,
+      "category": "Pizzas",
+      "id": 8554,
+      "bot_id": 1183,
+      "is_available": true
+    },
+    {
+      "name": "Califórnia",
+      "description": "Leite condensado, chocolate",
+      "price": 10.0,
+      "category": "Sobremesas",
+      "id": 8562,
+      "bot_id": 1183,
+      "is_available": true
+    },
+    {
+      "name": "Chocolate",
+      "description": "Leite condensado e chocolate",
+      "price": 10.0,
+      "category": "Sobremesas",
+      "id": 8560,
+      "bot_id": 1183,
+      "is_available": true
+    },
+    {
+      "name": "Romeu e Julieta",
+      "description": "Creme de leite, goiabada",
+      "price": 10.0,
+      "category": "Sobremesas",
+      "id": 8561,
+      "bot_id": 1183,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

@@ -1,0 +1,203 @@
+{
+  "products": [
+    {
+      "name": "Coca-cola 1l",
+      "description": "",
+      "price": 6.0,
+      "category": "Bebidas",
+      "id": 8697,
+      "bot_id": 1195,
+      "is_available": true
+    },
+    {
+      "name": "Coca-cola 2l",
+      "description": "",
+      "price": 10.0,
+      "category": "Bebidas",
+      "id": 8696,
+      "bot_id": 1195,
+      "is_available": true
+    },
+    {
+      "name": "Coca-cola lata",
+      "description": "",
+      "price": 4.0,
+      "category": "Bebidas",
+      "id": 8698,
+      "bot_id": 1195,
+      "is_available": true
+    },
+    {
+      "name": "Coca-cola mini 250ml",
+      "description": "",
+      "price": 2.0,
+      "category": "Bebidas",
+      "id": 8699,
+      "bot_id": 1195,
+      "is_available": true
+    },
+    {
+      "name": "Fanta 2l",
+      "description": "",
+      "price": 8.0,
+      "category": "Bebidas",
+      "id": 8700,
+      "bot_id": 1195,
+      "is_available": true
+    },
+    {
+      "name": "Fanta lata",
+      "description": "",
+      "price": 5.5,
+      "category": "Bebidas",
+      "id": 8701,
+      "bot_id": 1195,
+      "is_available": true
+    },
+    {
+      "name": "Fanta mini 250ml",
+      "description": "",
+      "price": 2.0,
+      "category": "Bebidas",
+      "id": 8702,
+      "bot_id": 1195,
+      "is_available": true
+    },
+    {
+      "name": "Guaraná Antártica 1,5l",
+      "description": "",
+      "price": 6.0,
+      "category": "Bebidas",
+      "id": 8704,
+      "bot_id": 1195,
+      "is_available": true
+    },
+    {
+      "name": "Guaraná Antártica 1l",
+      "description": "",
+      "price": 4.0,
+      "category": "Bebidas",
+      "id": 8705,
+      "bot_id": 1195,
+      "is_available": true
+    },
+    {
+      "name": "Guaraná Antártica 2l",
+      "description": "",
+      "price": 8.0,
+      "category": "Bebidas",
+      "id": 8703,
+      "bot_id": 1195,
+      "is_available": true
+    },
+    {
+      "name": "Jatobá 2l",
+      "description": "",
+      "price": 8.0,
+      "category": "Bebidas",
+      "id": 8706,
+      "bot_id": 1195,
+      "is_available": true
+    },
+    {
+      "name": "Jatobá laranja mini 250ml",
+      "description": "",
+      "price": 2.0,
+      "category": "Bebidas",
+      "id": 8709,
+      "bot_id": 1195,
+      "is_available": true
+    },
+    {
+      "name": "Jatobá tutti frutti",
+      "description": "",
+      "price": 5.0,
+      "category": "Bebidas",
+      "id": 8707,
+      "bot_id": 1195,
+      "is_available": true
+    },
+    {
+      "name": "Jatobá tutti frutti 250ml",
+      "description": "",
+      "price": 2.0,
+      "category": "Bebidas",
+      "id": 8708,
+      "bot_id": 1195,
+      "is_available": true
+    },
+    {
+      "name": "Sprite mini 250ml",
+      "description": "",
+      "price": 2.0,
+      "category": "Bebidas",
+      "id": 8710,
+      "bot_id": 1195,
+      "is_available": true
+    },
+    {
+      "name": "Acerola",
+      "description": "Suco sem leite",
+      "price": 5.0,
+      "category": "Sucos",
+      "id": 8714,
+      "bot_id": 1195,
+      "is_available": true
+    },
+    {
+      "name": "Cajá",
+      "description": "Suco sem leite",
+      "price": 5.0,
+      "category": "Sucos",
+      "id": 8712,
+      "bot_id": 1195,
+      "is_available": true
+    },
+    {
+      "name": "Caju",
+      "description": "Suco sem leite",
+      "price": 5.0,
+      "category": "Sucos",
+      "id": 8713,
+      "bot_id": 1195,
+      "is_available": true
+    },
+    {
+      "name": "Goiaba",
+      "description": "Suco sem leite",
+      "price": 5.0,
+      "category": "Sucos",
+      "id": 8715,
+      "bot_id": 1195,
+      "is_available": true
+    },
+    {
+      "name": "Graviola",
+      "description": "Suco sem leite",
+      "price": 5.0,
+      "category": "Sucos",
+      "id": 8716,
+      "bot_id": 1195,
+      "is_available": true
+    },
+    {
+      "name": "Manga",
+      "description": "Suco sem leite",
+      "price": 5.5,
+      "category": "Sucos",
+      "id": 8711,
+      "bot_id": 1195,
+      "is_available": true
+    },
+    {
+      "name": "Maracujá",
+      "description": "Suco sem leite",
+      "price": 3.5,
+      "category": "Sucos",
+      "id": 8717,
+      "bot_id": 1195,
+      "is_available": true
+    }
+  ],
+  "category": "outros"
+}

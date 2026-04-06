@@ -1,0 +1,131 @@
+{
+  "products": [
+    {
+      "name": "complemento",
+      "description": "ovo, tomate, milho, azeitona, cebola, orégano, bacon",
+      "price": 1.0,
+      "category": "Adicionais",
+      "id": 8351,
+      "bot_id": 1171,
+      "is_available": true
+    },
+    {
+      "name": "banana c/ canela",
+      "description": "",
+      "price": 11.99,
+      "category": "Doces",
+      "id": 8360,
+      "bot_id": 1171,
+      "is_available": true
+    },
+    {
+      "name": "chocolate c/ morango",
+      "description": "",
+      "price": 11.99,
+      "category": "Doces",
+      "id": 8359,
+      "bot_id": 1171,
+      "is_available": true
+    },
+    {
+      "name": "queijo c/ goiabada",
+      "description": "",
+      "price": 11.99,
+      "category": "Doces",
+      "id": 8358,
+      "bot_id": 1171,
+      "is_available": true
+    },
+    {
+      "name": "4 queijos c/ bacon",
+      "description": "",
+      "price": 10.99,
+      "category": "Especiais",
+      "id": 8355,
+      "bot_id": 1171,
+      "is_available": true
+    },
+    {
+      "name": "camarão c/ queijo",
+      "description": "",
+      "price": 12.99,
+      "category": "Especiais",
+      "id": 8357,
+      "bot_id": 1171,
+      "is_available": true
+    },
+    {
+      "name": "carne seca c/ queijo",
+      "description": "",
+      "price": 10.99,
+      "category": "Especiais",
+      "id": 8352,
+      "bot_id": 1171,
+      "is_available": true
+    },
+    {
+      "name": "costela c/ barbecue",
+      "description": "",
+      "price": 10.99,
+      "category": "Especiais",
+      "id": 8354,
+      "bot_id": 1171,
+      "is_available": true
+    },
+    {
+      "name": "frango c/ queijo",
+      "description": "",
+      "price": 10.99,
+      "category": "Especiais",
+      "id": 8353,
+      "bot_id": 1171,
+      "is_available": true
+    },
+    {
+      "name": "palmito c/ cheddar",
+      "description": "",
+      "price": 10.99,
+      "category": "Especiais",
+      "id": 8356,
+      "bot_id": 1171,
+      "is_available": true
+    },
+    {
+      "name": "calabresa",
+      "description": "",
+      "price": 6.99,
+      "category": "Tradicionais",
+      "id": 8350,
+      "bot_id": 1171,
+      "is_available": true
+    },
+    {
+      "name": "carne",
+      "description": "",
+      "price": 7.99,
+      "category": "Tradicionais",
+      "id": 8347,
+      "bot_id": 1171,
+      "is_available": true
+    },
+    {
+      "name": "frango",
+      "description": "",
+      "price": 7.99,
+      "category": "Tradicionais",
+      "id": 8348,
+      "bot_id": 1171,
+      "is_available": true
+    },
+    {
+      "name": "queijo",
+      "description": "",
+      "price": 6.99,
+      "category": "Tradicionais",
+      "id": 8349,
+      "bot_id": 1171,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

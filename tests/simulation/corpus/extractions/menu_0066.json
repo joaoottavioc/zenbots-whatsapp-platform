@@ -1,0 +1,131 @@
+{
+  "products": [
+    {
+      "name": "Atum",
+      "description": "",
+      "price": 4.5,
+      "category": "Sabores",
+      "id": 8920,
+      "bot_id": 1208,
+      "is_available": true
+    },
+    {
+      "name": "Azeitona",
+      "description": "",
+      "price": 3.5,
+      "category": "Sabores",
+      "id": 8921,
+      "bot_id": 1208,
+      "is_available": true
+    },
+    {
+      "name": "Bacon",
+      "description": "",
+      "price": 5.5,
+      "category": "Sabores",
+      "id": 8922,
+      "bot_id": 1208,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa",
+      "description": "",
+      "price": 5.5,
+      "category": "Sabores",
+      "id": 8924,
+      "bot_id": 1208,
+      "is_available": true
+    },
+    {
+      "name": "Carne",
+      "description": "",
+      "price": 3.5,
+      "category": "Sabores",
+      "id": 8917,
+      "bot_id": 1208,
+      "is_available": true
+    },
+    {
+      "name": "Carne Seca c/ Catupiry",
+      "description": "",
+      "price": 5.0,
+      "category": "Sabores",
+      "id": 8925,
+      "bot_id": 1208,
+      "is_available": true
+    },
+    {
+      "name": "Federal",
+      "description": "",
+      "price": 9.5,
+      "category": "Sabores",
+      "id": 8929,
+      "bot_id": 1208,
+      "is_available": true
+    },
+    {
+      "name": "Frango",
+      "description": "",
+      "price": 4.5,
+      "category": "Sabores",
+      "id": 8918,
+      "bot_id": 1208,
+      "is_available": true
+    },
+    {
+      "name": "Italiano",
+      "description": "",
+      "price": 7.0,
+      "category": "Sabores",
+      "id": 8926,
+      "bot_id": 1208,
+      "is_available": true
+    },
+    {
+      "name": "Linguiça",
+      "description": "",
+      "price": 4.5,
+      "category": "Sabores",
+      "id": 8919,
+      "bot_id": 1208,
+      "is_available": true
+    },
+    {
+      "name": "Pastel de Vento",
+      "description": "",
+      "price": 1.0,
+      "category": "Sabores",
+      "id": 8930,
+      "bot_id": 1208,
+      "is_available": true
+    },
+    {
+      "name": "Português",
+      "description": "",
+      "price": 9.0,
+      "category": "Sabores",
+      "id": 8928,
+      "bot_id": 1208,
+      "is_available": true
+    },
+    {
+      "name": "Tomate Seco",
+      "description": "",
+      "price": 7.0,
+      "category": "Sabores",
+      "id": 8927,
+      "bot_id": 1208,
+      "is_available": true
+    },
+    {
+      "name": "Vegetariana",
+      "description": "",
+      "price": 6.5,
+      "category": "Sabores",
+      "id": 8923,
+      "bot_id": 1208,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

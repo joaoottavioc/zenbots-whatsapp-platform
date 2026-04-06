@@ -1,0 +1,212 @@
+{
+  "products": [
+    {
+      "name": "Agua mineral 500 ml",
+      "description": "",
+      "price": 1.6,
+      "category": "Bebidas",
+      "id": 9048,
+      "bot_id": 1219,
+      "is_available": true
+    },
+    {
+      "name": "Aguarius fresh",
+      "description": "",
+      "price": 1.6,
+      "category": "Bebidas",
+      "id": 9049,
+      "bot_id": 1219,
+      "is_available": true
+    },
+    {
+      "name": "Kapo",
+      "description": "",
+      "price": 1.2,
+      "category": "Bebidas",
+      "id": 9057,
+      "bot_id": 1219,
+      "is_available": true
+    },
+    {
+      "name": "Refresco 200 ml",
+      "description": "",
+      "price": 1.6,
+      "category": "Bebidas",
+      "id": 9054,
+      "bot_id": 1219,
+      "is_available": true
+    },
+    {
+      "name": "Refresco 300 ml",
+      "description": "",
+      "price": 1.6,
+      "category": "Bebidas",
+      "id": 9055,
+      "bot_id": 1219,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante 200 ml",
+      "description": "",
+      "price": 1.6,
+      "category": "Bebidas",
+      "id": 9051,
+      "bot_id": 1219,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante 300 ml",
+      "description": "",
+      "price": 1.6,
+      "category": "Bebidas",
+      "id": 9052,
+      "bot_id": 1219,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante 500 ml",
+      "description": "",
+      "price": 1.6,
+      "category": "Bebidas",
+      "id": 9053,
+      "bot_id": 1219,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante em lata",
+      "description": "",
+      "price": 1.6,
+      "category": "Bebidas",
+      "id": 9050,
+      "bot_id": 1219,
+      "is_available": true
+    },
+    {
+      "name": "Suco polpa 500 ml",
+      "description": "",
+      "price": 1.2,
+      "category": "Bebidas",
+      "id": 9056,
+      "bot_id": 1219,
+      "is_available": true
+    },
+    {
+      "name": "Chesburque",
+      "description": "",
+      "price": 1.2,
+      "category": "Lanches",
+      "id": 9039,
+      "bot_id": 1219,
+      "is_available": true
+    },
+    {
+      "name": "Especial da Casa",
+      "description": "",
+      "price": 2.0,
+      "category": "Lanches",
+      "id": 9041,
+      "bot_id": 1219,
+      "is_available": true
+    },
+    {
+      "name": "Hamburgue",
+      "description": "",
+      "price": 1.2,
+      "category": "Lanches",
+      "id": 9038,
+      "bot_id": 1219,
+      "is_available": true
+    },
+    {
+      "name": "Hot c/fritas",
+      "description": "",
+      "price": 1.6,
+      "category": "Lanches",
+      "id": 9045,
+      "bot_id": 1219,
+      "is_available": true
+    },
+    {
+      "name": "Hot simples",
+      "description": "",
+      "price": 1.0,
+      "category": "Lanches",
+      "id": 9044,
+      "bot_id": 1219,
+      "is_available": true
+    },
+    {
+      "name": "Misto",
+      "description": "",
+      "price": 1.4,
+      "category": "Lanches",
+      "id": 9036,
+      "bot_id": 1219,
+      "is_available": true
+    },
+    {
+      "name": "Pizza",
+      "description": "",
+      "price": 1.6,
+      "category": "Lanches",
+      "id": 9043,
+      "bot_id": 1219,
+      "is_available": true
+    },
+    {
+      "name": "Salada de frutas 200 ml",
+      "description": "",
+      "price": 1.0,
+      "category": "Lanches",
+      "id": 9046,
+      "bot_id": 1219,
+      "is_available": true
+    },
+    {
+      "name": "Salada de frutas 300 ml",
+      "description": "",
+      "price": 1.5,
+      "category": "Lanches",
+      "id": 9047,
+      "bot_id": 1219,
+      "is_available": true
+    },
+    {
+      "name": "Salgado",
+      "description": "",
+      "price": 1.4,
+      "category": "Lanches",
+      "id": 9035,
+      "bot_id": 1219,
+      "is_available": true
+    },
+    {
+      "name": "S.quente",
+      "description": "",
+      "price": 1.4,
+      "category": "Lanches",
+      "id": 9037,
+      "bot_id": 1219,
+      "is_available": true
+    },
+    {
+      "name": "x-salada",
+      "description": "",
+      "price": 1.8,
+      "category": "Lanches",
+      "id": 9040,
+      "bot_id": 1219,
+      "is_available": true
+    },
+    {
+      "name": "X tudo",
+      "description": "",
+      "price": 2.4,
+      "category": "Lanches",
+      "id": 9042,
+      "bot_id": 1219,
+      "is_available": true
+    }
+  ],
+  "category": "lanchonete"
+}

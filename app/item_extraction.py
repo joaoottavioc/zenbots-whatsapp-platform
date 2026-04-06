@@ -120,6 +120,28 @@ _STOP = frozenset(
         "remove",
         "remover",
         "remova",
+        # Extended remove/cancel verbs
+        "cancela",
+        "cancelar",
+        "esquece",
+        "esquecer",
+        "deixa",
+        "fora",
+        "não",
+        "nao",
+        # Informal ADD verbs — prevent leaking into extracted item names
+        "arruma",
+        "arrume",
+        "querendo",
+        "joga",
+        "jogar",
+        "inclui",
+        "incluir",
+        "solta",
+        "mete",
+        "faz",
+        "fazer",
+        "to",
     }
 )
 

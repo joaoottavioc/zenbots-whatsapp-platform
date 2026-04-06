@@ -101,6 +101,9 @@ class Bot(SQLModel, table=True):
     # F-17: Cancellation window (minutes after order creation)
     cancellation_window_minutes: int = Field(default=5)
 
+    # Restaurant cover image
+    restaurant_image_url: Optional[str] = Field(default=None)
+
     # MUDANÇA 2: O Bot ganha a Assinatura (1-pra-1 com o Bot)
     subscription: Optional["Subscription"] = Relationship(
         back_populates="bot", sa_relationship_kwargs={"cascade": "all, delete-orphan"}

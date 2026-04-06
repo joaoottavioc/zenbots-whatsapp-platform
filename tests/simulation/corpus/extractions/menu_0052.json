@@ -1,0 +1,131 @@
+{
+  "products": [
+    {
+      "name": "Água com gás 500ml",
+      "description": "",
+      "price": 3.5,
+      "category": "Bebidas",
+      "id": 8488,
+      "bot_id": 1181,
+      "is_available": true
+    },
+    {
+      "name": "Água sem gás 500ml",
+      "description": "",
+      "price": 3.5,
+      "category": "Bebidas",
+      "id": 8487,
+      "bot_id": 1181,
+      "is_available": true
+    },
+    {
+      "name": "Budweiser long neck",
+      "description": "",
+      "price": 6.5,
+      "category": "Bebidas",
+      "id": 8491,
+      "bot_id": 1181,
+      "is_available": true
+    },
+    {
+      "name": "Cerveja artesanal",
+      "description": "",
+      "price": 19.99,
+      "category": "Bebidas",
+      "id": 8493,
+      "bot_id": 1181,
+      "is_available": true
+    },
+    {
+      "name": "H2O 500ml",
+      "description": "",
+      "price": 4.99,
+      "category": "Bebidas",
+      "id": 8489,
+      "bot_id": 1181,
+      "is_available": true
+    },
+    {
+      "name": "Heineken long neck",
+      "description": "",
+      "price": 6.5,
+      "category": "Bebidas",
+      "id": 8490,
+      "bot_id": 1181,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerantes 2 litros",
+      "description": "",
+      "price": 8.5,
+      "category": "Bebidas",
+      "id": 8486,
+      "bot_id": 1181,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerantes lata",
+      "description": "",
+      "price": 4.99,
+      "category": "Bebidas",
+      "id": 8485,
+      "bot_id": 1181,
+      "is_available": true
+    },
+    {
+      "name": "Skol lata",
+      "description": "",
+      "price": 5.0,
+      "category": "Bebidas",
+      "id": 8492,
+      "bot_id": 1181,
+      "is_available": true
+    },
+    {
+      "name": "Copa no Figo 300ml",
+      "description": "Copa de figo com calda de chocolate.",
+      "price": 10.99,
+      "category": "Sobremesas",
+      "id": 8496,
+      "bot_id": 1181,
+      "is_available": true
+    },
+    {
+      "name": "Mamãe Papaya com frutas",
+      "description": "",
+      "price": 12.99,
+      "category": "Sobremesas",
+      "id": 8497,
+      "bot_id": 1181,
+      "is_available": true
+    },
+    {
+      "name": "Petit Gateau",
+      "description": "Bolinho de chocolate com sorvete de creme.",
+      "price": 12.99,
+      "category": "Sobremesas",
+      "id": 8498,
+      "bot_id": 1181,
+      "is_available": true
+    },
+    {
+      "name": "Profiteroles",
+      "description": "Garfinhos recheados com sorvete, servidos com calda de chocolate.",
+      "price": 12.99,
+      "category": "Sobremesas",
+      "id": 8494,
+      "bot_id": 1181,
+      "is_available": true
+    },
+    {
+      "name": "Torta de Chocolate",
+      "description": "Torta de chocolate com uma bola de sorvete.",
+      "price": 12.99,
+      "category": "Sobremesas",
+      "id": 8495,
+      "bot_id": 1181,
+      "is_available": true
+    }
+  ],
+  "category": "hamburgueria"
+}

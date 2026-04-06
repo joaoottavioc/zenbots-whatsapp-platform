@@ -1,0 +1,86 @@
+{
+  "products": [
+    {
+      "name": "Bacon",
+      "description": "Mussarela e Bacon",
+      "price": 36.0,
+      "category": "Pizzas",
+      "id": 8389,
+      "bot_id": 1174,
+      "is_available": true
+    },
+    {
+      "name": "Bauru",
+      "description": "Presunto, Fatias de Tomate e Mussarela",
+      "price": 37.0,
+      "category": "Pizzas",
+      "id": 8388,
+      "bot_id": 1174,
+      "is_available": true
+    },
+    {
+      "name": "Berinjela",
+      "description": "Berinjela e Mussarela",
+      "price": 27.0,
+      "category": "Pizzas",
+      "id": 8394,
+      "bot_id": 1174,
+      "is_available": true
+    },
+    {
+      "name": "Boka Loka",
+      "description": "Presunto, Palmito, Ervilha, Ovos, Mussarela e Bacon",
+      "price": 40.0,
+      "category": "Pizzas",
+      "id": 8393,
+      "bot_id": 1174,
+      "is_available": true
+    },
+    {
+      "name": "Brasileira",
+      "description": "Atum, Palmito, Ovos, Catupiry e Mussarela",
+      "price": 42.0,
+      "category": "Pizzas",
+      "id": 8390,
+      "bot_id": 1174,
+      "is_available": true
+    },
+    {
+      "name": "Brócolis I",
+      "description": "Brócolis, Cebola, Catupiry e Bacon",
+      "price": 36.0,
+      "category": "Pizzas",
+      "id": 8391,
+      "bot_id": 1174,
+      "is_available": true
+    },
+    {
+      "name": "Brócolis II",
+      "description": "Brócolis, Mussarela, Tomate e Bacon",
+      "price": 37.0,
+      "category": "Pizzas",
+      "id": 8392,
+      "bot_id": 1174,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa",
+      "description": "Calabresa e Cebola",
+      "price": 29.0,
+      "category": "Pizzas",
+      "id": 8395,
+      "bot_id": 1174,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa II",
+      "description": "Calabresa, Cebola e Catupiry",
+      "price": 33.0,
+      "category": "Pizzas",
+      "id": 8396,
+      "bot_id": 1174,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

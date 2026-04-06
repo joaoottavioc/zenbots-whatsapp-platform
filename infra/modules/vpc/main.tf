@@ -172,12 +172,9 @@ resource "aws_security_group" "ecs" {
   name_prefix = "${var.project}-${var.environment}-ecs-"
   vpc_id      = aws_vpc.this.id
 
-  ingress {
-    from_port       = 8000
-    to_port         = 8000
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
-  }
+  # NOTE: No inline ingress rules — all ingress managed via standalone
+  # aws_security_group_rule resources to avoid conflicts with rules added
+  # by other modules (redis-ecs, dev/main.tf ecs_from_nat, etc.)
 
   egress {
     from_port   = 0
@@ -193,6 +190,16 @@ resource "aws_security_group" "ecs" {
   lifecycle {
     create_before_destroy = true
   }
+}
+
+resource "aws_security_group_rule" "ecs_from_alb" {
+  type                     = "ingress"
+  from_port                = 8000
+  to_port                  = 8000
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.ecs.id
+  source_security_group_id = aws_security_group.alb.id
+  description              = "Allow ALB to reach ECS backend on port 8000"
 }
 
 resource "aws_security_group" "rds" {

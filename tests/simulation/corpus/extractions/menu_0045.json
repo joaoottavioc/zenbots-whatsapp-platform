@@ -1,0 +1,113 @@
+{
+  "products": [
+    {
+      "name": "Água Mineral",
+      "description": "Água mineral",
+      "price": 5.0,
+      "category": "Bebidas",
+      "id": 8325,
+      "bot_id": 1166,
+      "is_available": true
+    },
+    {
+      "name": "Chocolate Quente",
+      "description": "Bebida quente de chocolate",
+      "price": 9.0,
+      "category": "Bebidas",
+      "id": 8323,
+      "bot_id": 1166,
+      "is_available": true
+    },
+    {
+      "name": "Suco Natural",
+      "description": "Suco de fruta natural",
+      "price": 8.0,
+      "category": "Bebidas",
+      "id": 8324,
+      "bot_id": 1166,
+      "is_available": true
+    },
+    {
+      "name": "Café com Leite",
+      "description": "Café com leite",
+      "price": 8.0,
+      "category": "Cafés",
+      "id": 8320,
+      "bot_id": 1166,
+      "is_available": true
+    },
+    {
+      "name": "Café Preto",
+      "description": "Café coado",
+      "price": 5.0,
+      "category": "Cafés",
+      "id": 8319,
+      "bot_id": 1166,
+      "is_available": true
+    },
+    {
+      "name": "Cappuccino",
+      "description": "Café com leite e espuma",
+      "price": 9.0,
+      "category": "Cafés",
+      "id": 8321,
+      "bot_id": 1166,
+      "is_available": true
+    },
+    {
+      "name": "Latte",
+      "description": "Café com leite cremoso",
+      "price": 9.0,
+      "category": "Cafés",
+      "id": 8322,
+      "bot_id": 1166,
+      "is_available": true
+    },
+    {
+      "name": "Combo Café e Bolo",
+      "description": "Café e bolo por um preço especial",
+      "price": 12.0,
+      "category": "Combos",
+      "id": 8330,
+      "bot_id": 1166,
+      "is_available": true
+    },
+    {
+      "name": "Croissant",
+      "description": "Croissant amanteigado",
+      "price": 7.0,
+      "category": "Lanches",
+      "id": 8329,
+      "bot_id": 1166,
+      "is_available": true
+    },
+    {
+      "name": "Pão de Queijo",
+      "description": "Pão de queijo quentinho",
+      "price": 6.0,
+      "category": "Lanches",
+      "id": 8328,
+      "bot_id": 1166,
+      "is_available": true
+    },
+    {
+      "name": "Bolo de Cenoura",
+      "description": "Bolo de cenoura com cobertura",
+      "price": 7.0,
+      "category": "Sobremesas",
+      "id": 8326,
+      "bot_id": 1166,
+      "is_available": true
+    },
+    {
+      "name": "Bolo de Chocolate",
+      "description": "Bolo de chocolate com cobertura",
+      "price": 8.0,
+      "category": "Sobremesas",
+      "id": 8327,
+      "bot_id": 1166,
+      "is_available": true
+    }
+  ],
+  "category": "padaria"
+}

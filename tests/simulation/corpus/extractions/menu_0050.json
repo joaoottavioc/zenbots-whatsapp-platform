@@ -1,0 +1,284 @@
+{
+  "products": [
+    {
+      "name": "Água Mineral",
+      "description": "",
+      "price": 2.0,
+      "category": "Bebidas",
+      "id": 8445,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Café Grande",
+      "description": "",
+      "price": 4.0,
+      "category": "Bebidas",
+      "id": 8440,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Café Médio",
+      "description": "",
+      "price": 3.0,
+      "category": "Bebidas",
+      "id": 8439,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Leite Grande",
+      "description": "",
+      "price": 4.0,
+      "category": "Bebidas",
+      "id": 8444,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Leite Pequeno",
+      "description": "",
+      "price": 3.0,
+      "category": "Bebidas",
+      "id": 8443,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Nescau Grande",
+      "description": "",
+      "price": 4.0,
+      "category": "Bebidas",
+      "id": 8442,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Nescau Pequeno",
+      "description": "",
+      "price": 3.0,
+      "category": "Bebidas",
+      "id": 8441,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Farofa de Carne",
+      "description": "",
+      "price": 8.0,
+      "category": "Farofas",
+      "id": 8435,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Farofa de Carne com Ovo",
+      "description": "",
+      "price": 10.0,
+      "category": "Farofas",
+      "id": 8436,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Farofa de Charque",
+      "description": "",
+      "price": 10.0,
+      "category": "Farofas",
+      "id": 8437,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Farofa de Charque com Ovo",
+      "description": "",
+      "price": 12.0,
+      "category": "Farofas",
+      "id": 8438,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Bandeja c/ Bolo, Cará e Macaxeira",
+      "description": "",
+      "price": 5.0,
+      "category": "Outros",
+      "id": 8453,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Cuscuz",
+      "description": "",
+      "price": 2.0,
+      "category": "Outros",
+      "id": 8455,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Fatia de Bolo",
+      "description": "",
+      "price": 3.0,
+      "category": "Outros",
+      "id": 8452,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Ovo Cozido",
+      "description": "",
+      "price": 1.0,
+      "category": "Outros",
+      "id": 8454,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Misto c/ Ovo",
+      "description": "",
+      "price": 4.0,
+      "category": "Sanduíches",
+      "id": 8432,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Pão c/ Banana",
+      "description": "",
+      "price": 3.0,
+      "category": "Sanduíches",
+      "id": 8429,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Pão c/ Banana e Queijo",
+      "description": "",
+      "price": 4.0,
+      "category": "Sanduíches",
+      "id": 8431,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Pão c/ Manteiga",
+      "description": "",
+      "price": 1.0,
+      "category": "Sanduíches",
+      "id": 8425,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Pão c/ Ovo",
+      "description": "",
+      "price": 1.0,
+      "category": "Sanduíches",
+      "id": 8426,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Pão c/ Presunto",
+      "description": "",
+      "price": 3.0,
+      "category": "Sanduíches",
+      "id": 8427,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Pão c/ Queijo",
+      "description": "",
+      "price": 3.0,
+      "category": "Sanduíches",
+      "id": 8428,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Pão Mistão",
+      "description": "",
+      "price": 4.0,
+      "category": "Sanduíches",
+      "id": 8430,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "X-Caboquinho",
+      "description": "",
+      "price": 5.0,
+      "category": "Sanduíches",
+      "id": 8433,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "X-Tudão",
+      "description": "",
+      "price": 6.0,
+      "category": "Sanduíches",
+      "id": 8434,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Tapioca c/ Banana",
+      "description": "",
+      "price": 6.0,
+      "category": "Tapiocas",
+      "id": 8448,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Tapioca c/ Carne",
+      "description": "",
+      "price": 8.0,
+      "category": "Tapiocas",
+      "id": 8451,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Tapioca c/ Ovo",
+      "description": "",
+      "price": 6.0,
+      "category": "Tapiocas",
+      "id": 8449,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Tapioca c/ Queijo",
+      "description": "",
+      "price": 6.0,
+      "category": "Tapiocas",
+      "id": 8447,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Tapioca c/ Tucumã",
+      "description": "",
+      "price": 6.0,
+      "category": "Tapiocas",
+      "id": 8450,
+      "bot_id": 1177,
+      "is_available": true
+    },
+    {
+      "name": "Tapioca Simples",
+      "description": "",
+      "price": 5.0,
+      "category": "Tapiocas",
+      "id": 8446,
+      "bot_id": 1177,
+      "is_available": true
+    }
+  ],
+  "category": "padaria"
+}

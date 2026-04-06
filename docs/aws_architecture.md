@@ -2,7 +2,7 @@
 
 Complete reference for the ZenBots AWS infrastructure. Use this when you need to understand how things are connected, troubleshoot issues, or make manual changes.
 
-**Last updated:** 2026-03-10
+**Last updated:** 2026-03-12
 
 ---
 
@@ -37,18 +37,18 @@ Complete reference for the ZenBots AWS infrastructure. Use this when you need to
 Internet
    │
    ▼
-Route 53 (dev-api.zenbotz.com.br)
+Route 53 (dev-api.zenbotz.com.br / api.zenbotz.com.br)
    │
-   ▼
-ALB (public subnets, ports 80→443 redirect, 443→backend)
-   │
-   ▼
+   ├── [Dev]  fck-nat EIP → Caddy (HTTPS/443, Let's Encrypt) → Cloud Map → ECS backend
+   └── [Prod] ALB (HTTPS/443, ACM cert) → ECS backend
+
 ECS Fargate (private subnets)
    ├── Backend (FastAPI, port 8000)
-   └── Worker  (ARQ consumer)
+   ├── Worker  (ARQ consumer)
+   └── Redis 7 (dev only, ECS service + Cloud Map DNS)
          │
          ├──▶ RDS PostgreSQL + pgvector (isolated subnets)
-         ├──▶ ElastiCache Redis (isolated subnets)
+         ├──▶ ElastiCache Redis (prod only, isolated subnets)
          ├──▶ S3 (menu PDFs/images, via VPC Gateway Endpoint)
          └──▶ OpenAI API (via NAT instance)
 ```
@@ -74,7 +74,7 @@ CIDR: `10.0.0.0/16`
 |------|-------|---------|-----------------|
 | **Public** | `10.0.1.0/24`, `10.0.2.0/24` | ALB, NAT instance | Direct (Internet Gateway) |
 | **Private** | `10.0.10.0/24`, `10.0.11.0/24` | ECS tasks | Outbound only (via NAT) |
-| **Isolated** | `10.0.20.0/24`, `10.0.21.0/24` | RDS, ElastiCache | None |
+| **Isolated** | `10.0.20.0/24`, `10.0.21.0/24` | RDS (dev+prod), ElastiCache (prod only) | None |
 
 ### NAT
 
@@ -83,7 +83,9 @@ CIDR: `10.0.0.0/16`
 | Dev | fck-nat t4g.nano EC2 instance | ~$3/month |
 | Prod | fck-nat t4g.small EC2 instance | ~$5/month |
 
-Both environments use ARM64 AMIs from the [fck-nat](https://github.com/AndrewGuentworker/fck-nat) project (owner `568608671756`). Each has a CloudWatch alarm for auto-recovery if the underlying host fails. Prod uses t4g.small (2 GiB RAM) for higher throughput headroom.
+Both environments use ARM64 AMIs from the [fck-nat](https://github.com/AndrewGuentworker/fck-nat) project (owner `568608671756`). Each has a CloudWatch alarm for auto-recovery if the underlying host fails. Prod uses t4g.small (2 GiB RAM) for higher throughput headroom. Dev NAT runs in **us-east-1b** (us-east-1a had InsufficientInstanceCapacity for t4g.nano in March 2026).
+
+**Caddy reverse proxy** (dev only): The NAT instance also runs Caddy for HTTPS termination (Let's Encrypt) and reverse proxy to the ECS backend via Cloud Map DNS. The Caddyfile includes `flush_interval -1` and `transport http { read_timeout 0; write_timeout 0 }` for reliable SSE streaming. See `infra/modules/nat/caddy_userdata.sh.tpl`.
 
 > **Why not NAT Gateway?** NAT Gateway costs ~$32/mo fixed + data transfer charges. fck-nat provides the same outbound-only connectivity at ~$5/mo. Trade-off: if the fck-nat instance fails, outbound traffic (OpenAI API, WhatsApp sends) is interrupted for 2-3 minutes until CloudWatch auto-recovery restarts it. Inbound webhooks (through ALB) are NOT affected. Upgrade path: switch to NAT Gateway in `infra/environments/prod/main.tf` by changing `use_nat_instance = false`.
 
@@ -107,8 +109,8 @@ All tasks use ARM64 (Graviton) architecture for lower cost.
 
 | Task | CPU | Memory | Image tag suffix | CMD |
 |------|-----|--------|-----------------|-----|
-| Backend | 256 (dev) / 256 (prod) | 512 (dev) / 512 (prod) | `{tag}` | `uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2` |
-| Worker | 256 (dev) / 256 (prod) | 512 (dev) / 512 (prod) | `{tag}-worker` | `arq app.worker.WorkerSettings` |
+| Backend | 1024 | 2048 | `{tag}` | `sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${WEB_WORKERS}"` (WEB_WORKERS=1, SentenceTransformer needs ~500MB/process) |
+| Worker | 256 | 512 | `{tag}-worker` | `arq app.worker.WorkerSettings` (lazy imports, no model loaded) |
 | Migrations | 256 | 512 | `{tag}-migrations` | `python run_migrations.py` |
 
 ### IAM Roles
@@ -142,10 +144,11 @@ Non-sensitive values are passed directly as environment variables:
 
 ```
 ENVIRONMENT=development      # or "production"
+WEB_WORKERS=1               # Uvicorn worker count (dev=1, prod=2)
 LOG_FORMAT=json
-REDIS_HOST={elasticache endpoint}
+REDIS_HOST={redis endpoint}  # Dev: Cloud Map DNS (redis.zenbots-dev.local), Prod: ElastiCache endpoint
 REDIS_PORT=6379
-REDIS_URL=redis://{elasticache endpoint}:6379/0
+REDIS_URL=redis://{redis endpoint}:6379/0
 ```
 
 Sensitive values are injected from SSM Parameter Store. See [Section 8](#8-secrets-management).
@@ -232,16 +235,33 @@ RDS is in isolated subnets with no public access. To connect:
 
 ---
 
-## 5. Cache (ElastiCache Redis)
+## 5. Cache (Redis)
 
-| Setting | Dev | Prod (launch) | Prod (scaled) |
-|---------|-----|---------------|----------------|
-| Node type | `cache.t4g.micro` | `cache.t4g.micro` | `cache.t4g.small` |
-| Engine | Redis 7.0 | Redis 7.0 | Redis 7.0 |
-| Cluster nodes | 1 | 1 | 2 (Multi-AZ with failover) |
-| Encryption at rest | Yes | Yes | Yes |
-| Encryption in transit | No | No | No |
-| Snapshot retention | None | None | 7 days |
+### Dev: Redis on ECS Fargate
+
+Dev uses Redis 7 Alpine as a third ECS Fargate SPOT task instead of managed ElastiCache (saves ~$10.50/mo).
+
+| Setting | Value |
+|---------|-------|
+| Image | `redis:7-alpine` |
+| CPU / Memory | 256 / 512 MB |
+| Capacity | FARGATE_SPOT ARM64 |
+| Persistence | None (`--save "" --appendonly no`) |
+| Max memory | 384 MB (allkeys-lru eviction) |
+| Discovery | AWS Cloud Map DNS: `redis.zenbots-dev.local` |
+| Scheduling | Scales up 15 min before backend/worker, down 15 min after |
+| Health check | `redis-cli ping` (10s interval, 5 retries) |
+
+### Prod: ElastiCache Redis (managed)
+
+| Setting | Prod (launch) | Prod (scaled) |
+|---------|---------------|----------------|
+| Node type | `cache.t4g.micro` | `cache.t4g.small` |
+| Engine | Redis 7.0 | Redis 7.0 |
+| Cluster nodes | 1 | 2 (Multi-AZ with failover) |
+| Encryption at rest | Yes | Yes |
+| Encryption in transit | No | No |
+| Snapshot retention | None | 7 days |
 
 > **Launch → Scaled upgrade trigger:** Enable Multi-AZ (2 nodes) and upgrade to cache.t4g.small when you have >50 restaurants or when SSE dashboard reliability is business-critical. All Redis data is ephemeral (rate limits, ARQ jobs, pub/sub). If the single node dies, ElastiCache replaces it in ~5-10 minutes. Rate limits reset and pending ARQ jobs are lost (re-enqueued on next WhatsApp message). No order data is affected.
 
@@ -520,7 +540,7 @@ Logs are JSON-formatted with fields: `asctime`, `levelname`, `name`, `message`, 
 
 ## 12. Off-Hours Scheduling (Dev Only)
 
-Dev services scale to zero outside business hours to save costs. RDS is also stopped/started on a schedule to reduce costs further.
+Dev services scale to zero outside business hours to save costs. RDS is stopped/started on a schedule, and Redis on ECS follows its own schedule (starts 15 min before backend/worker, stops 15 min after).
 
 ### ECS Schedule (BRT = UTC-3)
 
@@ -563,17 +583,19 @@ RDS is stopped/started via a Lambda function triggered by EventBridge Scheduler,
 ### If you need to work outside hours
 
 ```bash
-# Manually scale up ECS
+# 1. Start RDS first (takes 3-5 minutes)
+aws rds start-db-instance --db-instance-identifier zenbots-dev
+aws rds wait db-instance-available --db-instance-identifier zenbots-dev
+
+# 2. Scale up Redis on ECS (must be running before backend/worker)
+aws ecs update-service --cluster zenbots-dev \
+  --service zenbots-dev-redis --desired-count 1
+
+# 3. Wait ~30s for Redis to start, then scale up backend + worker
 aws ecs update-service --cluster zenbots-dev \
   --service zenbots-dev-backend --desired-count 1
 aws ecs update-service --cluster zenbots-dev \
   --service zenbots-dev-worker --desired-count 1
-
-# If RDS is stopped, start it manually (takes 3-5 minutes)
-aws rds start-db-instance --db-instance-identifier zenbots-dev-db
-
-# Wait for RDS to become available
-aws rds wait db-instance-available --db-instance-identifier zenbots-dev-db
 
 # The next scheduled action will automatically scale back down/up as usual
 ```
@@ -732,11 +754,12 @@ Key points:
 | Aspect | Dev | Prod (launch) | Prod (scaled) |
 |--------|-----|---------------|----------------|
 | Domain | `dev-api.zenbotz.com.br` | `api.zenbotz.com.br` | `api.zenbotz.com.br` |
-| NAT | fck-nat t4g.nano ($3/mo) | fck-nat t4g.small ($5/mo) | fck-nat t4g.small or NAT Gateway |
+| HTTPS termination | Caddy on fck-nat (Let's Encrypt) | ALB + ACM cert | ALB + ACM cert + WAF |
+| NAT | fck-nat t4g.nano + Caddy ($3/mo) | fck-nat t4g.small ($5/mo) | fck-nat t4g.small or NAT Gateway |
 | RDS | db.t4g.micro, single-AZ, scheduled | db.t4g.micro, Multi-AZ, always-on | db.t4g.small, Multi-AZ |
-| Redis | cache.t4g.micro, 1 node | cache.t4g.micro, 1 node | cache.t4g.small, 2 nodes Multi-AZ |
-| ECS backend | FARGATE_SPOT, 0.25 vCPU, 512 MB, 1 task | FARGATE, 0.25 vCPU, 512 MB, 1-4 tasks | FARGATE, 0.5 vCPU, 1 GB, 2-4 tasks |
-| ECS worker | FARGATE_SPOT, 0.25 vCPU, 512 MB, 1 task | FARGATE_SPOT, 0.25 vCPU, 512 MB, 1-2 tasks | FARGATE, 0.5 vCPU, 1 GB, 1-2 tasks |
+| Redis | Redis 7 on ECS (0.25 vCPU, 512 MB, Cloud Map DNS) | cache.t4g.micro, 1 node | cache.t4g.small, 2 nodes Multi-AZ |
+| ECS backend | FARGATE_SPOT, 1 vCPU, 2 GB, 1 task, WEB_WORKERS=1 | FARGATE, 1 vCPU, 2 GB, 2-4 tasks, WEB_WORKERS=1 | FARGATE, 1 vCPU, 2 GB, 2-4 tasks |
+| ECS worker | FARGATE_SPOT, 0.25 vCPU, 512 MB, 1 task | FARGATE_SPOT, 0.25 vCPU, 512 MB, 1-2 tasks | FARGATE, 0.25 vCPU, 512 MB, 1-2 tasks |
 | Deploy strategy | 50% min healthy | 100% min healthy (zero-downtime) | 100% min healthy (zero-downtime) |
 | Off-hours scheduling | Yes (ECS + RDS) | No (24/7) | No (24/7) |
 | Secrets | SSM Parameter Store (free) | SSM Parameter Store (free) | SSM Parameter Store (free) |
@@ -753,50 +776,61 @@ Key points:
 
 ## 17. Cost Breakdown
 
-### Dev Environment (~$42/month)
-
-| Service | Always on | With scheduling | Notes |
-|---------|-----------|-----------------|-------|
-| RDS db.t4g.micro | $12/mo | ~$4/mo | Scheduled stop/start (50 hrs/week) |
-| ElastiCache cache.t4g.micro | $12/mo | $12/mo | Cannot be scheduled |
-| NAT instance (t4g.nano) | $3/mo | $3/mo | Always runs |
-| ECS Fargate Spot (backend) | $5/mo | ~$1.50/mo | 50h/week vs 168h |
-| ECS Fargate Spot (worker) | $5/mo | ~$1.50/mo | 50h/week vs 168h |
-| ALB | $16/mo | $16/mo | Always runs |
-| S3 + CloudWatch | ~$1.50/mo | ~$1.50/mo | No Secrets Manager, no Container Insights, 3-day log retention |
-| **Total** | **~$54.50/mo** | **~$39.50/mo** | Phase 1 + Phase 2 savings applied |
-
-> **Cost optimization applied (Phase 1 + 2):** Secrets Manager → SSM Parameter Store (saved ~$3.20/mo), Container Insights disabled (saved ~$1.50/mo), log retention 7→3 days (saved ~$1/mo), RDS scheduling (saved ~$8/mo). See `tech_debt/backlog_aws_refactor.md` for the full plan.
-
-### Prod Environment — Launch Config (estimated, ~$76/month)
+### Dev Environment (~$20/month)
 
 | Service | Cost | Notes |
 |---------|------|-------|
-| RDS db.t4g.micro (Multi-AZ) | $25/mo | Auto-failover ~30s, upgrade to t4g.small at >20 customers |
-| ElastiCache cache.t4g.micro (1 node) | $12/mo | All Redis data is ephemeral |
-| NAT (fck-nat t4g.small) | $5/mo | Auto-recovery alarm, same as dev pattern |
-| ECS Fargate (backend, 1 task on-demand) | $10/mo | Auto-scales to 4 on CPU > 70% |
-| ECS Fargate (worker, 1 task Spot) | $3/mo | ARQ jobs retry on Spot interruption |
-| ALB | $16/mo | + LCU charges |
-| S3 + SSM + CloudWatch (30-day logs) | $5/mo | No WAF, no Container Insights, no dashboard |
-| Route 53 health check + S3 maintenance page | ~$1/mo | Automatic failover to static maintenance page |
-| **Total** | **~$77/mo** | **65% less than original $223 plan** |
+| NAT instance + Caddy (fck-nat t4g.nano) | $3.07/mo | Always on, HTTPS reverse proxy (24/7) |
+| Public IPv4 (NAT EIP) | $3.65/mo | AWS charges $0.005/hr per public IPv4 since Feb 2024 |
+| ECS Fargate SPOT (backend: 1 vCPU / 2 GB) | ~$2.57-4.29/mo | ~217 hrs/mo, Spot discount 50-70% |
+| RDS db.t4g.micro (compute) | $3.47/mo | Scheduled stop/start (~217 hrs/mo) |
+| RDS storage (20 GB gp3) | $1.60/mo | Charged 24/7 even when instance is stopped |
+| ECS Fargate SPOT (worker: 0.25 vCPU / 512 MB) | ~$0.64-1.07/mo | ~217 hrs/mo (scheduled) |
+| ECS Fargate SPOT (Redis: 0.25 vCPU / 512 MB) | ~$0.64-1.07/mo | ~217 hrs/mo (scheduled) |
+| CloudWatch (logs 3-day + 7 alarms) | ~$1.45/mo | $0.50/GB ingestion + $0.10/alarm |
+| Route 53 (1 zone) | $0.50/mo | A record → NAT EIP |
+| ECR | ~$0.20/mo | ~2 GB stored, lifecycle cleanup |
+| Cloud Map (1 namespace, 2 services) | ~$0.10/mo | Redis + backend DNS discovery |
+| S3 | ~$0.03/mo | <1 GB, no versioning |
+| SSM Parameter Store (19 params) | $0.00 | Free tier |
+| **Total** | **~$18-20/mo** | Mid-range ~$20 at 60% Spot discount |
 
-**Estimated availability (launch): ~99.7%** (~26 hours downtime/year). Database is fully HA with automatic failover. Maintenance page failover prevents hard 503s during backend outages. Acceptable for early-stage SaaS with <20 restaurants.
+> **Cost optimization applied (Phases 1-4 + SM cleanup):** Secrets Manager deleted (saved ~$3.20/mo), Container Insights disabled (saved ~$1.50/mo), log retention 7→3 days (saved ~$1/mo), RDS scheduling (saved ~$8/mo), ElastiCache → Redis on ECS (saved ~$10.50/mo), ALB → Caddy on NAT (saved ~$16/mo + $7.30 IPv4). Backend bumped to 1024/2048 for SentenceTransformer model (+~$2.55/mo). This is the cost floor for the current architecture. See `tech_debt/backlog_aws_refactor.md`.
+
+### Prod Environment — Launch Config (estimated, ~$108/month)
+
+Applies the same cost-first philosophy proven in dev. Start lean, scale components independently via growth triggers. See `tech_debt/backlog_aws_refactor.md` for the full rationale.
+
+| Service | Cost | Notes |
+|---------|------|-------|
+| ECS Fargate (backend, 1 task on-demand, 1 vCPU / 2 GB) | ~$29/mo | WEB_WORKERS=1, auto-scales to 4 on CPU > 70%. Start with 1 task, not 2. |
+| RDS db.t4g.micro (Multi-AZ) | ~$25/mo | Auto-failover ~30s, upgrade to t4g.small at >20 customers |
+| ALB + WAF | ~$26/mo | WAF rate limiting (2,000 req/5min/IP) |
+| ElastiCache cache.t4g.micro (1 node) | ~$12/mo | Single node initially. Multi-AZ at >50 restaurants. |
+| NAT (fck-nat t4g.small) | ~$5/mo | Auto-recovery alarm. Upgrade to NAT Gateway only if zero-downtime NAT is needed. |
+| CloudWatch (30-day logs, 13 alarms) | ~$5/mo | No Container Insights, no dashboard initially |
+| ECS Fargate (worker, 1 task Spot, 0.25 vCPU / 512 MB) | ~$3/mo | ARQ jobs retry on Spot interruption |
+| Route 53 health check + S3 maintenance page | ~$2/mo | Automatic failover to static maintenance page |
+| SSM Parameter Store | $0/mo | Free tier (same as dev, no Secrets Manager) |
+| S3 + ECR | ~$1/mo | Menu storage |
+| **Total** | **~$108/mo** | **52% less than original $223 plan** |
+
+**Estimated availability (launch): ~99.7%** (~26 hours downtime/year). Database is fully HA with Multi-AZ automatic failover. Maintenance page failover prevents hard 503s during backend outages. Acceptable for early-stage SaaS with <20 restaurants.
 
 ### Prod Environment — Scaled Config (estimated, ~$200/month)
 
+Triggered incrementally as the platform grows. Each upgrade is independent.
+
 | Service | Cost | Notes |
 |---------|------|-------|
-| RDS db.t4g.small (Multi-AZ) | $50/mo | Failover in ~30s |
-| ElastiCache cache.t4g.small (2 nodes) | $45/mo | Multi-AZ with failover |
+| ECS Fargate (backend, 2 tasks on-demand, 1 vCPU / 2 GB each) | ~$58/mo | 2-task baseline at >20 customers, auto-scales to 4 |
+| RDS db.t4g.small (Multi-AZ) | ~$50/mo | Upgraded at >20 customers or >$500/mo revenue |
+| ElastiCache cache.t4g.small (2 nodes Multi-AZ) | ~$45/mo | Upgraded at >50 restaurants |
+| ALB + WAF | ~$26/mo | + LCU charges under load |
 | NAT (fck-nat t4g.small or Gateway) | $5-32/mo | Evaluate based on traffic |
-| ECS Fargate (backend, 2 tasks on-demand) | $20/mo | Auto-scales to 4 |
-| ECS Fargate (worker, 1 task on-demand) | $10/mo | Auto-scales to 2 |
-| ALB | $16/mo | + LCU charges |
-| WAF | $10/mo | Rate limiting + managed rules |
-| Other (S3, SSM, Logs 90d, Dashboard, Insights) | $12/mo | Full observability |
-| **Total** | **~$168-195/mo** | Full HA config |
+| ECS Fargate (worker, 1 task on-demand, 0.25 vCPU / 512 MB) | ~$5/mo | Auto-scales to 2 |
+| Other (SSM, Logs 90d, Dashboard, Insights) | ~$12/mo | Full observability |
+| **Total** | **~$200/mo** | Full HA config |
 
 **Estimated availability (scaled): ~99.9%** (~8.7 hours downtime/year).
 
@@ -804,9 +838,9 @@ Key points:
 
 | Trigger | Action | Cost impact |
 |---------|--------|-------------|
+| >20 paying customers | Backend baseline → 2 tasks | +$29/mo |
 | >20 paying customers or >$500/mo revenue | RDS → db.t4g.small (keep Multi-AZ) | +$25/mo |
-| >50 restaurants or SSE dashboard is critical | ElastiCache → cache.t4g.small Multi-AZ | +$33/mo |
-| p99 latency spikes during scale-out | Backend baseline → 2 tasks | +$10/mo |
+| >50 restaurants or SSE dashboard is critical | ElastiCache → cache.t4g.small Multi-AZ (2 nodes) | +$33/mo |
 | ALB flood/connection alarms fire or abuse detected | Enable WAF (`enable_waf = true`) | +$10/mo |
 | Full observability needed | Enable Container Insights + dashboard + 90d logs | +$5/mo |
 | High outbound traffic or zero NAT downtime required | fck-nat → NAT Gateway | +$27/mo |
@@ -843,14 +877,16 @@ infra/
     ├── vpc/                    # VPC, subnets, route tables, security groups
     ├── nat/                    # NAT instance or gateway
     ├── rds/                    # PostgreSQL on RDS
-    ├── elasticache/            # Redis on ElastiCache
+    ├── elasticache/            # Redis on ElastiCache (prod only)
+    ├── redis-ecs/              # Redis 7 on ECS Fargate (dev only, replaces ElastiCache)
     ├── alb/                    # Application Load Balancer
     ├── ecs/                    # Cluster, task defs, services, IAM, auto-scaling
     ├── s3/                     # Menu storage bucket
     ├── secrets/                # SSM Parameter Store entries (legacy: Secrets Manager)
     ├── monitoring/             # SNS + CloudWatch alarms
     ├── dashboard/              # CloudWatch dashboard (prod only)
-    ├── scheduling/             # Off-hours ECS scaling (dev only)
+    ├── ssm-parameters/         # SSM Parameter Store (replaces Secrets Manager for dev)
+    ├── scheduling/             # Off-hours ECS + Redis scaling (dev only)
     ├── rds-scheduling/         # RDS stop/start via Lambda + EventBridge (dev only)
     ├── ecr/                    # Container registry
     ├── maintenance-page/       # S3 static maintenance page (prod only)
@@ -1024,15 +1060,18 @@ terraform output -raw rds_endpoint
 
 ### Services are at 0 tasks (outside business hours)
 
-Dev services scale to 0 at 7 PM BRT and back up at 9 AM BRT on weekdays. Weekends are fully off. RDS is also stopped 30 minutes after ECS scales down.
+Dev services scale to 0 at 7 PM BRT and back up at 9 AM BRT on weekdays. Weekends are fully off. RDS is stopped 30 minutes after ECS scales down. Redis on ECS stops 15 minutes after backend/worker.
 
 To work outside hours:
 ```bash
-# Start RDS first (takes 3-5 minutes)
-aws rds start-db-instance --db-instance-identifier zenbots-dev-db
-aws rds wait db-instance-available --db-instance-identifier zenbots-dev-db
+# 1. Start RDS first (takes 3-5 minutes)
+aws rds start-db-instance --db-instance-identifier zenbots-dev
+aws rds wait db-instance-available --db-instance-identifier zenbots-dev
 
-# Then scale up ECS
+# 2. Scale up Redis, then backend + worker
+aws ecs update-service --cluster zenbots-dev \
+  --service zenbots-dev-redis --desired-count 1
+# Wait ~30s for Redis to register in Cloud Map
 aws ecs update-service --cluster zenbots-dev \
   --service zenbots-dev-backend --desired-count 1
 aws ecs update-service --cluster zenbots-dev \

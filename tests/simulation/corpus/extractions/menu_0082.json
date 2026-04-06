@@ -1,0 +1,104 @@
+{
+  "products": [
+    {
+      "name": "Guioza",
+      "description": "",
+      "price": 25.0,
+      "category": "Entradas",
+      "id": 9112,
+      "bot_id": 1224,
+      "is_available": true
+    },
+    {
+      "name": "Harumaki",
+      "description": "",
+      "price": 30.0,
+      "category": "Entradas",
+      "id": 9115,
+      "bot_id": 1224,
+      "is_available": true
+    },
+    {
+      "name": "Missoshiru",
+      "description": "",
+      "price": 25.0,
+      "category": "Entradas",
+      "id": 9114,
+      "bot_id": 1224,
+      "is_available": true
+    },
+    {
+      "name": "Sunomono",
+      "description": "",
+      "price": 5.0,
+      "category": "Entradas",
+      "id": 9116,
+      "bot_id": 1224,
+      "is_available": true
+    },
+    {
+      "name": "Temaki",
+      "description": "",
+      "price": 30.0,
+      "category": "Entradas",
+      "id": 9113,
+      "bot_id": 1224,
+      "is_available": true
+    },
+    {
+      "name": "Tempurá",
+      "description": "",
+      "price": 5.0,
+      "category": "Entradas",
+      "id": 9117,
+      "bot_id": 1224,
+      "is_available": true
+    },
+    {
+      "name": "Atum",
+      "description": "Sushi de Atum",
+      "price": 10.0,
+      "category": "Sushi",
+      "id": 9119,
+      "bot_id": 1224,
+      "is_available": true
+    },
+    {
+      "name": "Hot Roll",
+      "description": "Salmão, kani, cream cheese e cebolinha - 8 unidades",
+      "price": 30.0,
+      "category": "Sushi",
+      "id": 9121,
+      "bot_id": 1224,
+      "is_available": true
+    },
+    {
+      "name": "Kappa Maki",
+      "description": "Sushi de Pepino",
+      "price": 20.0,
+      "category": "Sushi",
+      "id": 9122,
+      "bot_id": 1224,
+      "is_available": true
+    },
+    {
+      "name": "Niguiri",
+      "description": "Niguiri de Salmão 10 unidades",
+      "price": 30.0,
+      "category": "Sushi",
+      "id": 9120,
+      "bot_id": 1224,
+      "is_available": true
+    },
+    {
+      "name": "Salmão",
+      "description": "Sushi de salmão 10 unidades",
+      "price": 40.0,
+      "category": "Sushi",
+      "id": 9118,
+      "bot_id": 1224,
+      "is_available": true
+    }
+  ],
+  "category": "sushi"
+}

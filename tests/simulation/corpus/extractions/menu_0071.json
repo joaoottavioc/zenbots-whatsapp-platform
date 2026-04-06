@@ -1,0 +1,113 @@
+{
+  "products": [
+    {
+      "name": "Americana",
+      "description": "Mucarela - Bacon - Champignon - Queijo - Orégano",
+      "price": 14.9,
+      "category": "Sabores Especiais",
+      "id": 8990,
+      "bot_id": 1213,
+      "is_available": true
+    },
+    {
+      "name": "Serrana",
+      "description": "Mucarela - Presunto - Calabresa - Ovo de Codorna - Azeitona - Orégano",
+      "price": 14.9,
+      "category": "Sabores Especiais",
+      "id": 8988,
+      "bot_id": 1213,
+      "is_available": true
+    },
+    {
+      "name": "Turbinada",
+      "description": "Mucarela - Presunto - Calabresa - Bacon - Frango - Catupiry - Orégano",
+      "price": 14.9,
+      "category": "Sabores Especiais",
+      "id": 8989,
+      "bot_id": 1213,
+      "is_available": true
+    },
+    {
+      "name": "Pepperoni",
+      "description": "Mucarela - Calabresa - Orégano",
+      "price": 16.9,
+      "category": "Sabores Premium",
+      "id": 8991,
+      "bot_id": 1213,
+      "is_available": true
+    },
+    {
+      "name": "Alho com Catupiry",
+      "description": "Mucarela - Alho - Catupiry - Orégano",
+      "price": 12.9,
+      "category": "Sabores Tradicionais",
+      "id": 8987,
+      "bot_id": 1213,
+      "is_available": true
+    },
+    {
+      "name": "Alho e Óleo",
+      "description": "Mucarela - Alho - Orégano",
+      "price": 12.9,
+      "category": "Sabores Tradicionais",
+      "id": 8984,
+      "bot_id": 1213,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa",
+      "description": "Mucarela - Calabresa - Cebola - Orégano",
+      "price": 12.9,
+      "category": "Sabores Tradicionais",
+      "id": 8982,
+      "bot_id": 1213,
+      "is_available": true
+    },
+    {
+      "name": "Frango com Catupiry",
+      "description": "Mucarela - Frango - Catupiry - Orégano",
+      "price": 12.9,
+      "category": "Sabores Tradicionais",
+      "id": 8983,
+      "bot_id": 1213,
+      "is_available": true
+    },
+    {
+      "name": "Lombo Suíno com Catupiry",
+      "description": "Mucarela - Lombo - Catupiry - Orégano",
+      "price": 12.9,
+      "category": "Sabores Tradicionais",
+      "id": 8985,
+      "bot_id": 1213,
+      "is_available": true
+    },
+    {
+      "name": "Margarita",
+      "description": "Mucarela - Tomate - Manjericão - Orégano",
+      "price": 12.9,
+      "category": "Sabores Tradicionais",
+      "id": 8986,
+      "bot_id": 1213,
+      "is_available": true
+    },
+    {
+      "name": "Mucarela",
+      "description": "Mucarela - Orégano",
+      "price": 12.9,
+      "category": "Sabores Tradicionais",
+      "id": 8980,
+      "bot_id": 1213,
+      "is_available": true
+    },
+    {
+      "name": "Presunto",
+      "description": "Mucarela - Presunto - Orégano",
+      "price": 12.9,
+      "category": "Sabores Tradicionais",
+      "id": 8981,
+      "bot_id": 1213,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

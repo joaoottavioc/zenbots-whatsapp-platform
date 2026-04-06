@@ -1,0 +1,122 @@
+{
+  "products": [
+    {
+      "name": "Chimichurri",
+      "description": "",
+      "price": 3.0,
+      "category": "Molhos",
+      "id": 9004,
+      "bot_id": 1216,
+      "is_available": true
+    },
+    {
+      "name": "Maionese de Alho Major",
+      "description": "",
+      "price": 3.0,
+      "category": "Molhos",
+      "id": 9003,
+      "bot_id": 1216,
+      "is_available": true
+    },
+    {
+      "name": "Molho de Alho",
+      "description": "",
+      "price": 3.0,
+      "category": "Molhos",
+      "id": 9002,
+      "bot_id": 1216,
+      "is_available": true
+    },
+    {
+      "name": "Molho de Pimenta dedo de Moça",
+      "description": "",
+      "price": 3.0,
+      "category": "Molhos",
+      "id": 9005,
+      "bot_id": 1216,
+      "is_available": true
+    },
+    {
+      "name": "Ancho Di Prima",
+      "description": "Simples (acompanha mandioca, vinagrete, farofa de costelinha e molho de alho)",
+      "price": 90.0,
+      "category": "Pratos Principais",
+      "id": 8997,
+      "bot_id": 1216,
+      "is_available": true
+    },
+    {
+      "name": "Completo",
+      "description": "(acompanha arroz, feijão, mandioca, vinagrete, farofa de costelinha e molho de alho)",
+      "price": 150.0,
+      "category": "Pratos Principais",
+      "id": 9001,
+      "bot_id": 1216,
+      "is_available": true
+    },
+    {
+      "name": "Cupim Bola dos Deuses",
+      "description": "Simples (acompanha mandioca, vinagrete, farofa de costelinha e molho de alho)",
+      "price": 120.0,
+      "category": "Pratos Principais",
+      "id": 9000,
+      "bot_id": 1216,
+      "is_available": true
+    },
+    {
+      "name": "Cupim Fatiado",
+      "description": "Simples (acompanha mandioca, vinagrete, farofa de costelinha e molho de alho)",
+      "price": 70.0,
+      "category": "Pratos Principais",
+      "id": 8998,
+      "bot_id": 1216,
+      "is_available": true
+    },
+    {
+      "name": "Picanha Premium",
+      "description": "Simples (acompanha mandioca, vinagrete, farofa de costelinha e molho de alho)",
+      "price": 120.0,
+      "category": "Pratos Principais",
+      "id": 8999,
+      "bot_id": 1216,
+      "is_available": true
+    },
+    {
+      "name": "Capitão (Pão Bagute Especial, Picanha Premium, queijo muçarela, molho chimichurri)",
+      "description": "",
+      "price": 30.0,
+      "category": "Sanduíches",
+      "id": 9009,
+      "bot_id": 1216,
+      "is_available": true
+    },
+    {
+      "name": "Major (Pão Bagute Especial, Cupim Bola dos Deuses, queijo muçarela, molho chimichurri e maionese especial)",
+      "description": "",
+      "price": 30.0,
+      "category": "Sanduíches",
+      "id": 9006,
+      "bot_id": 1216,
+      "is_available": true
+    },
+    {
+      "name": "Sargento (Pão Bagute Especial, Cupim Fatiado Super Grill, queijo muçarela, molho chimichurri)",
+      "description": "",
+      "price": 25.0,
+      "category": "Sanduíches",
+      "id": 9007,
+      "bot_id": 1216,
+      "is_available": true
+    },
+    {
+      "name": "Tenente (Pão Bagute Especial, Ancho Di Prima, queijo muçarela, molho chimichurri)",
+      "description": "",
+      "price": 25.0,
+      "category": "Sanduíches",
+      "id": 9008,
+      "bot_id": 1216,
+      "is_available": true
+    }
+  ],
+  "category": "padaria"
+}

@@ -40,3 +40,21 @@ variable "nat_type" {
     error_message = "nat_type must be 'instance' or 'gateway'."
   }
 }
+
+variable "enable_reverse_proxy" {
+  description = "Install Caddy reverse proxy on NAT instance for HTTPS termination (dev only, replaces ALB)"
+  type        = bool
+  default     = false
+}
+
+variable "reverse_proxy_domain" {
+  description = "Domain name for Caddy HTTPS (e.g. dev-api.zenbotz.com.br)"
+  type        = string
+  default     = ""
+}
+
+variable "reverse_proxy_upstream" {
+  description = "Upstream address for Caddy to proxy to (e.g. backend.zenbots-dev.local:8000)"
+  type        = string
+  default     = ""
+}

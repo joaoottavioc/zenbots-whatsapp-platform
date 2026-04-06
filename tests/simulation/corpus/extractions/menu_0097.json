@@ -1,0 +1,194 @@
+{
+  "products": [
+    {
+      "name": "Café com leite e Nutella (médio)",
+      "description": "",
+      "price": 5.5,
+      "category": "Matinais",
+      "id": 9321,
+      "bot_id": 1239,
+      "is_available": true
+    },
+    {
+      "name": "Café com leite e Nutella (pequeno)",
+      "description": "",
+      "price": 4.5,
+      "category": "Matinais",
+      "id": 9320,
+      "bot_id": 1239,
+      "is_available": true
+    },
+    {
+      "name": "Café com leite (grande)",
+      "description": "",
+      "price": 5.0,
+      "category": "Matinais",
+      "id": 9319,
+      "bot_id": 1239,
+      "is_available": true
+    },
+    {
+      "name": "Café com leite (médio)",
+      "description": "",
+      "price": 4.0,
+      "category": "Matinais",
+      "id": 9318,
+      "bot_id": 1239,
+      "is_available": true
+    },
+    {
+      "name": "Café com leite (pequeno)",
+      "description": "",
+      "price": 3.0,
+      "category": "Matinais",
+      "id": 9317,
+      "bot_id": 1239,
+      "is_available": true
+    },
+    {
+      "name": "Café expresso",
+      "description": "",
+      "price": 2.5,
+      "category": "Matinais",
+      "id": 9315,
+      "bot_id": 1239,
+      "is_available": true
+    },
+    {
+      "name": "Café machado",
+      "description": "",
+      "price": 2.5,
+      "category": "Matinais",
+      "id": 9316,
+      "bot_id": 1239,
+      "is_available": true
+    },
+    {
+      "name": "Cappuccino (grande)",
+      "description": "",
+      "price": 6.0,
+      "category": "Matinais",
+      "id": 9324,
+      "bot_id": 1239,
+      "is_available": true
+    },
+    {
+      "name": "Cappuccino (médio)",
+      "description": "",
+      "price": 5.0,
+      "category": "Matinais",
+      "id": 9323,
+      "bot_id": 1239,
+      "is_available": true
+    },
+    {
+      "name": "Cappuccino (pequeno)",
+      "description": "",
+      "price": 4.0,
+      "category": "Matinais",
+      "id": 9322,
+      "bot_id": 1239,
+      "is_available": true
+    },
+    {
+      "name": "Chocolate (grande)",
+      "description": "",
+      "price": 5.0,
+      "category": "Matinais",
+      "id": 9327,
+      "bot_id": 1239,
+      "is_available": true
+    },
+    {
+      "name": "Chocolate (médio)",
+      "description": "",
+      "price": 4.0,
+      "category": "Matinais",
+      "id": 9326,
+      "bot_id": 1239,
+      "is_available": true
+    },
+    {
+      "name": "Chocolate (pequeno)",
+      "description": "",
+      "price": 3.0,
+      "category": "Matinais",
+      "id": 9325,
+      "bot_id": 1239,
+      "is_available": true
+    },
+    {
+      "name": "Leite zero lactose (grande)",
+      "description": "",
+      "price": 3.0,
+      "category": "Matinais",
+      "id": 9314,
+      "bot_id": 1239,
+      "is_available": true
+    },
+    {
+      "name": "Leite zero lactose (pequeno)",
+      "description": "",
+      "price": 1.5,
+      "category": "Matinais",
+      "id": 9313,
+      "bot_id": 1239,
+      "is_available": true
+    },
+    {
+      "name": "Pão com cream cheese",
+      "description": "",
+      "price": 4.0,
+      "category": "Pães Especiais",
+      "id": 9329,
+      "bot_id": 1239,
+      "is_available": true
+    },
+    {
+      "name": "Pão com frutas (mamão, abacaxi ou laranja)",
+      "description": "",
+      "price": 5.0,
+      "category": "Pães Especiais",
+      "id": 9331,
+      "bot_id": 1239,
+      "is_available": true
+    },
+    {
+      "name": "Pão com geléia",
+      "description": "",
+      "price": 3.5,
+      "category": "Pães Especiais",
+      "id": 9333,
+      "bot_id": 1239,
+      "is_available": true
+    },
+    {
+      "name": "Pão com goiabada",
+      "description": "",
+      "price": 4.5,
+      "category": "Pães Especiais",
+      "id": 9332,
+      "bot_id": 1239,
+      "is_available": true
+    },
+    {
+      "name": "Pão especial (açucarado)",
+      "description": "",
+      "price": 3.5,
+      "category": "Pães Especiais",
+      "id": 9328,
+      "bot_id": 1239,
+      "is_available": true
+    },
+    {
+      "name": "Pão na chapa",
+      "description": "",
+      "price": 3.0,
+      "category": "Pães Especiais",
+      "id": 9330,
+      "bot_id": 1239,
+      "is_available": true
+    }
+  ],
+  "category": "cafeteria"
+}

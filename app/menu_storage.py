@@ -109,6 +109,23 @@ def generate_presigned_url(s3_url: str, expiration: int = 3600) -> str:
     )
 
 
+def delete_s3_object(s3_url: str) -> bool:
+    """Delete an object from S3 given its full URL. Returns True on success."""
+    if not s3_url or not BUCKET_NAME:
+        return False
+    prefix = f"https://{BUCKET_NAME}.s3.{REGION}.amazonaws.com/"
+    if not s3_url.startswith(prefix):
+        return False
+    key = s3_url[len(prefix) :]
+    try:
+        s3_client.delete_object(Bucket=BUCKET_NAME, Key=key)
+        logger.info("Deleted S3 object: %s", key)
+        return True
+    except Exception as e:
+        logger.error("Failed to delete S3 object %s: %s", key, e)
+        return False
+
+
 # Mantemos a antiga para compatibilidade se usada em outros lugares
 def upload_file_to_s3(file: UploadFile, folder: str = "uploads") -> str:
     return upload_bytes_to_s3(

@@ -1,0 +1,140 @@
+{
+  "products": [
+    {
+      "name": "Bacalhau",
+      "description": "molho de tomate pelado, azeite, cebola e alho",
+      "price": 27.5,
+      "category": "Massas ao Forno",
+      "id": 8254,
+      "bot_id": 1161,
+      "is_available": true
+    },
+    {
+      "name": "Bolonhesa",
+      "description": "molho de tomate pelado, carne bovina suína, azeite e cebola",
+      "price": 19.5,
+      "category": "Massas ao Forno",
+      "id": 8253,
+      "bot_id": 1161,
+      "is_available": true
+    },
+    {
+      "name": "Caneloni",
+      "description": "molho branco com mussarela, parmesão, gorgonzola e provolone",
+      "price": 22.5,
+      "category": "Massas ao Forno",
+      "id": 8248,
+      "bot_id": 1161,
+      "is_available": true
+    },
+    {
+      "name": "Conchiglione",
+      "description": "",
+      "price": 22.5,
+      "category": "Massas ao Forno",
+      "id": 8249,
+      "bot_id": 1161,
+      "is_available": true
+    },
+    {
+      "name": "Frango",
+      "description": "molho de tomate pelado, azeite e frango",
+      "price": 22.0,
+      "category": "Massas ao Forno",
+      "id": 8252,
+      "bot_id": 1161,
+      "is_available": true
+    },
+    {
+      "name": "Lasanha",
+      "description": "",
+      "price": 22.5,
+      "category": "Massas ao Forno",
+      "id": 8250,
+      "bot_id": 1161,
+      "is_available": true
+    },
+    {
+      "name": "Quatro Queijos",
+      "description": "molho branco com mussarela, parmesão, gorgonzola e provolone",
+      "price": 22.5,
+      "category": "Massas ao Forno",
+      "id": 8251,
+      "bot_id": 1161,
+      "is_available": true
+    },
+    {
+      "name": "Fettuccine",
+      "description": "",
+      "price": 19.5,
+      "category": "Massas Cozidas",
+      "id": 8255,
+      "bot_id": 1161,
+      "is_available": true
+    },
+    {
+      "name": "Filet Misto",
+      "description": "azeite, manjericão, parmesão de hialia, azeitona e cebola",
+      "price": 24.5,
+      "category": "Massas Cozidas",
+      "id": 8262,
+      "bot_id": 1161,
+      "is_available": true
+    },
+    {
+      "name": "Fusilli",
+      "description": "",
+      "price": 19.5,
+      "category": "Massas Cozidas",
+      "id": 8256,
+      "bot_id": 1161,
+      "is_available": true
+    },
+    {
+      "name": "Mediterrâneo",
+      "description": "azeite, manjericão, azeitona, champignon, cebola, sal, manjericão e azeite",
+      "price": 24.5,
+      "category": "Massas Cozidas",
+      "id": 8261,
+      "bot_id": 1161,
+      "is_available": true
+    },
+    {
+      "name": "Penne",
+      "description": "",
+      "price": 19.5,
+      "category": "Massas Cozidas",
+      "id": 8257,
+      "bot_id": 1161,
+      "is_available": true
+    },
+    {
+      "name": "Rigatoni",
+      "description": "",
+      "price": 19.5,
+      "category": "Massas Cozidas",
+      "id": 8258,
+      "bot_id": 1161,
+      "is_available": true
+    },
+    {
+      "name": "Spaghetti",
+      "description": "",
+      "price": 19.5,
+      "category": "Massas Cozidas",
+      "id": 8259,
+      "bot_id": 1161,
+      "is_available": true
+    },
+    {
+      "name": "Tagliarini",
+      "description": "",
+      "price": 19.5,
+      "category": "Massas Cozidas",
+      "id": 8260,
+      "bot_id": 1161,
+      "is_available": true
+    }
+  ],
+  "category": "comida italiana"
+}

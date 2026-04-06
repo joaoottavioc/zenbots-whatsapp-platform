@@ -1,0 +1,104 @@
+{
+  "products": [
+    {
+      "name": "Baguette de mix de gergelim",
+      "description": "",
+      "price": 18.0,
+      "category": "Lanches",
+      "id": 9075,
+      "bot_id": 1221,
+      "is_available": true
+    },
+    {
+      "name": "Baguette Multigrãos",
+      "description": "",
+      "price": 22.0,
+      "category": "Lanches",
+      "id": 9076,
+      "bot_id": 1221,
+      "is_available": true
+    },
+    {
+      "name": "Baguette Tradicional",
+      "description": "",
+      "price": 17.0,
+      "category": "Lanches",
+      "id": 9074,
+      "bot_id": 1221,
+      "is_available": true
+    },
+    {
+      "name": "Brioche",
+      "description": "",
+      "price": 25.0,
+      "category": "Lanches",
+      "id": 9083,
+      "bot_id": 1221,
+      "is_available": true
+    },
+    {
+      "name": "Focaccia de tomate cereja, flor de sal e alecrim",
+      "description": "",
+      "price": 25.0,
+      "category": "Lanches",
+      "id": 9084,
+      "bot_id": 1221,
+      "is_available": true
+    },
+    {
+      "name": "Pão Italiano",
+      "description": "",
+      "price": 15.0,
+      "category": "Lanches",
+      "id": 9077,
+      "bot_id": 1221,
+      "is_available": true
+    },
+    {
+      "name": "2 queijos (parmesão e Mussarela)",
+      "description": "",
+      "price": 25.0,
+      "category": "Pães Recheados",
+      "id": 9080,
+      "bot_id": 1221,
+      "is_available": true
+    },
+    {
+      "name": "Azeitona preta (tipo AZAPA)",
+      "description": "",
+      "price": 20.0,
+      "category": "Pães Recheados",
+      "id": 9079,
+      "bot_id": 1221,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa com Mussarela",
+      "description": "",
+      "price": 20.0,
+      "category": "Pães Recheados",
+      "id": 9078,
+      "bot_id": 1221,
+      "is_available": true
+    },
+    {
+      "name": "Multigrãos",
+      "description": "",
+      "price": 25.0,
+      "category": "Pães Recheados",
+      "id": 9081,
+      "bot_id": 1221,
+      "is_available": true
+    },
+    {
+      "name": "Nozes com gorgonzola",
+      "description": "",
+      "price": 25.0,
+      "category": "Pães Recheados",
+      "id": 9082,
+      "bot_id": 1221,
+      "is_available": true
+    }
+  ],
+  "category": "padaria"
+}

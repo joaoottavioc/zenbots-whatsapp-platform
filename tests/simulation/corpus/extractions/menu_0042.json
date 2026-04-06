@@ -1,0 +1,113 @@
+{
+  "products": [
+    {
+      "name": "Café Gelado",
+      "description": "",
+      "price": 12.0,
+      "category": "Bebidas geladas",
+      "id": 8282,
+      "bot_id": 1163,
+      "is_available": true
+    },
+    {
+      "name": "Detox",
+      "description": "",
+      "price": 8.0,
+      "category": "Bebidas geladas",
+      "id": 8283,
+      "bot_id": 1163,
+      "is_available": true
+    },
+    {
+      "name": "Mocha Latte",
+      "description": "",
+      "price": 12.0,
+      "category": "Bebidas geladas",
+      "id": 8284,
+      "bot_id": 1163,
+      "is_available": true
+    },
+    {
+      "name": "Café Latte",
+      "description": "",
+      "price": 8.0,
+      "category": "Bebidas quentes",
+      "id": 8278,
+      "bot_id": 1163,
+      "is_available": true
+    },
+    {
+      "name": "Cappuccino Cremoso",
+      "description": "",
+      "price": 10.0,
+      "category": "Bebidas quentes",
+      "id": 8279,
+      "bot_id": 1163,
+      "is_available": true
+    },
+    {
+      "name": "Cappuccino Italiano",
+      "description": "",
+      "price": 10.0,
+      "category": "Bebidas quentes",
+      "id": 8280,
+      "bot_id": 1163,
+      "is_available": true
+    },
+    {
+      "name": "Carioca",
+      "description": "",
+      "price": 6.0,
+      "category": "Bebidas quentes",
+      "id": 8281,
+      "bot_id": 1163,
+      "is_available": true
+    },
+    {
+      "name": "Expresso Simples",
+      "description": "",
+      "price": 6.0,
+      "category": "Bebidas quentes",
+      "id": 8277,
+      "bot_id": 1163,
+      "is_available": true
+    },
+    {
+      "name": "Brownie",
+      "description": "",
+      "price": 10.0,
+      "category": "Doces",
+      "id": 8288,
+      "bot_id": 1163,
+      "is_available": true
+    },
+    {
+      "name": "Cookie",
+      "description": "",
+      "price": 8.0,
+      "category": "Doces",
+      "id": 8285,
+      "bot_id": 1163,
+      "is_available": true
+    },
+    {
+      "name": "Donut",
+      "description": "",
+      "price": 8.0,
+      "category": "Doces",
+      "id": 8286,
+      "bot_id": 1163,
+      "is_available": true
+    },
+    {
+      "name": "Macaron",
+      "description": "",
+      "price": 8.0,
+      "category": "Doces",
+      "id": 8287,
+      "bot_id": 1163,
+      "is_available": true
+    }
+  ],
+  "category": "cafeteria"
+}

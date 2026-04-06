@@ -1,0 +1,212 @@
+{
+  "products": [
+    {
+      "name": "Açaí Batido",
+      "description": "Com água",
+      "price": 15.0,
+      "category": "Bebidas Geladas",
+      "id": 8894,
+      "bot_id": 1204,
+      "is_available": true
+    },
+    {
+      "name": "Água de Coco",
+      "description": "",
+      "price": 15.0,
+      "category": "Bebidas Geladas",
+      "id": 8891,
+      "bot_id": 1204,
+      "is_available": true
+    },
+    {
+      "name": "Dois sabores",
+      "description": "Fruta",
+      "price": 16.8,
+      "category": "Bebidas Geladas",
+      "id": 8887,
+      "bot_id": 1204,
+      "is_available": true
+    },
+    {
+      "name": "Frutas vermelhas",
+      "description": "",
+      "price": 18.0,
+      "category": "Bebidas Geladas",
+      "id": 8895,
+      "bot_id": 1204,
+      "is_available": true
+    },
+    {
+      "name": "Item Fruta",
+      "description": "",
+      "price": 15.0,
+      "category": "Bebidas Geladas",
+      "id": 8893,
+      "bot_id": 1204,
+      "is_available": true
+    },
+    {
+      "name": "Limonada Suíça",
+      "description": "",
+      "price": 15.0,
+      "category": "Bebidas Geladas",
+      "id": 8890,
+      "bot_id": 1204,
+      "is_available": true
+    },
+    {
+      "name": "Pitaya com laranja",
+      "description": "",
+      "price": 15.0,
+      "category": "Bebidas Geladas",
+      "id": 8889,
+      "bot_id": 1204,
+      "is_available": true
+    },
+    {
+      "name": "Suco de Laranja",
+      "description": "",
+      "price": 10.8,
+      "category": "Bebidas Geladas",
+      "id": 8897,
+      "bot_id": 1204,
+      "is_available": true
+    },
+    {
+      "name": "Tangerina",
+      "description": "",
+      "price": 15.0,
+      "category": "Bebidas Geladas",
+      "id": 8892,
+      "bot_id": 1204,
+      "is_available": true
+    },
+    {
+      "name": "Termogênico",
+      "description": "",
+      "price": 18.0,
+      "category": "Bebidas Geladas",
+      "id": 8896,
+      "bot_id": 1204,
+      "is_available": true
+    },
+    {
+      "name": "Três sabores",
+      "description": "Fruta",
+      "price": 19.0,
+      "category": "Bebidas Geladas",
+      "id": 8888,
+      "bot_id": 1204,
+      "is_available": true
+    },
+    {
+      "name": "Um sabor",
+      "description": "Fruta",
+      "price": 12.7,
+      "category": "Bebidas Geladas",
+      "id": 8886,
+      "bot_id": 1204,
+      "is_available": true
+    },
+    {
+      "name": "Café do coador",
+      "description": "Com açúcar",
+      "price": 4.3,
+      "category": "Bebidas Quentes",
+      "id": 8875,
+      "bot_id": 1204,
+      "is_available": true
+    },
+    {
+      "name": "Café expresso",
+      "description": "",
+      "price": 6.3,
+      "category": "Bebidas Quentes",
+      "id": 8876,
+      "bot_id": 1204,
+      "is_available": true
+    },
+    {
+      "name": "Cappuccino",
+      "description": "",
+      "price": 7.4,
+      "category": "Bebidas Quentes",
+      "id": 8880,
+      "bot_id": 1204,
+      "is_available": true
+    },
+    {
+      "name": "Cappuccino Especial",
+      "description": "Cappuccino com canela",
+      "price": 7.4,
+      "category": "Bebidas Quentes",
+      "id": 8881,
+      "bot_id": 1204,
+      "is_available": true
+    },
+    {
+      "name": "Cappuccino gelado",
+      "description": "",
+      "price": 9.0,
+      "category": "Bebidas Quentes",
+      "id": 8882,
+      "bot_id": 1204,
+      "is_available": true
+    },
+    {
+      "name": "Chá Quente",
+      "description": "",
+      "price": 7.0,
+      "category": "Bebidas Quentes",
+      "id": 8883,
+      "bot_id": 1204,
+      "is_available": true
+    },
+    {
+      "name": "Chocolate",
+      "description": "Mexido / Toddy / Puro",
+      "price": 7.4,
+      "category": "Bebidas Quentes",
+      "id": 8877,
+      "bot_id": 1204,
+      "is_available": true
+    },
+    {
+      "name": "Chocolate Especial",
+      "description": "Chantilly e raspas de chocolate",
+      "price": 9.0,
+      "category": "Bebidas Quentes",
+      "id": 8878,
+      "bot_id": 1204,
+      "is_available": true
+    },
+    {
+      "name": "Chocolate Gelado",
+      "description": "",
+      "price": 9.0,
+      "category": "Bebidas Quentes",
+      "id": 8879,
+      "bot_id": 1204,
+      "is_available": true
+    },
+    {
+      "name": "Iogurte Batido",
+      "description": "",
+      "price": 7.0,
+      "category": "Bebidas Quentes",
+      "id": 8884,
+      "bot_id": 1204,
+      "is_available": true
+    },
+    {
+      "name": "Vitamina Mista",
+      "description": "",
+      "price": 7.0,
+      "category": "Bebidas Quentes",
+      "id": 8885,
+      "bot_id": 1204,
+      "is_available": true
+    }
+  ],
+  "category": "cafeteria"
+}

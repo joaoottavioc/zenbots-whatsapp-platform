@@ -1,0 +1,77 @@
+{
+  "products": [
+    {
+      "name": "Juice",
+      "description": "Suco",
+      "price": 12.0,
+      "category": "Bebidas",
+      "id": 9159,
+      "bot_id": 1228,
+      "is_available": true
+    },
+    {
+      "name": "Matcha Osa",
+      "description": "Bebida de matcha",
+      "price": 12.4,
+      "category": "Bebidas",
+      "id": 9160,
+      "bot_id": 1228,
+      "is_available": true
+    },
+    {
+      "name": "Mineral Water",
+      "description": "Água mineral",
+      "price": 8.0,
+      "category": "Bebidas",
+      "id": 9161,
+      "bot_id": 1228,
+      "is_available": true
+    },
+    {
+      "name": "Soft Drink",
+      "description": "Refrigerante",
+      "price": 11.0,
+      "category": "Bebidas",
+      "id": 9158,
+      "bot_id": 1228,
+      "is_available": true
+    },
+    {
+      "name": "Burger",
+      "description": "Hambúrguer",
+      "price": 22.0,
+      "category": "Pratos",
+      "id": 9163,
+      "bot_id": 1228,
+      "is_available": true
+    },
+    {
+      "name": "Pizza",
+      "description": "Pizza",
+      "price": 24.0,
+      "category": "Pratos",
+      "id": 9164,
+      "bot_id": 1228,
+      "is_available": true
+    },
+    {
+      "name": "Spaghetti",
+      "description": "Prato de espaguete",
+      "price": 27.0,
+      "category": "Pratos",
+      "id": 9162,
+      "bot_id": 1228,
+      "is_available": true
+    },
+    {
+      "name": "Taco",
+      "description": "Taco",
+      "price": 18.0,
+      "category": "Pratos",
+      "id": 9165,
+      "bot_id": 1228,
+      "is_available": true
+    }
+  ],
+  "category": "hamburgueria"
+}

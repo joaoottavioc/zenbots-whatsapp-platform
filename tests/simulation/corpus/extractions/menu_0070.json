@@ -1,0 +1,158 @@
+{
+  "products": [
+    {
+      "name": "Chantilly",
+      "description": "",
+      "price": 12.75,
+      "category": "Adicionais",
+      "id": 8978,
+      "bot_id": 1212,
+      "is_available": true
+    },
+    {
+      "name": "Doce de Leite",
+      "description": "",
+      "price": 13.5,
+      "category": "Adicionais",
+      "id": 8979,
+      "bot_id": 1212,
+      "is_available": true
+    },
+    {
+      "name": "Baunilha",
+      "description": "",
+      "price": 10.0,
+      "category": "Bebidas Geladas",
+      "id": 8977,
+      "bot_id": 1212,
+      "is_available": true
+    },
+    {
+      "name": "Biscoito com Creme",
+      "description": "",
+      "price": 13.5,
+      "category": "Bebidas Geladas",
+      "id": 8973,
+      "bot_id": 1212,
+      "is_available": true
+    },
+    {
+      "name": "Café com Avelã",
+      "description": "",
+      "price": 12.75,
+      "category": "Bebidas Geladas",
+      "id": 8972,
+      "bot_id": 1212,
+      "is_available": true
+    },
+    {
+      "name": "Caramelo",
+      "description": "",
+      "price": 12.75,
+      "category": "Bebidas Geladas",
+      "id": 8971,
+      "bot_id": 1212,
+      "is_available": true
+    },
+    {
+      "name": "Matcha Cremoso",
+      "description": "",
+      "price": 13.5,
+      "category": "Bebidas Geladas",
+      "id": 8975,
+      "bot_id": 1212,
+      "is_available": true
+    },
+    {
+      "name": "Mocha com Avelã",
+      "description": "",
+      "price": 13.5,
+      "category": "Bebidas Geladas",
+      "id": 8974,
+      "bot_id": 1212,
+      "is_available": true
+    },
+    {
+      "name": "Morangos Cremosos",
+      "description": "",
+      "price": 10.0,
+      "category": "Bebidas Geladas",
+      "id": 8976,
+      "bot_id": 1212,
+      "is_available": true
+    },
+    {
+      "name": "Americano",
+      "description": "",
+      "price": 9.0,
+      "category": "Café Espresso",
+      "id": 8963,
+      "bot_id": 1212,
+      "is_available": true
+    },
+    {
+      "name": "Cappuccino",
+      "description": "",
+      "price": 9.0,
+      "category": "Café Espresso",
+      "id": 8964,
+      "bot_id": 1212,
+      "is_available": true
+    },
+    {
+      "name": "Chocolate Belga",
+      "description": "",
+      "price": 15.75,
+      "category": "Café Espresso",
+      "id": 8968,
+      "bot_id": 1212,
+      "is_available": true
+    },
+    {
+      "name": "Espresso Duplo",
+      "description": "",
+      "price": 10.5,
+      "category": "Café Espresso",
+      "id": 8965,
+      "bot_id": 1212,
+      "is_available": true
+    },
+    {
+      "name": "Latte",
+      "description": "",
+      "price": 12.6,
+      "category": "Café Espresso",
+      "id": 8966,
+      "bot_id": 1212,
+      "is_available": true
+    },
+    {
+      "name": "Macchiato",
+      "description": "",
+      "price": 12.6,
+      "category": "Café Espresso",
+      "id": 8967,
+      "bot_id": 1212,
+      "is_available": true
+    },
+    {
+      "name": "Mocha",
+      "description": "",
+      "price": 15.0,
+      "category": "Café Espresso",
+      "id": 8969,
+      "bot_id": 1212,
+      "is_available": true
+    },
+    {
+      "name": "White Mocha",
+      "description": "",
+      "price": 15.0,
+      "category": "Café Espresso",
+      "id": 8970,
+      "bot_id": 1212,
+      "is_available": true
+    }
+  ],
+  "category": "cafeteria"
+}

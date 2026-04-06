@@ -1,0 +1,131 @@
+{
+  "products": [
+    {
+      "name": "Água",
+      "description": "",
+      "price": 4.0,
+      "category": "Bebidas",
+      "id": 8762,
+      "bot_id": 1196,
+      "is_available": true
+    },
+    {
+      "name": "Cerveja lata",
+      "description": "",
+      "price": 8.0,
+      "category": "Bebidas",
+      "id": 8763,
+      "bot_id": 1196,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante 2L",
+      "description": "",
+      "price": 8.0,
+      "category": "Bebidas",
+      "id": 8761,
+      "bot_id": 1196,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante lata",
+      "description": "",
+      "price": 5.0,
+      "category": "Bebidas",
+      "id": 8760,
+      "bot_id": 1196,
+      "is_available": true
+    },
+    {
+      "name": "Modesto 01",
+      "description": "Pão, Burger 150g, creme de cheddar, farofa de bacon, maionese temperada",
+      "price": 20.0,
+      "category": "Lanches",
+      "id": 8754,
+      "bot_id": 1196,
+      "is_available": true
+    },
+    {
+      "name": "Modesto 02",
+      "description": "Pão, Burger 150g, queijo gouda, bacon crispy, maionese de caramelizada, molho",
+      "price": 29.0,
+      "category": "Lanches",
+      "id": 8755,
+      "bot_id": 1196,
+      "is_available": true
+    },
+    {
+      "name": "Modesto 03",
+      "description": "Pão, Burger 150g, cheddar, bacon crocante, cebola caramelizada, molho",
+      "price": 30.0,
+      "category": "Lanches",
+      "id": 8756,
+      "bot_id": 1196,
+      "is_available": true
+    },
+    {
+      "name": "Modesto 04",
+      "description": "Pão, alface, 2 blend 100g, cheddar, bacon, cebola, na cerveja, molho",
+      "price": 25.0,
+      "category": "Lanches",
+      "id": 8758,
+      "bot_id": 1196,
+      "is_available": true
+    },
+    {
+      "name": "Modesto 04 Hot",
+      "description": "Pão, 2 blend 80g, mussarela, pepperoni, cebola, pimentão, molho",
+      "price": 25.0,
+      "category": "Lanches",
+      "id": 8757,
+      "bot_id": 1196,
+      "is_available": true
+    },
+    {
+      "name": "Modesto 05",
+      "description": "Pão, Burger 150g, mussarela, tomate",
+      "price": 20.0,
+      "category": "Lanches",
+      "id": 8759,
+      "bot_id": 1196,
+      "is_available": true
+    },
+    {
+      "name": "Batata frita palito",
+      "description": "",
+      "price": 10.0,
+      "category": "Porções",
+      "id": 8764,
+      "bot_id": 1196,
+      "is_available": true
+    },
+    {
+      "name": "Cebola empanada",
+      "description": "",
+      "price": 10.0,
+      "category": "Porções",
+      "id": 8765,
+      "bot_id": 1196,
+      "is_available": true
+    },
+    {
+      "name": "Frango empanado",
+      "description": "",
+      "price": 10.0,
+      "category": "Porções",
+      "id": 8767,
+      "bot_id": 1196,
+      "is_available": true
+    },
+    {
+      "name": "Nuggets",
+      "description": "",
+      "price": 10.0,
+      "category": "Porções",
+      "id": 8766,
+      "bot_id": 1196,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

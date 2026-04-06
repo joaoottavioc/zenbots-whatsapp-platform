@@ -1,0 +1,149 @@
+{
+  "products": [
+    {
+      "name": "Bolinho de Salmão",
+      "description": "",
+      "price": 12.0,
+      "category": "Pratos Principais",
+      "id": 9103,
+      "bot_id": 1223,
+      "is_available": true
+    },
+    {
+      "name": "Ceviche",
+      "description": "350 gr",
+      "price": 25.0,
+      "category": "Pratos Principais",
+      "id": 9111,
+      "bot_id": 1223,
+      "is_available": true
+    },
+    {
+      "name": "Harumaki",
+      "description": "2 unidades",
+      "price": 12.0,
+      "category": "Pratos Principais",
+      "id": 9102,
+      "bot_id": 1223,
+      "is_available": true
+    },
+    {
+      "name": "Hot Roll",
+      "description": "Sushi frito com Salmão",
+      "price": 24.0,
+      "category": "Pratos Principais",
+      "id": 9098,
+      "bot_id": 1223,
+      "is_available": true
+    },
+    {
+      "name": "Iscas",
+      "description": "",
+      "price": 12.0,
+      "category": "Pratos Principais",
+      "id": 9106,
+      "bot_id": 1223,
+      "is_available": true
+    },
+    {
+      "name": "Poke Crispy",
+      "description": "",
+      "price": 25.0,
+      "category": "Pratos Principais",
+      "id": 9108,
+      "bot_id": 1223,
+      "is_available": true
+    },
+    {
+      "name": "Poke de Camarão",
+      "description": "",
+      "price": 25.0,
+      "category": "Pratos Principais",
+      "id": 9109,
+      "bot_id": 1223,
+      "is_available": true
+    },
+    {
+      "name": "Poke Tradicional",
+      "description": "",
+      "price": 25.0,
+      "category": "Pratos Principais",
+      "id": 9107,
+      "bot_id": 1223,
+      "is_available": true
+    },
+    {
+      "name": "Quitola",
+      "description": "",
+      "price": 12.0,
+      "category": "Pratos Principais",
+      "id": 9104,
+      "bot_id": 1223,
+      "is_available": true
+    },
+    {
+      "name": "Sashimi",
+      "description": "Salmão",
+      "price": 20.0,
+      "category": "Pratos Principais",
+      "id": 9096,
+      "bot_id": 1223,
+      "is_available": true
+    },
+    {
+      "name": "Shimeji",
+      "description": "Shimeji",
+      "price": 12.0,
+      "category": "Pratos Principais",
+      "id": 9101,
+      "bot_id": 1223,
+      "is_available": true
+    },
+    {
+      "name": "Tataki",
+      "description": "Salmão, Maionese, gergelim, cebolinhas",
+      "price": 25.0,
+      "category": "Pratos Principais",
+      "id": 9099,
+      "bot_id": 1223,
+      "is_available": true
+    },
+    {
+      "name": "Tempura",
+      "description": "Legumes e camarão empanados",
+      "price": 24.0,
+      "category": "Pratos Principais",
+      "id": 9100,
+      "bot_id": 1223,
+      "is_available": true
+    },
+    {
+      "name": "Uramaki",
+      "description": "Salmão, Arroz, Cream Cheese",
+      "price": 14.0,
+      "category": "Pratos Principais",
+      "id": 9097,
+      "bot_id": 1223,
+      "is_available": true
+    },
+    {
+      "name": "Yakissoba",
+      "description": "",
+      "price": 25.0,
+      "category": "Pratos Principais",
+      "id": 9110,
+      "bot_id": 1223,
+      "is_available": true
+    },
+    {
+      "name": "Missoshiru",
+      "description": "",
+      "price": 2.5,
+      "category": "Sobremesas",
+      "id": 9105,
+      "bot_id": 1223,
+      "is_available": true
+    }
+  ],
+  "category": "sushi"
+}
