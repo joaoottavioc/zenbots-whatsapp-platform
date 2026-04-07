@@ -108,6 +108,14 @@ def gen_scenarios(products, unavail_indices):
         "add_remove_remove_msg": format_remove(single["name"]),
         # 12. Greeting (varied)
         "greeting_msg": format_greeting(),
+        # 13. (S8) Continuation: after adding `single`, send a verb-less
+        # follow-up like "e uma {multi_2}". Tests whether the bot handles
+        # the most common production pattern: customer adds an item, then
+        # tags on more without repeating "quero".
+        "continuation_first_msg": format_add(single["name"], qty=1),
+        "continuation_first_product": single["name"],
+        "continuation_followup_msg": f"e uma {multi_2['name'].lower()}",
+        "continuation_followup_product": multi_2["name"],
     }
 
     # Generate abbreviation for a suitable product
@@ -500,10 +508,21 @@ async def main():
     print("Done!")
 
 
+# Scenarios that don't reflect comprehension difficulty:
+#  - greeting: trivial intent ("oi") that always passes
+#  - suggestions: tests the bot path that fires when comprehension fails
+#  - checkout: tests state machine, not natural-language understanding
+# These three account for 27% of the test count and inflate the headline
+# pass_rate. The "comprehension_pass_rate" metric excludes them so the
+# number reflects how well the bot actually understands customer messages.
+_EASY_SCENARIOS = frozenset({"greeting", "suggestions", "checkout"})
+
+
 # --- Test scenario names mapped from test class names ---
 _SCENARIO_MAP = {
     "TestRandAddSingle": "add_single",
     "TestRandAddMulti": "add_multi",
+    "TestRandContinuation": "continuation",
     "TestRandUnavailable": "unavailable",
     "TestRandRemove": "remove",
     "TestRandSuggestions": "suggestions",
@@ -562,6 +581,9 @@ def _parse_results(output: str, bots: dict, started_at: str, finished_at: str) -
     total_passed = 0
     total_failed = 0
     total_skipped = 0
+    comp_passed = 0  # comprehension-only (excludes easy scenarios)
+    comp_failed = 0
+    comp_skipped = 0
 
     # Only parse lines before the FAILURES/warnings section —
     # the failure summary repeats test names and causes double-counting.
@@ -592,12 +614,19 @@ def _parse_results(output: str, bots: dict, started_at: str, finished_at: str) -
             }
             # Only count tests that belong to known restaurants
             # (avoids double-counting from failure summary section)
+            is_comp = scenario not in _EASY_SCENARIOS
             if status == "PASSED":
                 total_passed += 1
+                if is_comp:
+                    comp_passed += 1
             elif status == "FAILED":
                 total_failed += 1
+                if is_comp:
+                    comp_failed += 1
             else:
                 total_skipped += 1
+                if is_comp:
+                    comp_skipped += 1
 
     # Extract failure details (only FAILED lines, not warnings)
     failure_lines = []
@@ -607,6 +636,7 @@ def _parse_results(output: str, bots: dict, started_at: str, finished_at: str) -
             failure_lines.append(stripped)
 
     total = total_passed + total_failed + total_skipped
+    comp_total = comp_passed + comp_failed + comp_skipped
     return {
         "run_type": "corpus",
         "started_at": started_at,
@@ -616,27 +646,40 @@ def _parse_results(output: str, bots: dict, started_at: str, finished_at: str) -
         "failed": total_failed,
         "skipped": total_skipped,
         "pass_rate": round(total_passed / total * 100, 1) if total else 0,
+        # Honest comprehension metric: excludes greeting/suggestions/checkout
+        # which inflate the headline number with trivial passes.
+        "comprehension_total": comp_total,
+        "comprehension_passed": comp_passed,
+        "comprehension_failed": comp_failed,
+        "comprehension_skipped": comp_skipped,
+        "comprehension_pass_rate": (
+            round(comp_passed / comp_total * 100, 1) if comp_total else 0
+        ),
         "restaurants": list(restaurants.values()),
         "failure_summary": "\n".join(failure_lines[-30:]) if failure_lines else None,
     }
 
 
 def _upload_report(report: dict):
-    """Upload report to S3 — tries direct import first, falls back to docker exec."""
+    """Upload report to S3 — direct import when running inside Docker, falls
+    back to `docker compose exec` when running on the host. Either path that
+    succeeds returns early; only a true failure falls through to local save.
+    """
     import shutil
 
     try:
         if not shutil.which("docker"):
-            # Inside Docker — import directly
+            # Inside Docker (e.g. invoked via the /admin/corpus/run-tests
+            # endpoint as an in-container subprocess) — import and call directly.
             from app.qa_reports import upload_qa_report
 
             key = upload_qa_report(report)
             if key:
                 print(f"\nReport uploaded to S3: {key}")
-            else:
-                print("\nS3 upload returned None (bucket not configured?)")
+                return
+            print("\nS3 upload returned None (bucket not configured?)")
         else:
-            # Outside Docker — use docker exec
+            # Outside Docker — proxy through `docker compose exec backend`
             tmp_path = PROJECT_ROOT / ".qa_report_tmp.json"
             tmp_path.write_text(
                 json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -656,12 +699,12 @@ def _upload_report(report: dict):
                 timeout=30,
             )
             tmp_path.unlink(missing_ok=True)
-        combined = result.stdout + result.stderr
-        if "S3_KEY:" in combined:
-            key = combined.split("S3_KEY:")[1].strip().split("\n")[0]
-            print(f"\nReport uploaded to S3: {key}")
-            return
-        print(f"\nS3 upload output: {combined[:300]}")
+            combined = result.stdout + result.stderr
+            if "S3_KEY:" in combined:
+                key = combined.split("S3_KEY:")[1].strip().split("\n")[0]
+                print(f"\nReport uploaded to S3: {key}")
+                return
+            print(f"\nS3 upload output: {combined[:300]}")
     except Exception as e:
         print(f"\nS3 upload failed ({e})")
 

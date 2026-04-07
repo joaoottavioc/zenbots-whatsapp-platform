@@ -62,19 +62,25 @@ def upload_qa_report(report: dict) -> Optional[str]:
 
 
 def list_qa_reports(limit: int = 50) -> list[dict]:
-    """List recent QA reports from S3, newest first."""
+    """List recent QA reports from S3, newest first.
+
+    Uses a paginator to fetch ALL objects under the prefix before sorting.
+    A previous bug used `MaxKeys=limit` which truncates server-side in
+    lexicographic key order — with timestamp filenames that meant only the
+    OLDEST `limit` reports were ever returned and the in-memory `reverse=True`
+    sort never reached the actual newest reports.
+    """
     if not BUCKET_NAME:
         return []
 
     try:
-        response = s3_client.list_objects_v2(
-            Bucket=BUCKET_NAME,
-            Prefix=_reports_prefix(),
-            MaxKeys=limit,
-        )
-        objects = response.get("Contents", [])
-        # Sort newest first
-        objects.sort(key=lambda o: o["LastModified"], reverse=True)
+        paginator = s3_client.get_paginator("list_objects_v2")
+        all_objects = []
+        for page in paginator.paginate(Bucket=BUCKET_NAME, Prefix=_reports_prefix()):
+            all_objects.extend(page.get("Contents", []))
+
+        # Sort newest first by LastModified, then take the top `limit`
+        all_objects.sort(key=lambda o: o["LastModified"], reverse=True)
         return [
             {
                 "key": obj["Key"],
@@ -82,7 +88,7 @@ def list_qa_reports(limit: int = 50) -> list[dict]:
                 "last_modified": obj["LastModified"].isoformat(),
                 "size_bytes": obj["Size"],
             }
-            for obj in objects[:limit]
+            for obj in all_objects[:limit]
         ]
     except Exception as e:
         logger.error("Failed to list QA reports: %s", e)

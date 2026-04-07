@@ -600,7 +600,17 @@ async def admin_corpus_accept(
     with open(filepath, "wb") as f:
         f.write(resp.content)
 
-    # Update manifest
+    # Update manifest. validated=None means "never tried" (the validate
+    # script picks these up). validated=True means "passed validation".
+    # validated=False is reserved for entries the validator rejected and
+    # moved to rejected/.
+    # menu_type tracks the source quality tier:
+    #   "template"        — design templates (DDG image scrape, what we have today)
+    #   "real_restaurant" — iFood/Rappi/Google Maps screenshots
+    #   "phone_photo"     — handwritten or phone-captured menus
+    # The accept endpoint defaults to "template" because it's hit by the
+    # classifier game which scrapes design templates. Real menu / phone photo
+    # entries should be re-tagged after upload.
     manifest.append(
         {
             "id": image_id,
@@ -609,10 +619,11 @@ async def admin_corpus_accept(
             "restaurant_name": (alt or "")[:60],
             "source_url": image_url[:500],
             "source_type": "classifier_game",
+            "menu_type": "template",
             "added_date": date.today().isoformat(),
             "file_size_kb": len(resp.content) // 1024,
             "product_count": 0,
-            "validated": False,
+            "validated": None,
             "last_used": None,
         }
     )

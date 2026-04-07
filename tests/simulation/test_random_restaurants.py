@@ -228,6 +228,46 @@ class TestRandAddMulti:
             assert found[0][1] == exp_qty
 
 
+class TestRandContinuation:
+    """S8: Continuation pattern.
+
+    The most common real-world WhatsApp pattern: customer adds an item, then
+    sends a follow-up message starting with "e " (no shopping verb). Today the
+    bot misses these because the pre-router ADD guard requires a verb.
+
+    Sequence:
+      1. "oi"                       → greeting
+      2. format_add(single)         → cart has [single]
+      3. "e uma {multi_2}"          → cart should have [single, multi_2]
+    """
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "label", _LABELS, ids=lambda x: _TEST_DATA.get(x, {}).get("name", x)
+    )
+    async def test_continuation(self, db_check, label):
+        sc = _sc(label)
+        if not sc.get("continuation_followup_msg"):
+            pytest.skip("No continuation scenario")
+        c = await _ctx(label)
+        await c.send("oi")
+        await c.send(sc["continuation_first_msg"])
+        cart1 = await c.get_cart_items()
+        first_name = sc["continuation_first_product"]
+        found1 = [n for n, q in cart1 if first_name.lower() in n.lower()]
+        assert found1, f"Setup: '{first_name}' not in cart: {cart1}"
+
+        await c.send(sc["continuation_followup_msg"])
+        cart2 = await c.get_cart_items()
+        # First product must still be there (continuation must not wipe it)
+        still_first = [n for n, q in cart2 if first_name.lower() in n.lower()]
+        assert still_first, f"Continuation wiped first product '{first_name}': {cart2}"
+        # Second product must have been added
+        second_name = sc["continuation_followup_product"]
+        found2 = [n for n, q in cart2 if second_name.lower() in n.lower()]
+        assert found2, f"Continuation didn't add '{second_name}': {cart2}"
+
+
 class TestRandUnavailable:
     @pytest.mark.asyncio
     @pytest.mark.parametrize(

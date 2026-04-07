@@ -201,7 +201,18 @@ async def delete_bot(bot_id: int):
 
 async def validate_all():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    unvalidated = [e for e in manifest if e.get("validated") is None]
+    # An image needs validation if either:
+    #   - validated is None (clean "never tried" marker), OR
+    #   - validated is False AND the file is still in images/ (new entries
+    #     from the classifier game which historically wrote False).
+    # Entries with validated == True are done. Entries with validated == False
+    # AND file in rejected/ have already been rejected and should not retry.
+    unvalidated = [
+        e
+        for e in manifest
+        if e.get("validated") is not True
+        and not e.get("file", "").startswith("rejected/")
+    ]
 
     if not unvalidated:
         print("All images already validated!")

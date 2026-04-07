@@ -3,11 +3,24 @@
 Realistic Brazilian Portuguese phrase variations for QA testing.
 Each phrase uses {name} for product name and {qty} for quantity.
 Weights approximate real-world frequency.
+
+Phrase tiers (controlled by PHRASE_TIER env var):
+  - "clean":  Tier 1 only — formal, well-formed phrases (legacy default)
+  - "mixed":  Weighted blend of Tier 1 + Tier 2 (default; closest to today)
+  - "slang":  Tier 2 only — WhatsApp shorthand, abbreviations, no caps
+  - "hard":   Tier 2 + Tier 3 (slang AND typos applied to product names)
+
+The "hard" tier is what the P0 honest baseline run uses to expose the
+real-world failure rate. Switch via:  PHRASE_TIER=hard python ...
 """
 
+import os
 import random
 import re
 
+# --- Tier 1: Clean / formal phrases ---
+# These are the well-formed messages a careful customer would send.
+# Used for the "clean" tier and as the high-weight base of "mixed".
 ADD_PHRASES = [
     # High frequency — universal
     ("quero {qty} {name}", 0.12),
@@ -35,6 +48,43 @@ ADD_PHRASES = [
     ("tu manda {qty} {name}", 0.02),
 ]
 
+# --- Tier 2: Slang / abbreviations / WhatsApp shorthand ---
+# What real Brazilian customers actually type at 11pm on Friday after a beer.
+# These are MUCH harder for the bot — abbreviated verbs ("pfv"=por favor,
+# "ae"=aí), no punctuation, vague qualifiers, voice-like fillers, no capitals.
+SLANG_ADD_PHRASES = [
+    # WhatsApp shorthand
+    ("manda {qty} {name} ae", 0.10),
+    ("manda {qty} {name} pfv", 0.08),
+    ("me ve {qty} {name} ai", 0.07),
+    ("bota {qty} {name} pra mim", 0.07),
+    ("fecha {qty} {name}", 0.06),
+    ("me faz {qty} {name} ai", 0.05),
+    ("solta {qty} {name}", 0.05),
+    # Bare names + voice fillers
+    ("{name}", 0.07),
+    ("um {name}", 0.06),
+    ("{qty} {name}", 0.06),
+    ("entao manda {qty} {name}", 0.05),
+    ("tipo um {name}", 0.04),
+    # Affective qualifiers (filler that doesn't help disambiguation)
+    ("manda uma {name} gelada", 0.04),
+    ("bota um {name} bem feito", 0.03),
+    ("quero {qty} {name} caprichada", 0.03),
+    # Continuation-style (no verb)
+    ("e mais {qty} {name}", 0.04),
+    ("ah e {qty} {name}", 0.03),
+    # Polite slang
+    ("da pra mandar {qty} {name}?", 0.04),
+    ("rola {qty} {name}?", 0.03),
+]
+
+# Mixed tier: weighted blend of Tier 1 and Tier 2.
+# Roughly mirrors what production WhatsApp traffic actually looks like.
+MIXED_ADD_PHRASES = [(p, w * 0.55) for p, w in ADD_PHRASES] + [
+    (p, w * 0.45) for p, w in SLANG_ADD_PHRASES
+]
+
 REMOVE_PHRASES = [
     ("tira o {name}", 0.18),
     ("remove o {name}", 0.12),
@@ -49,6 +99,27 @@ REMOVE_PHRASES = [
     ("não manda o {name} não", 0.04),
     ("deixa sem o {name}", 0.03),
     ("tira ae o {name}", 0.03),
+]
+
+# --- Tier 2: Slang remove phrases ---
+SLANG_REMOVE_PHRASES = [
+    ("tira esse {name} ae", 0.15),
+    ("vish, tira o {name}", 0.10),
+    ("ah, esquece o {name}", 0.10),
+    ("tira o {name} pfv", 0.08),
+    ("nao quero mais {name} nao", 0.08),
+    ("cancela esse {name}", 0.08),
+    ("muda, tira o {name}", 0.07),
+    ("manda sem o {name}", 0.07),
+    ("eu nao quero {name}", 0.06),
+    ("nao precisa do {name}", 0.06),
+    ("pode esquecer o {name}", 0.05),
+    ("muda ae, sem {name}", 0.05),
+    ("deixa o {name} pra la", 0.05),
+]
+
+MIXED_REMOVE_PHRASES = [(p, w * 0.55) for p, w in REMOVE_PHRASES] + [
+    (p, w * 0.45) for p, w in SLANG_REMOVE_PHRASES
 ]
 
 SUGGESTION_PHRASES = [
@@ -126,6 +197,104 @@ QUESTION_PHRASES = [
     ("quanto tempo demora?", 0.03),
 ]
 
+# --- Tier 2: Slang question phrases (no punctuation, abbreviations) ---
+SLANG_QUESTION_PHRASES = [
+    ("qt ta o {name}", 0.15),
+    ("quanto eh o {name}", 0.12),
+    ("preço do {name}", 0.10),
+    ("ce tem {name}", 0.10),
+    ("ainda tem {name} ae", 0.08),
+    ("o {name} ta saindo por quanto", 0.08),
+    ("manda o preço do {name} ae", 0.06),
+    ("quanto fica {name}", 0.06),
+    ("quanto custa esse {name}", 0.06),
+    ("o {name} ta saindo?", 0.05),
+    ("vcs aceitam pix", 0.05),
+    ("eh quanto o {name}", 0.04),
+    ("qual o preço de um {name}", 0.05),
+]
+
+MIXED_QUESTION_PHRASES = [(p, w * 0.55) for p, w in QUESTION_PHRASES] + [
+    (p, w * 0.45) for p, w in SLANG_QUESTION_PHRASES
+]
+
+# --- Tier 3: Common Brazilian food misspellings ---
+# Maps the canonical product word to typo variants real customers type.
+# Used by apply_typo() to mutate product names before formatting.
+COMMON_TYPOS = {
+    "margherita": ["margarita", "margerita", "marguerita"],
+    "calabresa": ["calabreza", "calabressa"],
+    "muçarela": ["mussarela", "musarela", "mucarela"],
+    "mussarela": ["muçarela", "musarela", "mucarela"],
+    "catupiry": ["catupiri", "katupiry", "catupirí"],
+    "strogonoff": ["estrognoff", "estrogonofe", "strogonof", "estrogonoff"],
+    "estrogonofe": ["estrognoff", "strogonof", "strogonoff"],
+    "parmegiana": ["parmigiana", "parmejana", "parmegianna"],
+    "pepperoni": ["peperoni", "peperone", "pepperonni"],
+    "coca-cola": ["coca cola", "cocacola", "coca"],
+    "guaraná": ["guarana", "guaranã"],
+    "x-burger": ["xburguer", "x burguer", "xburger"],
+    "x-tudo": ["xtudo", "x tudo"],
+    "x-bacon": ["xbacon", "x bacon"],
+    "x-salada": ["xsalada", "x salada"],
+    "açaí": ["acai", "asai"],
+    "iogurte": ["yogurte", "yogurt"],
+    "frango": ["franco"],
+    "filé": ["file", "filet"],
+    "picanha": ["picana"],
+    "feijoada": ["feijuada"],
+    "lasanha": ["lazanha", "lasagna"],
+    "tapioca": ["tapioka"],
+    "esfiha": ["esfira", "isfia"],
+}
+
+
+def apply_typo(name: str) -> str:
+    """Apply a random typo to a product name (Tier 3 only).
+
+    For each canonical word found in the name (case-insensitive), there's a
+    chance to replace it with a misspelled variant from COMMON_TYPOS. Always
+    applies at least one transformation if any candidate is found, so the
+    output is reliably "rougher" than the input.
+    """
+    if not name:
+        return name
+    name_lower = name.lower()
+
+    # Find all candidate replacements that could apply.
+    candidates = [
+        (canonical, variants)
+        for canonical, variants in COMMON_TYPOS.items()
+        if canonical in name_lower
+    ]
+    if not candidates:
+        # No known canonical word in this name → fall back to a generic
+        # mutation (drop accents, drop hyphens) about half the time.
+        if random.random() < 0.5:
+            return _generic_typo(name)
+        return name
+
+    # Apply a typo to one randomly chosen canonical word.
+    canonical, variants = random.choice(candidates)
+    chosen = random.choice(variants)
+    # Case-insensitive replace, preserving the rest of the name.
+    pattern = re.compile(re.escape(canonical), re.IGNORECASE)
+    return pattern.sub(chosen, name, count=1)
+
+
+def _generic_typo(name: str) -> str:
+    """Apply generic typo transformations (no-hyphen, no-accent, lowercase)."""
+    result = name.lower()
+    # Drop hyphens about 60% of the time
+    if "-" in result and random.random() < 0.6:
+        result = result.replace("-", " " if random.random() < 0.5 else "")
+    # Drop accents about 50% of the time
+    if random.random() < 0.5:
+        accent_map = str.maketrans("áàâãéèêíìîóòôõúùûç", "aaaaeeeiiiooooouuc")
+        result = result.translate(accent_map)
+    return result
+
+
 # --- Generic food words to exclude from abbreviation generation ---
 GENERIC_FOOD_WORDS = frozenset(
     {
@@ -198,11 +367,48 @@ def pick_weighted(phrases: list[tuple[str, float]]) -> str:
     return random.choices(items, weights=weights, k=1)[0]
 
 
+def get_tier() -> str:
+    """Read PHRASE_TIER env var. Defaults to 'mixed' (today's behavior)."""
+    return os.getenv("PHRASE_TIER", "mixed").lower()
+
+
+def _add_pool() -> list[tuple[str, float]]:
+    tier = get_tier()
+    if tier == "clean":
+        return ADD_PHRASES
+    if tier in ("slang", "hard"):
+        return SLANG_ADD_PHRASES
+    return MIXED_ADD_PHRASES
+
+
+def _remove_pool() -> list[tuple[str, float]]:
+    tier = get_tier()
+    if tier == "clean":
+        return REMOVE_PHRASES
+    if tier in ("slang", "hard"):
+        return SLANG_REMOVE_PHRASES
+    return MIXED_REMOVE_PHRASES
+
+
+def _question_pool() -> list[tuple[str, float]]:
+    tier = get_tier()
+    if tier == "clean":
+        return QUESTION_PHRASES
+    if tier in ("slang", "hard"):
+        return SLANG_QUESTION_PHRASES
+    return MIXED_QUESTION_PHRASES
+
+
 def format_add(name: str, qty: int = 1) -> str:
-    """Generate a random ADD phrase with product name and quantity."""
-    phrase = pick_weighted(ADD_PHRASES)
+    """Generate a random ADD phrase with product name and quantity.
+
+    Phrase pool depends on PHRASE_TIER env var (see module docstring).
+    Tier 3 ("hard") additionally applies typos to the product name.
+    """
+    phrase = pick_weighted(_add_pool())
     qty_str = str(qty) if qty > 1 else ("um" if random.random() < 0.5 else "1")
-    result = phrase.format(name=name.lower(), qty=qty_str)
+    typo_name = apply_typo(name) if get_tier() == "hard" else name
+    result = phrase.format(name=typo_name.lower(), qty=qty_str)
     # Clean up "um um" or "1 um" artifacts
     result = re.sub(r"\b(um|1)\s+\1\b", r"\1", result)
     return result.strip()
@@ -210,8 +416,9 @@ def format_add(name: str, qty: int = 1) -> str:
 
 def format_remove(name: str) -> str:
     """Generate a random REMOVE phrase."""
-    phrase = pick_weighted(REMOVE_PHRASES)
-    return phrase.format(name=name.lower()).strip()
+    phrase = pick_weighted(_remove_pool())
+    typo_name = apply_typo(name) if get_tier() == "hard" else name
+    return phrase.format(name=typo_name.lower()).strip()
 
 
 def format_suggestion() -> str:
@@ -231,8 +438,9 @@ def format_greeting() -> str:
 
 def format_question(name: str) -> str:
     """Generate a random QUESTION phrase (should NOT add to cart)."""
-    phrase = pick_weighted(QUESTION_PHRASES)
-    return phrase.format(name=name.lower()).strip()
+    phrase = pick_weighted(_question_pool())
+    typo_name = apply_typo(name) if get_tier() == "hard" else name
+    return phrase.format(name=typo_name.lower()).strip()
 
 
 def generate_abbreviations(product_name: str) -> list[str]:

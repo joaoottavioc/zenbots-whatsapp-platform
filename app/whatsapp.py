@@ -3105,6 +3105,25 @@ async def _process_contact_message_inner(
         _real_order_pairs = [(q, n) for q, n in _order_pairs if q > 1]
         if len(_real_order_pairs) >= 2:
             cart.last_suggestions = None
+    # Pre-empt suggestion handler when an unambiguous FINISH verb is present
+    # AND there is no selection signal (digit/ordinal). The greedy name-overlap
+    # matcher in _handle_suggestion_selection cannot distinguish "fecha com
+    # mignon" (FINISH) from "vou de mignon" (selection) — the discriminator is
+    # the verb. If the message has both a digit/ordinal AND a FINISH verb
+    # (e.g. "1 e fecha o pedido"), Option H below chains the FINISH after
+    # the selection has been added.
+    if cart.last_suggestions and _FINISH_KEYWORD_RE.search(text_body):
+        _has_selection_signal = bool(re.search(r"\b\d+\b", text_body)) or any(
+            o in text_body.lower()
+            for o in ("primeir", "segund", "terceir", "quart", "quint")
+        )
+        if not _has_selection_signal:
+            logger.info(
+                "[SUGGESTION] cleared by FINISH keyword (no selection signal): %r",
+                text_body[:80],
+            )
+            cart.last_suggestions = None
+            clear_pending(cart)
     if cart.state in [CartState.GREETING, CartState.SHOPPING] and cart.last_suggestions:
         sug_result = await _handle_suggestion_selection(mctx)
         if sug_result is not None:
@@ -3114,16 +3133,32 @@ async def _process_contact_message_inner(
                 sug_result, _sug_unmatched = sug_result
 
             if _sug_unmatched:
-                # Route unmatched parts through the shopping flow.
-                # Override mctx.text_body so _handle_shopping_intent searches
-                # for the unmatched items (not the full original message).
-                _original_text = mctx.text_body
-                mctx.text_body = " e ".join(_sug_unmatched)
-                shopping_result = await _handle_shopping_intent(mctx, "ADD")
-                mctx.text_body = _original_text  # restore
-                if shopping_result:
-                    # Shopping flow returns full cart summary — use it instead
-                    sug_result = shopping_result
+                # Check FINISH against the ORIGINAL text_body (not the filtered
+                # unmatched parts) — the legacy path's _food_unmatched filter
+                # strips "o pedido" from "fecha o pedido", leaving only "fecha"
+                # which doesn't match the regex. The original text always
+                # preserves the full structure.
+                if _FINISH_KEYWORD_RE.search(text_body):
+                    # Multi-intent: customer selected suggestion(s) AND wants
+                    # to finalize ("1 e fecha o pedido", "primeiro e finaliza").
+                    # The selection has already been added to cart by the
+                    # handler above. Run FINISH on the same turn so the customer
+                    # sees both the cart confirmation AND the next-step prompt
+                    # in one response.
+                    finish_result = await _handle_finish_order(mctx, "FINISH_ORDER")
+                    if finish_result:
+                        sug_result = sug_result + "\n\n" + finish_result
+                else:
+                    # Route unmatched parts through the shopping flow.
+                    # Override mctx.text_body so _handle_shopping_intent searches
+                    # for the unmatched items (not the full original message).
+                    _original_text = mctx.text_body
+                    mctx.text_body = " e ".join(_sug_unmatched)
+                    shopping_result = await _handle_shopping_intent(mctx, "ADD")
+                    mctx.text_body = _original_text  # restore
+                    if shopping_result:
+                        # Shopping flow returns full cart summary — use it instead
+                        sug_result = shopping_result
 
             cart.last_activity_at = utcnow()
             session.add(cart)
@@ -4097,6 +4132,21 @@ _ADD_KEYWORD_RE = re.compile(
     rf"(?:\s+\w{{1,5}}){{0,2}}\s+(?:{_ADD_QTY_WORDS}|\d+)\s*\(?[a-záàâãéèêíìîóòôõúùûç]",
     re.IGNORECASE,
 )
+# Pre-router FINISH pattern: explicit "finalizar / fechar pedido / fechar a conta"
+# keywords are unambiguous and should bypass the semantic router. The router
+# misclassifies slang phrases like "vamo finalizar, pode mandar aí" as ADD
+# (because "pode mandar" is an ADD prototype) even though "finalizar" is the
+# real intent. Matches at word boundaries to avoid false positives.
+_FINISH_KEYWORD_RE = re.compile(
+    r"\b("
+    r"finaliz\w*"
+    r"|fecha(?:r|ndo)?\s+(?:o\s+|meu\s+|esse\s+|este\s+)?pedido"
+    r"|fecho\s+(?:o\s+|meu\s+)?pedido"
+    r"|fecha(?:r)?\s+a\s+conta"
+    r"|encerra(?:r)?\s+(?:o\s+)?pedido"
+    r")\b",
+    re.IGNORECASE,
+)
 
 
 # Score from the last resolve_intent call. Used by the checkout guard
@@ -4121,6 +4171,19 @@ async def resolve_intent(text_body, cart, cart_items_for_intent, found_products=
         final_intent = "MODIFY"
         if in_checkout and final_intent in _CHECKOUT_INTENT_OVERRIDES:
             final_intent = _CHECKOUT_INTENT_OVERRIDES[final_intent]
+        return final_intent
+
+    # 0b2. Pre-router guard: explicit FINISH_ORDER keywords ("finalizar",
+    # "fechar pedido", etc.) are unambiguous and should bypass the router.
+    # Without this guard, slang like "vamo finalizar, pode mandar aí que eu
+    # to com fome" gets misclassified as ADD because "pode mandar" is an ADD
+    # prototype. Placed before the ADD guard so "finalizar" wins over "pode mandar".
+    if _FINISH_KEYWORD_RE.search(text_body):
+        logger.info("[INTENT] pre-router FINISH guard matched: %r", text_body[:80])
+        _last_router_score = 1.0
+        final_intent = "FINISH_ORDER"
+        # FINISH_ORDER is not in _CHECKOUT_INTENT_OVERRIDES — during checkout
+        # the customer reaffirming "finalizar" should still drive the flow forward.
         return final_intent
 
     # 0c. Pre-router guard: obvious ADD patterns bypass the semantic router.
