@@ -74,9 +74,12 @@ SLANG_ADD_PHRASES = [
     # Continuation-style (no verb)
     ("e mais {qty} {name}", 0.04),
     ("ah e {qty} {name}", 0.03),
-    # Polite slang
-    ("da pra mandar {qty} {name}?", 0.04),
-    ("rola {qty} {name}?", 0.03),
+    # Polite slang (removed templates ending in "?" — the trailing question
+    # mark made the bot answer conversationally instead of adding. This is a
+    # phrase-bank quality bug, not a bot bug. Real "polite slang" would be
+    # "da pra mandar X" or "rola X" without the question mark.)
+    ("da pra mandar {qty} {name}", 0.04),
+    ("rola {qty} {name}", 0.03),
 ]
 
 # Mixed tier: weighted blend of Tier 1 and Tier 2.

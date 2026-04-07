@@ -4121,10 +4121,41 @@ _REMOVE_KEYWORD_RE = re.compile(
     r")",
     re.IGNORECASE,
 )
-# Extended remove patterns: "sem o X", "cancela o X", "esquece o X"
+# Extended remove patterns:
+#  - "sem o X", "cancela o X", "esquece(r) o X", "deixa sem o X", "tira fora o X"
+#  - "deixa o X pra la" / "para lá" (set-aside form)
+# The first alternative is the original verb-style; the second covers the
+# slang Tier 2 phrase "deixa o X pra la".
 _REMOVE_ALT_RE = re.compile(
-    r"(?:sem|cancela|esquece|deixa\s+sem|tira\s+fora)"
-    r"\s+(?:o|a|os|as)\s+[a-záàâãéèêíìîóòôõúùûç]",
+    r"(?:"
+    r"(?:sem|cancela|esquece(?:r)?|deixa\s+sem|tira\s+fora)"
+    r"\s+(?:o|a|os|as)\s+[a-záàâãéèêíìîóòôõúùûç]"
+    r"|"
+    r"deixa\s+(?:o|a|os|as)\s+[a-záàâãéèêíìîóòôõúùûç][^\n]*?\s+(?:pra|para)\s+l[aá]"
+    r")",
+    re.IGNORECASE,
+)
+# Negation-style REMOVE patterns: "não quero (mais) X", "não precisa do X",
+# "não manda o X", "eu não quero X". The semantic router classifies these
+# as NEGATE or low-confidence ADD; without this guard they're treated as
+# new orders. Pattern: optional "eu" + "não" + (quero|precisa|manda) +
+# optional article + product token. "esquece o X" stays in _REMOVE_ALT_RE.
+#
+# A negative lookahead excludes Portuguese function words at the product
+# position. Without it, "não quero mais" would match because the regex
+# backtracks and treats "mais" as the product name. The product token must
+# be an actual content word, not a quantifier/pronoun/intensifier.
+_REMOVE_NEGATION_FUNC_WORDS = (
+    "mais|nada|isso|aquilo|disso|dessa|disto|nisso|naquilo|"
+    "nenhum|nenhuma|nenhuns|nenhumas|muito|muita|muitos|muitas|"
+    "pouco|pouca|tudo|nem|agora|nunca|jamais|sso|isto"
+)
+_REMOVE_NEGATION_RE = re.compile(
+    r"\b(?:eu\s+)?n[aã]o\s+"
+    r"(?:quero(?:\s+mais)?|precisa(?:\s+do)?|preciso(?:\s+do)?|manda(?:\s+o)?)"
+    r"\s+(?:o|a|os|as|do|da|dos|das)?\s*"
+    rf"(?!(?:{_REMOVE_NEGATION_FUNC_WORDS})\b)"
+    r"[a-záàâãéèêíìîóòôõúùûç]\w{2,}",
     re.IGNORECASE,
 )
 _ADD_KEYWORD_RE = re.compile(
@@ -4148,6 +4179,43 @@ _FINISH_KEYWORD_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Pre-router CONTINUATION pattern: messages starting with a continuation
+# marker ("e", "mais", "também", "tb", "ah e") followed by a quantity and a
+# product token. This is the most common production pattern (S8) — the
+# customer adds an item, then sends a verb-less follow-up like "e uma coca".
+# The semantic router can't recognize these as ADD without the verb, and the
+# existing _ADD_KEYWORD_RE requires explicit verbs (quero/manda/etc.).
+# A relative-quantity-only message like "mais uma" without a product name is
+# NOT matched here — that's a different scenario (P2.4).
+_CONTINUATION_KEYWORD_RE = re.compile(
+    r"^\s*"
+    r"(?:ah\s+)?"
+    r"(?:e|mais|tamb[eé]m|tb)\s+"
+    rf"(?:mais\s+|tamb[eé]m\s+)?(?:{_ADD_QTY_WORDS}|\d+)\s+"
+    r"[\w-]",
+    re.IGNORECASE,
+)
+
+# Pre-router BARE-ADD pattern: messages that ARE the order, with no shopping
+# verb. e.g. "1 cookies", "tipo um cheeseburger", "três coxinhas". Brazilian
+# customers in a hurry skip the verb and just type the quantity + product.
+# Today these fall to the semantic router which often misclassifies them as
+# REQUEST_SUGGESTION (the embedding lands near "o que tem" prototypes).
+# A negative lookahead excludes time/currency/filler words at the product
+# position so "2 horas" / "3 reais" / "1 momento" don't false-positive.
+_BARE_ADD_FILLER_WORDS = (
+    "horas?|minutos?|segundos?|dias?|reais?|momentos?|vezes?|anos?|"
+    "semanas?|meses?|gente|favor"
+)
+_BARE_ADD_RE = re.compile(
+    r"^\s*"
+    r"(?:tipo\s+)?"
+    rf"(?:{_ADD_QTY_WORDS}|\d+)\s+"
+    rf"(?!(?:{_BARE_ADD_FILLER_WORDS})\b)"
+    r"\w{3,}",
+    re.IGNORECASE,
+)
+
 
 # Score from the last resolve_intent call. Used by the checkout guard
 # to block low-confidence shopping intents from breaking checkout flow.
@@ -4165,7 +4233,14 @@ async def resolve_intent(text_body, cart, cart_items_for_intent, found_products=
     # 0b. Pre-router guard: obvious REMOVE/MODIFY patterns bypass the semantic router.
     # "tire/tira/retira/remove" + qty + product is unambiguously a cart reduction,
     # but the router misclassifies it as ADD because product names shift the embedding.
-    if _REMOVE_KEYWORD_RE.search(text_body) or _REMOVE_ALT_RE.search(text_body):
+    # _REMOVE_KEYWORD_RE: explicit verbs (tira/retira/remov/remove)
+    # _REMOVE_ALT_RE: alternative phrases (sem/cancela/esquece/deixa sem)
+    # _REMOVE_NEGATION_RE: negation patterns (não quero/precisa/manda o X)
+    if (
+        _REMOVE_KEYWORD_RE.search(text_body)
+        or _REMOVE_ALT_RE.search(text_body)
+        or _REMOVE_NEGATION_RE.search(text_body)
+    ):
         logger.info("[INTENT] pre-router REMOVE guard matched: %r", text_body[:80])
         _last_router_score = 1.0
         final_intent = "MODIFY"
@@ -4186,12 +4261,43 @@ async def resolve_intent(text_body, cart, cart_items_for_intent, found_products=
         # the customer reaffirming "finalizar" should still drive the flow forward.
         return final_intent
 
+    # 0b3. Pre-router CONTINUATION guard. Verb-less follow-up messages like
+    # "e uma coca", "mais um cheeseburger", "ah e dois pasteis" are the most
+    # common production pattern (S8). The semantic router doesn't classify
+    # them as ADD without a verb, and _ADD_KEYWORD_RE requires "quero/manda".
+    # The continuation regex requires a marker + quantity + product token.
+    if _CONTINUATION_KEYWORD_RE.search(text_body):
+        logger.info(
+            "[INTENT] pre-router CONTINUATION guard matched: %r", text_body[:80]
+        )
+        _last_router_score = 1.0
+        final_intent = "ADD"
+        if in_checkout and final_intent in _CHECKOUT_INTENT_OVERRIDES:
+            final_intent = _CHECKOUT_INTENT_OVERRIDES[final_intent]
+        return final_intent
+
     # 0c. Pre-router guard: obvious ADD patterns bypass the semantic router.
     # Messages like "quero um(a) Coca-cola e um(a) X" are unambiguously ADD,
     # but the router may misclassify them because product names in long messages
     # shift the embedding away from short ADD prototypes.
     if _ADD_KEYWORD_RE.search(text_body):
         logger.info("[INTENT] pre-router ADD guard matched: %r", text_body[:80])
+        _last_router_score = 1.0
+        final_intent = "ADD"
+        if in_checkout and final_intent in _CHECKOUT_INTENT_OVERRIDES:
+            final_intent = _CHECKOUT_INTENT_OVERRIDES[final_intent]
+        return final_intent
+
+    # 0c2. Pre-router BARE-ADD guard. Catches verb-less qty+product messages
+    # like "1 cookies", "tipo um cheeseburger", "três coxinhas". These are
+    # real Brazilian patterns (the customer is in a hurry / it's a Friday
+    # night) but they fall through both the ADD guard (no verb) and the
+    # CONTINUATION guard (no marker). The semantic router misclassifies them
+    # as REQUEST_SUGGESTION because the embedding lands near "o que tem"
+    # prototypes. Worst-case false positive ("2 horas") routes to ADD where
+    # the LLM gracefully says "não encontrei isso no cardápio".
+    if _BARE_ADD_RE.search(text_body):
+        logger.info("[INTENT] pre-router BARE-ADD guard matched: %r", text_body[:80])
         _last_router_score = 1.0
         final_intent = "ADD"
         if in_checkout and final_intent in _CHECKOUT_INTENT_OVERRIDES:
