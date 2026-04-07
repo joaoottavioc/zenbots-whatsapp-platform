@@ -1,0 +1,239 @@
+{
+  "products": [
+    {
+      "name": "HAMBURGER ARTESANAL 150g",
+      "description": "",
+      "price": 15.0,
+      "category": "Adicionais",
+      "id": 10108,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "HAMBURGER ARTESANAL CREAMOSO 150g",
+      "description": "",
+      "price": 18.0,
+      "category": "Adicionais",
+      "id": 10109,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "HAMBURGER DE BACON 150g",
+      "description": "",
+      "price": 22.0,
+      "category": "Adicionais",
+      "id": 10112,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "HAMBURGER DE CALABRESA 150g",
+      "description": "",
+      "price": 22.0,
+      "category": "Adicionais",
+      "id": 10113,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "HAMBURGER DE CHEESE 150g",
+      "description": "",
+      "price": 20.0,
+      "category": "Adicionais",
+      "id": 10111,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "HAMBURGER DE MUSSARELA 150g",
+      "description": "",
+      "price": 20.0,
+      "category": "Adicionais",
+      "id": 10110,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "MAIONESE DA CASA",
+      "description": "",
+      "price": 5.0,
+      "category": "Adicionais",
+      "id": 10115,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "PICLES DA CASA",
+      "description": "",
+      "price": 5.0,
+      "category": "Adicionais",
+      "id": 10114,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "REQUEIJÃO CHEDDAR CREMOSO",
+      "description": "",
+      "price": 5.0,
+      "category": "Adicionais",
+      "id": 10116,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "CERVEJA SKOL 500 ml",
+      "description": "",
+      "price": 10.0,
+      "category": "Bebidas",
+      "id": 10118,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "CERVEJA SKOL LITRO 350 ml",
+      "description": "",
+      "price": 10.0,
+      "category": "Bebidas",
+      "id": 10117,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "REFRIGERANTE 1 L",
+      "description": "",
+      "price": 10.0,
+      "category": "Bebidas",
+      "id": 10121,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "REFRIGERANTE 300 ml",
+      "description": "",
+      "price": 5.0,
+      "category": "Bebidas",
+      "id": 10119,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "REFRIGERANTE 500 ml",
+      "description": "",
+      "price": 7.0,
+      "category": "Bebidas",
+      "id": 10120,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "SUCO 300 ml",
+      "description": "",
+      "price": 5.0,
+      "category": "Bebidas",
+      "id": 10122,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "SUCO 500 ml",
+      "description": "",
+      "price": 7.0,
+      "category": "Bebidas",
+      "id": 10123,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "BIG DUPLO ESPECIAL",
+      "description": "Pão opcional, 2 hamburgers artesanais 120g, mussarela, cheddar, bacon, maionese da casa, tomate, alface americana.",
+      "price": 19.0,
+      "category": "Lanches",
+      "id": 10099,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "BIG ESPECIAL DA CASA",
+      "description": "Pão opcional, alcatra acebolada em tiras 160g, mussarela, maionese da casa, tomate, alface americana.",
+      "price": 18.0,
+      "category": "Lanches",
+      "id": 10098,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "BIG PICANHA",
+      "description": "Pão opcional, picanha em tiras 160g, mussarela, alface americana, tomate, cebola roxa.",
+      "price": 23.0,
+      "category": "Lanches",
+      "id": 10101,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "BIG TRIPLO CHEDDAR/CARNE",
+      "description": "Pão opcional, 3 hamburgers 120g, 3x queijo cheddar, bacon, maionese da casa.",
+      "price": 25.0,
+      "category": "Lanches",
+      "id": 10102,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "BIG TUDO",
+      "description": "Pão opcional, hamburguer 150g, queijo cheddar, requeijão cheddar cremoso, maionese da casa, ovo, bacon, calabresa, tomate, alface americana, picles da casa, cebola roxa.",
+      "price": 20.0,
+      "category": "Lanches",
+      "id": 10100,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "BATATA 400g",
+      "description": "",
+      "price": 20.0,
+      "category": "Porções",
+      "id": 10103,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "BATATA C/ BACON E CHEESE 400g",
+      "description": "",
+      "price": 30.0,
+      "category": "Porções",
+      "id": 10105,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "BATATA C/ CHEESE 400g",
+      "description": "",
+      "price": 25.0,
+      "category": "Porções",
+      "id": 10104,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "CALABRESA 400g",
+      "description": "",
+      "price": 20.0,
+      "category": "Porções",
+      "id": 10106,
+      "bot_id": 1291,
+      "is_available": true
+    },
+    {
+      "name": "MINI CHURROS",
+      "description": "Mini churros com 2 opções de recheio: doce de leite ou chocolate.",
+      "price": 20.0,
+      "category": "Sobremesas",
+      "id": 10107,
+      "bot_id": 1291,
+      "is_available": true
+    }
+  ],
+  "category": "hamburgueria"
+}

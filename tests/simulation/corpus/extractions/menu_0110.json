@@ -1,0 +1,113 @@
+{
+  "products": [
+    {
+      "name": "Baunilha Latte",
+      "description": "Leite vaporizado e dose de espresso",
+      "price": 12.0,
+      "category": "Bebidas",
+      "id": 10127,
+      "bot_id": 1292,
+      "is_available": true
+    },
+    {
+      "name": "Brigadeiro Latte",
+      "description": "Leite vaporizado, espresso e sabor de brigadeiro",
+      "price": 16.0,
+      "category": "Bebidas",
+      "id": 10129,
+      "bot_id": 1292,
+      "is_available": true
+    },
+    {
+      "name": "Café com Leite",
+      "description": "Café tradicional no filtro de papel com leite vaporizado",
+      "price": 7.0,
+      "category": "Bebidas",
+      "id": 10125,
+      "bot_id": 1292,
+      "is_available": true
+    },
+    {
+      "name": "Café Filtrado",
+      "description": "Café tradicional no filtro de papel",
+      "price": 7.0,
+      "category": "Bebidas",
+      "id": 10124,
+      "bot_id": 1292,
+      "is_available": true
+    },
+    {
+      "name": "Café Latte",
+      "description": "Leite vaporizado, espresso e espuma",
+      "price": 12.0,
+      "category": "Bebidas",
+      "id": 10128,
+      "bot_id": 1292,
+      "is_available": true
+    },
+    {
+      "name": "Café Mocha",
+      "description": "Café tradicional com chocolate e leite vaporizado",
+      "price": 10.0,
+      "category": "Bebidas",
+      "id": 10126,
+      "bot_id": 1292,
+      "is_available": true
+    },
+    {
+      "name": "Capuccino Brigadeiro",
+      "description": "Espresso com leite e sabor de brigadeiro",
+      "price": 10.0,
+      "category": "Bebidas",
+      "id": 10134,
+      "bot_id": 1292,
+      "is_available": true
+    },
+    {
+      "name": "Capuccino Canela",
+      "description": "Espresso, leite cremoso e finalizado com canela em pó",
+      "price": 12.0,
+      "category": "Bebidas",
+      "id": 10135,
+      "bot_id": 1292,
+      "is_available": true
+    },
+    {
+      "name": "Capuccino Tradicional",
+      "description": "Espresso com leite cremoso",
+      "price": 10.0,
+      "category": "Bebidas",
+      "id": 10133,
+      "bot_id": 1292,
+      "is_available": true
+    },
+    {
+      "name": "Caramelo Macchiato",
+      "description": "Leite vaporizado e sabor de caramelo",
+      "price": 12.0,
+      "category": "Bebidas",
+      "id": 10132,
+      "bot_id": 1292,
+      "is_available": true
+    },
+    {
+      "name": "Doce de Leite Latte",
+      "description": "Leite vaporizado e doce de leite",
+      "price": 11.0,
+      "category": "Bebidas",
+      "id": 10131,
+      "bot_id": 1292,
+      "is_available": true
+    },
+    {
+      "name": "Latte Macchiato",
+      "description": "Leite vaporizado e dose de espresso",
+      "price": 7.0,
+      "category": "Bebidas",
+      "id": 10130,
+      "bot_id": 1292,
+      "is_available": true
+    }
+  ],
+  "category": "cafeteria"
+}

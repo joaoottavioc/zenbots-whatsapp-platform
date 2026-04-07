@@ -1,0 +1,176 @@
+{
+  "products": [
+    {
+      "name": "Banana C/ Chocolate Canela",
+      "description": "",
+      "price": 5.0,
+      "category": "Doces",
+      "id": 10068,
+      "bot_id": 1288,
+      "is_available": true
+    },
+    {
+      "name": "Brigadeiro",
+      "description": "",
+      "price": 5.0,
+      "category": "Doces",
+      "id": 10067,
+      "bot_id": 1288,
+      "is_available": true
+    },
+    {
+      "name": "Coco C/ Chocolate",
+      "description": "",
+      "price": 5.0,
+      "category": "Doces",
+      "id": 10064,
+      "bot_id": 1288,
+      "is_available": true
+    },
+    {
+      "name": "Coco C/ Leite Condensado",
+      "description": "",
+      "price": 5.0,
+      "category": "Doces",
+      "id": 10062,
+      "bot_id": 1288,
+      "is_available": true
+    },
+    {
+      "name": "Doce de Leite C/ Coco",
+      "description": "",
+      "price": 5.0,
+      "category": "Doces",
+      "id": 10066,
+      "bot_id": 1288,
+      "is_available": true
+    },
+    {
+      "name": "Morango C/ Chocolate",
+      "description": "",
+      "price": 5.0,
+      "category": "Doces",
+      "id": 10065,
+      "bot_id": 1288,
+      "is_available": true
+    },
+    {
+      "name": "Romeu e Julieta",
+      "description": "",
+      "price": 5.0,
+      "category": "Doces",
+      "id": 10063,
+      "bot_id": 1288,
+      "is_available": true
+    },
+    {
+      "name": "Sensação",
+      "description": "",
+      "price": 5.0,
+      "category": "Doces",
+      "id": 10069,
+      "bot_id": 1288,
+      "is_available": true
+    },
+    {
+      "name": "3 Queijos",
+      "description": "",
+      "price": 5.0,
+      "category": "Salgada",
+      "id": 10061,
+      "bot_id": 1288,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa C/ Queijo",
+      "description": "",
+      "price": 5.0,
+      "category": "Salgada",
+      "id": 10059,
+      "bot_id": 1288,
+      "is_available": true
+    },
+    {
+      "name": "Carne Moída C/ Catupiry",
+      "description": "",
+      "price": 5.0,
+      "category": "Salgada",
+      "id": 10057,
+      "bot_id": 1288,
+      "is_available": true
+    },
+    {
+      "name": "Carne Moída C/ Queijo",
+      "description": "",
+      "price": 5.0,
+      "category": "Salgada",
+      "id": 10056,
+      "bot_id": 1288,
+      "is_available": true
+    },
+    {
+      "name": "Carne Seca C/ Catupiry",
+      "description": "",
+      "price": 5.0,
+      "category": "Salgada",
+      "id": 10055,
+      "bot_id": 1288,
+      "is_available": true
+    },
+    {
+      "name": "Carne Seca C/ Queijo",
+      "description": "",
+      "price": 5.0,
+      "category": "Salgada",
+      "id": 10054,
+      "bot_id": 1288,
+      "is_available": true
+    },
+    {
+      "name": "Frango C/ Catupiry",
+      "description": "",
+      "price": 5.0,
+      "category": "Salgada",
+      "id": 10053,
+      "bot_id": 1288,
+      "is_available": true
+    },
+    {
+      "name": "Frango C/ Queijo e Catupiry",
+      "description": "",
+      "price": 5.0,
+      "category": "Salgada",
+      "id": 10052,
+      "bot_id": 1288,
+      "is_available": true
+    },
+    {
+      "name": "Manteiga",
+      "description": "",
+      "price": 3.0,
+      "category": "Salgada",
+      "id": 10051,
+      "bot_id": 1288,
+      "is_available": true
+    },
+    {
+      "name": "Ovo",
+      "description": "",
+      "price": 5.0,
+      "category": "Salgada",
+      "id": 10060,
+      "bot_id": 1288,
+      "is_available": true
+    },
+    {
+      "name": "Presunto C/ Queijo",
+      "description": "",
+      "price": 5.0,
+      "category": "Salgada",
+      "id": 10058,
+      "bot_id": 1288,
+      "is_available": true
+    }
+  ],
+  "category": "doceria"
+}

@@ -1,0 +1,122 @@
+{
+  "products": [
+    {
+      "name": "Bowl de açaí",
+      "description": "400g",
+      "price": 16.0,
+      "category": "Bowl",
+      "id": 10324,
+      "bot_id": 1306,
+      "is_available": true
+    },
+    {
+      "name": "Fatia de torta banoffee",
+      "description": "",
+      "price": 16.0,
+      "category": "Dolci & Frutti",
+      "id": 10325,
+      "bot_id": 1306,
+      "is_available": true
+    },
+    {
+      "name": "Fatia de torta de Nutella",
+      "description": "",
+      "price": 16.0,
+      "category": "Dolci & Frutti",
+      "id": 10326,
+      "bot_id": 1306,
+      "is_available": true
+    },
+    {
+      "name": "Caesar da casa",
+      "description": "Salada com alface, frango grelhado, queijo parmesão e molho caesar",
+      "price": 34.0,
+      "category": "Insalata",
+      "id": 10321,
+      "bot_id": 1306,
+      "is_available": true
+    },
+    {
+      "name": "Filé à parmegiana",
+      "description": "R$45",
+      "price": 45.0,
+      "category": "Mangiare",
+      "id": 10322,
+      "bot_id": 1306,
+      "is_available": true
+    },
+    {
+      "name": "Filé de tilápia",
+      "description": "R$10",
+      "price": 10.0,
+      "category": "Omelette",
+      "id": 10323,
+      "bot_id": 1306,
+      "is_available": true
+    },
+    {
+      "name": "Bolinho de arroz crocante",
+      "description": "(6 unidades)",
+      "price": 25.0,
+      "category": "Para Compartilhar",
+      "id": 10314,
+      "bot_id": 1306,
+      "is_available": true
+    },
+    {
+      "name": "Burrata & Tomate",
+      "description": "R$36",
+      "price": 36.0,
+      "category": "Para Compartilhar",
+      "id": 10318,
+      "bot_id": 1306,
+      "is_available": true
+    },
+    {
+      "name": "Coxinhas de frango",
+      "description": "(6 unidades)",
+      "price": 30.0,
+      "category": "Para Compartilhar",
+      "id": 10319,
+      "bot_id": 1306,
+      "is_available": true
+    },
+    {
+      "name": "Fritas",
+      "description": "Fritas com queijo e bacon",
+      "price": 28.0,
+      "category": "Para Compartilhar",
+      "id": 10317,
+      "bot_id": 1306,
+      "is_available": true
+    },
+    {
+      "name": "Mix de focaccia",
+      "description": "R$25",
+      "price": 25.0,
+      "category": "Para Compartilhar",
+      "id": 10316,
+      "bot_id": 1306,
+      "is_available": true
+    },
+    {
+      "name": "Polentinha frita",
+      "description": "R$26",
+      "price": 26.0,
+      "category": "Para Compartilhar",
+      "id": 10320,
+      "bot_id": 1306,
+      "is_available": true
+    },
+    {
+      "name": "Quentinho de da casa",
+      "description": "cremoso por fora e macio por dentro",
+      "price": 25.0,
+      "category": "Para Compartilhar",
+      "id": 10315,
+      "bot_id": 1306,
+      "is_available": true
+    }
+  ],
+  "category": "açaiteria"
+}

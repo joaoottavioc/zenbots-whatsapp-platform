@@ -1,0 +1,167 @@
+{
+  "products": [
+    {
+      "name": "Queijo Coalho, Manteiga da Terra e Mel",
+      "description": "",
+      "price": 10.0,
+      "category": "Lanches",
+      "id": 10296,
+      "bot_id": 1305,
+      "is_available": true
+    },
+    {
+      "name": "Queijo Coalho na Massa, Camarão, Purê de Mandioca",
+      "description": "",
+      "price": 21.0,
+      "category": "Lanches",
+      "id": 10299,
+      "bot_id": 1305,
+      "is_available": true
+    },
+    {
+      "name": "Queijo Coalho na Massa, Carne de Sol e Banana Frita",
+      "description": "",
+      "price": 20.5,
+      "category": "Lanches",
+      "id": 10298,
+      "bot_id": 1305,
+      "is_available": true
+    },
+    {
+      "name": "Queijo Coalho na Massa, Carne de Sol e Purê de Mandioca",
+      "description": "",
+      "price": 17.0,
+      "category": "Lanches",
+      "id": 10297,
+      "bot_id": 1305,
+      "is_available": true
+    },
+    {
+      "name": "Bacalhau, Camarão, Purê de Mandioca, Champignon e Rúcula",
+      "description": "",
+      "price": 29.5,
+      "category": "Pratos Principais",
+      "id": 10308,
+      "bot_id": 1305,
+      "is_available": true
+    },
+    {
+      "name": "Bacalhau, Catupiry, Champignon e Rúcula",
+      "description": "",
+      "price": 26.9,
+      "category": "Pratos Principais",
+      "id": 10306,
+      "bot_id": 1305,
+      "is_available": true
+    },
+    {
+      "name": "Bacalhau, Catupiry e Tomate Seco",
+      "description": "",
+      "price": 26.9,
+      "category": "Pratos Principais",
+      "id": 10304,
+      "bot_id": 1305,
+      "is_available": true
+    },
+    {
+      "name": "Bacalhau, Cheddar, Palmito e Manjericão",
+      "description": "",
+      "price": 26.9,
+      "category": "Pratos Principais",
+      "id": 10307,
+      "bot_id": 1305,
+      "is_available": true
+    },
+    {
+      "name": "Bacalhau, Mussarela de Búfala e Champignon",
+      "description": "",
+      "price": 26.9,
+      "category": "Pratos Principais",
+      "id": 10305,
+      "bot_id": 1305,
+      "is_available": true
+    },
+    {
+      "name": "Filé de Tilápia, Alho Poró e Pimenta Calabresa",
+      "description": "",
+      "price": 26.0,
+      "category": "Pratos Principais",
+      "id": 10310,
+      "bot_id": 1305,
+      "is_available": true
+    },
+    {
+      "name": "Filé de Tilápia, Tomate Fresco e Rúcula",
+      "description": "",
+      "price": 26.0,
+      "category": "Pratos Principais",
+      "id": 10309,
+      "bot_id": 1305,
+      "is_available": true
+    },
+    {
+      "name": "Proteína de Soja, Purê de Abóbora e Manjericão",
+      "description": "",
+      "price": 15.5,
+      "category": "Pratos Principais",
+      "id": 10312,
+      "bot_id": 1305,
+      "is_available": true
+    },
+    {
+      "name": "Proteína de Soja, Purê de Mandioca e Azeitona",
+      "description": "",
+      "price": 15.5,
+      "category": "Pratos Principais",
+      "id": 10313,
+      "bot_id": 1305,
+      "is_available": true
+    },
+    {
+      "name": "Proteína de Soja, Tomate Fresco e Rúcula",
+      "description": "",
+      "price": 15.5,
+      "category": "Pratos Principais",
+      "id": 10311,
+      "bot_id": 1305,
+      "is_available": true
+    },
+    {
+      "name": "Salmão, Alcaparras e Rúcula",
+      "description": "",
+      "price": 26.9,
+      "category": "Pratos Principais",
+      "id": 10300,
+      "bot_id": 1305,
+      "is_available": true
+    },
+    {
+      "name": "Salmão, Alho Poró e Manjericão",
+      "description": "",
+      "price": 26.9,
+      "category": "Pratos Principais",
+      "id": 10301,
+      "bot_id": 1305,
+      "is_available": true
+    },
+    {
+      "name": "Salmão, Champignon e Cheddar",
+      "description": "",
+      "price": 26.9,
+      "category": "Pratos Principais",
+      "id": 10302,
+      "bot_id": 1305,
+      "is_available": true
+    },
+    {
+      "name": "Salmão, Purê de Mandioca e Palmito",
+      "description": "",
+      "price": 26.9,
+      "category": "Pratos Principais",
+      "id": 10303,
+      "bot_id": 1305,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

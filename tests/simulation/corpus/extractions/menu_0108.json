@@ -1,0 +1,158 @@
+{
+  "products": [
+    {
+      "name": "Chocolate Branco",
+      "description": "Creme de leite e chocolate branco",
+      "price": 5.0,
+      "category": "Adicionais",
+      "id": 10095,
+      "bot_id": 1290,
+      "is_available": true
+    },
+    {
+      "name": "Chocolate Preto",
+      "description": "Creme de leite e chocolate preto",
+      "price": 5.0,
+      "category": "Adicionais",
+      "id": 10096,
+      "bot_id": 1290,
+      "is_available": true
+    },
+    {
+      "name": "Duas Amores",
+      "description": "",
+      "price": 5.0,
+      "category": "Adicionais",
+      "id": 10097,
+      "bot_id": 1290,
+      "is_available": true
+    },
+    {
+      "name": "Bacon",
+      "description": "Mussarela, molho, bacon e orégano",
+      "price": 48.0,
+      "category": "Pizzas",
+      "id": 10091,
+      "bot_id": 1290,
+      "is_available": true
+    },
+    {
+      "name": "Bacon Crocante",
+      "description": "Mussarela, molho, bacon, batata palha e orégano",
+      "price": 48.0,
+      "category": "Pizzas",
+      "id": 10093,
+      "bot_id": 1290,
+      "is_available": true
+    },
+    {
+      "name": "Bacon Milho",
+      "description": "Mussarela, molho, bacon, milho e orégano",
+      "price": 48.0,
+      "category": "Pizzas",
+      "id": 10092,
+      "bot_id": 1290,
+      "is_available": true
+    },
+    {
+      "name": "Caipira",
+      "description": "Mussarela, molho, frango, milho e orégano",
+      "price": 48.0,
+      "category": "Pizzas",
+      "id": 10085,
+      "bot_id": 1290,
+      "is_available": true
+    },
+    {
+      "name": "Calabresa",
+      "description": "Mussarela, molho, calabresa e orégano",
+      "price": 48.0,
+      "category": "Pizzas",
+      "id": 10084,
+      "bot_id": 1290,
+      "is_available": true
+    },
+    {
+      "name": "Catupilha",
+      "description": "Mussarela, molho, catupiry, batata palha e orégano",
+      "price": 48.0,
+      "category": "Pizzas",
+      "id": 10089,
+      "bot_id": 1290,
+      "is_available": true
+    },
+    {
+      "name": "Frango Catupiry",
+      "description": "Mussarela, molho, catupiry e orégano",
+      "price": 48.0,
+      "category": "Pizzas",
+      "id": 10087,
+      "bot_id": 1290,
+      "is_available": true
+    },
+    {
+      "name": "Frango Cheddar",
+      "description": "Molho, mussarela, frango, cheddar e orégano",
+      "price": 48.0,
+      "category": "Pizzas",
+      "id": 10088,
+      "bot_id": 1290,
+      "is_available": true
+    },
+    {
+      "name": "Frango Crocante",
+      "description": "Mussarela, molho, frango, batata palha e orégano",
+      "price": 48.0,
+      "category": "Pizzas",
+      "id": 10086,
+      "bot_id": 1290,
+      "is_available": true
+    },
+    {
+      "name": "Milho",
+      "description": "Mussarela, molho, milho e orégano",
+      "price": 48.0,
+      "category": "Pizzas",
+      "id": 10083,
+      "bot_id": 1290,
+      "is_available": true
+    },
+    {
+      "name": "Mussarela",
+      "description": "Mussarela, molho, milho e orégano",
+      "price": 48.0,
+      "category": "Pizzas",
+      "id": 10090,
+      "bot_id": 1290,
+      "is_available": true
+    },
+    {
+      "name": "Pizza Grande 1 Sabor",
+      "description": "8 pedaços",
+      "price": 20.0,
+      "category": "Pizzas",
+      "id": 10081,
+      "bot_id": 1290,
+      "is_available": true
+    },
+    {
+      "name": "Pizza Grande 2 Sabores",
+      "description": "8 pedaços",
+      "price": 25.0,
+      "category": "Pizzas",
+      "id": 10082,
+      "bot_id": 1290,
+      "is_available": true
+    },
+    {
+      "name": "Quatro Queijos",
+      "description": "Mussarela, molho, catupiry, provolone e parmesão",
+      "price": 48.0,
+      "category": "Pizzas",
+      "id": 10094,
+      "bot_id": 1290,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

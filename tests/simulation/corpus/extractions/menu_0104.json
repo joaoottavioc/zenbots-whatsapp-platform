@@ -1,0 +1,113 @@
+{
+  "products": [
+    {
+      "name": "Cerveja Brahma Latão",
+      "description": "",
+      "price": 2.0,
+      "category": "Bebidas",
+      "id": 10044,
+      "bot_id": 1286,
+      "is_available": true
+    },
+    {
+      "name": "Cerveja Glacial",
+      "description": "",
+      "price": 2.0,
+      "category": "Bebidas",
+      "id": 10043,
+      "bot_id": 1286,
+      "is_available": true
+    },
+    {
+      "name": "Refresco",
+      "description": "",
+      "price": 2.0,
+      "category": "Bebidas",
+      "id": 10041,
+      "bot_id": 1286,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante (200ml)",
+      "description": "",
+      "price": 2.0,
+      "category": "Bebidas",
+      "id": 10039,
+      "bot_id": 1286,
+      "is_available": true
+    },
+    {
+      "name": "Refrigerante (litro)",
+      "description": "",
+      "price": 4.0,
+      "category": "Bebidas",
+      "id": 10040,
+      "bot_id": 1286,
+      "is_available": true
+    },
+    {
+      "name": "Suco Natural",
+      "description": "",
+      "price": 4.0,
+      "category": "Bebidas",
+      "id": 10042,
+      "bot_id": 1286,
+      "is_available": true
+    },
+    {
+      "name": "Pastel de Carne",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis",
+      "id": 10033,
+      "bot_id": 1286,
+      "is_available": true
+    },
+    {
+      "name": "Pastel de Carne e Queijo",
+      "description": "",
+      "price": 9.5,
+      "category": "Pastéis",
+      "id": 10036,
+      "bot_id": 1286,
+      "is_available": true
+    },
+    {
+      "name": "Pastel de Frango",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis",
+      "id": 10034,
+      "bot_id": 1286,
+      "is_available": true
+    },
+    {
+      "name": "Pastel de Frango com Palmito",
+      "description": "",
+      "price": 9.5,
+      "category": "Pastéis",
+      "id": 10037,
+      "bot_id": 1286,
+      "is_available": true
+    },
+    {
+      "name": "Pastel de Pizza",
+      "description": "",
+      "price": 8.0,
+      "category": "Pastéis",
+      "id": 10035,
+      "bot_id": 1286,
+      "is_available": true
+    },
+    {
+      "name": "Pastel Misto",
+      "description": "Carne e Frango",
+      "price": 9.5,
+      "category": "Pastéis",
+      "id": 10038,
+      "bot_id": 1286,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

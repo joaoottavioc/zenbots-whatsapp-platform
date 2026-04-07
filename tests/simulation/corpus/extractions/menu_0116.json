@@ -1,0 +1,113 @@
+{
+  "products": [
+    {
+      "name": "Opção Hot",
+      "description": "",
+      "price": 2.5,
+      "category": "Adicionais",
+      "id": 10208,
+      "bot_id": 1298,
+      "is_available": true
+    },
+    {
+      "name": "Banana",
+      "description": "",
+      "price": 15.0,
+      "category": "Uramaki Doce",
+      "id": 10205,
+      "bot_id": 1298,
+      "is_available": true
+    },
+    {
+      "name": "Banana + Doce de Leite",
+      "description": "",
+      "price": 23.0,
+      "category": "Uramaki Doce",
+      "id": 10206,
+      "bot_id": 1298,
+      "is_available": true
+    },
+    {
+      "name": "Morango + Nutella",
+      "description": "",
+      "price": 27.0,
+      "category": "Uramaki Doce",
+      "id": 10204,
+      "bot_id": 1298,
+      "is_available": true
+    },
+    {
+      "name": "Morangos",
+      "description": "",
+      "price": 16.0,
+      "category": "Uramaki Doce",
+      "id": 10203,
+      "bot_id": 1298,
+      "is_available": true
+    },
+    {
+      "name": "Romeu e Julieta",
+      "description": "Goiabada - creamcheese",
+      "price": 18.0,
+      "category": "Uramaki Doce",
+      "id": 10207,
+      "bot_id": 1298,
+      "is_available": true
+    },
+    {
+      "name": "Ebimaki Especial",
+      "description": "Cada peça coberta com camarão",
+      "price": 28.0,
+      "category": "Uramakis Especiais",
+      "id": 10199,
+      "bot_id": 1298,
+      "is_available": true
+    },
+    {
+      "name": "Ebi Toast",
+      "description": "Recheado com camarão empanado",
+      "price": 30.0,
+      "category": "Uramakis Especiais",
+      "id": 10200,
+      "bot_id": 1298,
+      "is_available": true
+    },
+    {
+      "name": "Ebi Toast Especial",
+      "description": "Cada peça coberta de camarão - creamcheese",
+      "price": 35.0,
+      "category": "Uramakis Especiais",
+      "id": 10201,
+      "bot_id": 1298,
+      "is_available": true
+    },
+    {
+      "name": "Filadélfia Especial",
+      "description": "Cada peça coberta de patê de salmão",
+      "price": 28.0,
+      "category": "Uramakis Especiais",
+      "id": 10197,
+      "bot_id": 1298,
+      "is_available": true
+    },
+    {
+      "name": "Filadélfia Esp. Maçaricado",
+      "description": "",
+      "price": 30.0,
+      "category": "Uramakis Especiais",
+      "id": 10198,
+      "bot_id": 1298,
+      "is_available": true
+    },
+    {
+      "name": "Vegetariano",
+      "description": "Cenoura, pepino, manga",
+      "price": 16.0,
+      "category": "Uramakis Especiais",
+      "id": 10202,
+      "bot_id": 1298,
+      "is_available": true
+    }
+  ],
+  "category": "sushi"
+}

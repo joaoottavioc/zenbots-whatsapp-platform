@@ -1,0 +1,113 @@
+{
+  "products": [
+    {
+      "name": "Chá Verde",
+      "description": "",
+      "price": 10.0,
+      "category": "Bebidas",
+      "id": 10294,
+      "bot_id": 1304,
+      "is_available": true
+    },
+    {
+      "name": "Saqé",
+      "description": "",
+      "price": 10.0,
+      "category": "Bebidas",
+      "id": 10295,
+      "bot_id": 1304,
+      "is_available": true
+    },
+    {
+      "name": "Edamame",
+      "description": "",
+      "price": 10.0,
+      "category": "Entradas",
+      "id": 10284,
+      "bot_id": 1304,
+      "is_available": true
+    },
+    {
+      "name": "Gyoza",
+      "description": "",
+      "price": 10.0,
+      "category": "Entradas",
+      "id": 10286,
+      "bot_id": 1304,
+      "is_available": true
+    },
+    {
+      "name": "Sunomono",
+      "description": "",
+      "price": 10.0,
+      "category": "Entradas",
+      "id": 10285,
+      "bot_id": 1304,
+      "is_available": true
+    },
+    {
+      "name": "Dorayaki",
+      "description": "",
+      "price": 10.0,
+      "category": "Sobremesas",
+      "id": 10293,
+      "bot_id": 1304,
+      "is_available": true
+    },
+    {
+      "name": "Mochi",
+      "description": "",
+      "price": 10.0,
+      "category": "Sobremesas",
+      "id": 10292,
+      "bot_id": 1304,
+      "is_available": true
+    },
+    {
+      "name": "Nigiri de Camarão",
+      "description": "",
+      "price": 10.0,
+      "category": "Sushis & Sashimis",
+      "id": 10289,
+      "bot_id": 1304,
+      "is_available": true
+    },
+    {
+      "name": "Sashimi de Atum",
+      "description": "",
+      "price": 10.0,
+      "category": "Sushis & Sashimis",
+      "id": 10288,
+      "bot_id": 1304,
+      "is_available": true
+    },
+    {
+      "name": "Sushi de Salmão",
+      "description": "",
+      "price": 10.0,
+      "category": "Sushis & Sashimis",
+      "id": 10287,
+      "bot_id": 1304,
+      "is_available": true
+    },
+    {
+      "name": "Temaki de Atum",
+      "description": "",
+      "price": 10.0,
+      "category": "Temakis",
+      "id": 10291,
+      "bot_id": 1304,
+      "is_available": true
+    },
+    {
+      "name": "Temaki de Salmão",
+      "description": "",
+      "price": 10.0,
+      "category": "Temakis",
+      "id": 10290,
+      "bot_id": 1304,
+      "is_available": true
+    }
+  ],
+  "category": "sushi"
+}

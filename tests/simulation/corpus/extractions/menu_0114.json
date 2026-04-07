@@ -1,0 +1,185 @@
+{
+  "products": [
+    {
+      "name": "Bacalhau, Camarão, Purê de Mandioca, Champignon e Rúcula",
+      "description": "",
+      "price": 29.5,
+      "category": "Tapiocas",
+      "id": 10170,
+      "bot_id": 1296,
+      "is_available": true
+    },
+    {
+      "name": "Bacalhau, Catupiry, Champignon e Rúcula",
+      "description": "",
+      "price": 26.9,
+      "category": "Tapiocas",
+      "id": 10168,
+      "bot_id": 1296,
+      "is_available": true
+    },
+    {
+      "name": "Bacalhau, Catupiry e Tomate Seco",
+      "description": "",
+      "price": 26.9,
+      "category": "Tapiocas",
+      "id": 10166,
+      "bot_id": 1296,
+      "is_available": true
+    },
+    {
+      "name": "Bacalhau, Cheddar, Palmito e Manjericão",
+      "description": "",
+      "price": 26.9,
+      "category": "Tapiocas",
+      "id": 10169,
+      "bot_id": 1296,
+      "is_available": true
+    },
+    {
+      "name": "Bacalhau, Mussarela de Búfala e Champignon",
+      "description": "",
+      "price": 26.9,
+      "category": "Tapiocas",
+      "id": 10167,
+      "bot_id": 1296,
+      "is_available": true
+    },
+    {
+      "name": "Filé de Tilápia, Alho Poró e Pimenta Calabresa",
+      "description": "",
+      "price": 26.0,
+      "category": "Tapiocas",
+      "id": 10173,
+      "bot_id": 1296,
+      "is_available": true
+    },
+    {
+      "name": "Filé de Tilápia, Purê de Mandioca, Tomate Seco e Manjericão",
+      "description": "",
+      "price": 26.0,
+      "category": "Tapiocas",
+      "id": 10172,
+      "bot_id": 1296,
+      "is_available": true
+    },
+    {
+      "name": "Filé de Tilápia, Tomate Fresco e Rúcula",
+      "description": "",
+      "price": 26.0,
+      "category": "Tapiocas",
+      "id": 10171,
+      "bot_id": 1296,
+      "is_available": true
+    },
+    {
+      "name": "Proteína de Soja, Purê de Abóbora e Manjericão",
+      "description": "",
+      "price": 15.0,
+      "category": "Tapiocas",
+      "id": 10175,
+      "bot_id": 1296,
+      "is_available": true
+    },
+    {
+      "name": "Proteína de Soja, Purê de Mandioca, Palmito e Manjericão",
+      "description": "",
+      "price": 15.0,
+      "category": "Tapiocas",
+      "id": 10177,
+      "bot_id": 1296,
+      "is_available": true
+    },
+    {
+      "name": "Proteína de Soja, Tomate Fresco e Azeitona",
+      "description": "",
+      "price": 15.0,
+      "category": "Tapiocas",
+      "id": 10176,
+      "bot_id": 1296,
+      "is_available": true
+    },
+    {
+      "name": "Proteína de Soja, Tomate Fresco e Rúcula",
+      "description": "",
+      "price": 15.0,
+      "category": "Tapiocas",
+      "id": 10174,
+      "bot_id": 1296,
+      "is_available": true
+    },
+    {
+      "name": "Queijo Coalho, Manteiga da Terra e Mel",
+      "description": "",
+      "price": 10.0,
+      "category": "Tapiocas",
+      "id": 10158,
+      "bot_id": 1296,
+      "is_available": true
+    },
+    {
+      "name": "Queijo Coalho na Massa, Camarão, Purê de Mandioca",
+      "description": "",
+      "price": 21.0,
+      "category": "Tapiocas",
+      "id": 10161,
+      "bot_id": 1296,
+      "is_available": true
+    },
+    {
+      "name": "Queijo Coalho na Massa, Carne de Sol e Banana Frita",
+      "description": "",
+      "price": 20.5,
+      "category": "Tapiocas",
+      "id": 10160,
+      "bot_id": 1296,
+      "is_available": true
+    },
+    {
+      "name": "Queijo Coalho na Massa, Carne de Sol e Purê de Mandioca",
+      "description": "",
+      "price": 17.0,
+      "category": "Tapiocas",
+      "id": 10159,
+      "bot_id": 1296,
+      "is_available": true
+    },
+    {
+      "name": "Salmão, Alcaparras e Rúcula",
+      "description": "",
+      "price": 26.9,
+      "category": "Tapiocas",
+      "id": 10162,
+      "bot_id": 1296,
+      "is_available": true
+    },
+    {
+      "name": "Salmão, Alho Poró e Manjericão",
+      "description": "",
+      "price": 26.9,
+      "category": "Tapiocas",
+      "id": 10163,
+      "bot_id": 1296,
+      "is_available": true
+    },
+    {
+      "name": "Salmão, Champignon e Cheddar",
+      "description": "",
+      "price": 26.9,
+      "category": "Tapiocas",
+      "id": 10164,
+      "bot_id": 1296,
+      "is_available": true
+    },
+    {
+      "name": "Salmão, Purê de Mandioca e Palmito",
+      "description": "",
+      "price": 26.9,
+      "category": "Tapiocas",
+      "id": 10165,
+      "bot_id": 1296,
+      "is_available": true
+    }
+  ],
+  "category": "pizzaria"
+}

@@ -1,0 +1,257 @@
+{
+  "products": [
+    {
+      "name": "HAMBURGER ARTESANAL 150g",
+      "description": "",
+      "price": 15.0,
+      "category": "Adicionais",
+      "id": 10245,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "HAMBURGER ARTESANAL C/ QUEIJO 150g",
+      "description": "",
+      "price": 18.0,
+      "category": "Adicionais",
+      "id": 10246,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "HAMBURGER C/ ALFACE 150g",
+      "description": "",
+      "price": 18.0,
+      "category": "Adicionais",
+      "id": 10252,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "HAMBURGER C/ BACON 150g",
+      "description": "",
+      "price": 18.0,
+      "category": "Adicionais",
+      "id": 10248,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "HAMBURGER C/ CALABRESA 150g",
+      "description": "",
+      "price": 18.0,
+      "category": "Adicionais",
+      "id": 10250,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "HAMBURGER C/ CEBOLA 150g",
+      "description": "",
+      "price": 18.0,
+      "category": "Adicionais",
+      "id": 10254,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "HAMBURGER C/ FRANGO 150g",
+      "description": "",
+      "price": 18.0,
+      "category": "Adicionais",
+      "id": 10251,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "HAMBURGER C/ PICLES 150g",
+      "description": "",
+      "price": 18.0,
+      "category": "Adicionais",
+      "id": 10255,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "HAMBURGER C/ QUEIJO CREMOSO 150g",
+      "description": "",
+      "price": 18.0,
+      "category": "Adicionais",
+      "id": 10249,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "HAMBURGER CREMOSO 150g",
+      "description": "",
+      "price": 15.0,
+      "category": "Adicionais",
+      "id": 10247,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "HAMBURGER C/ TOMATE 150g",
+      "description": "",
+      "price": 18.0,
+      "category": "Adicionais",
+      "id": 10253,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "CERVEJA SKOL 500ml",
+      "description": "",
+      "price": 10.0,
+      "category": "Bebidas",
+      "id": 10257,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "CERVEJA SKOL LITRO 350ml",
+      "description": "",
+      "price": 8.0,
+      "category": "Bebidas",
+      "id": 10256,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "REFRIGERANTE 300ml",
+      "description": "",
+      "price": 5.0,
+      "category": "Bebidas",
+      "id": 10258,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "REFRIGERANTE 500ml",
+      "description": "",
+      "price": 7.0,
+      "category": "Bebidas",
+      "id": 10259,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "SUCO 300ml",
+      "description": "",
+      "price": 5.0,
+      "category": "Bebidas",
+      "id": 10260,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "SUCO 500ml",
+      "description": "",
+      "price": 7.0,
+      "category": "Bebidas",
+      "id": 10261,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "BIG DUPLO ESPECIAL",
+      "description": "Pão opcional, 2 hamburgers artesanais 120g, mussarela, cheddar, bacon, maionese da casa, tomate, alface americana.",
+      "price": 19.0,
+      "category": "Lanches",
+      "id": 10235,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "BIG ESPECIAL DA CASA",
+      "description": "Pão opcional, alcatra acebolada em tiras 160g, mussarela, maionese da casa, tomate, alface americana.",
+      "price": 18.0,
+      "category": "Lanches",
+      "id": 10234,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "BIG MONSTER",
+      "description": "Pão opcional, 2 hamburgers 150g, 2x mussarela, 2x cheddar, requintado cheddar cremoso, maionese da casa, bacon, calabresa, tomate, alface americana, picles da casa, cebola roxa.",
+      "price": 25.0,
+      "category": "Lanches",
+      "id": 10239,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "BIG PICANHA",
+      "description": "Pão opcional, picanha em tiras 160g, mussarela, alface americana, tomate, cebola roxa.",
+      "price": 23.0,
+      "category": "Lanches",
+      "id": 10237,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "BIG TRIPLO CHEDDAR/CARNE",
+      "description": "Pão opcional, 3 hamburgers 120g, 3x queijo cheddar, bacon, maionese da casa.",
+      "price": 25.0,
+      "category": "Lanches",
+      "id": 10238,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "BIG TUDO",
+      "description": "Pão opcional, hamburger 150g, ovo, bacon, calabresa, tomate, alface americana, picles da casa, cebola roxa.",
+      "price": 20.0,
+      "category": "Lanches",
+      "id": 10236,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "BATATA 400g",
+      "description": "",
+      "price": 20.0,
+      "category": "Porções",
+      "id": 10240,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "BATATA C/ BACON E CHEESE 400g",
+      "description": "",
+      "price": 30.0,
+      "category": "Porções",
+      "id": 10242,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "BATATA C/ CHEESE 400g",
+      "description": "",
+      "price": 25.0,
+      "category": "Porções",
+      "id": 10241,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "CALABRESA 400g",
+      "description": "",
+      "price": 25.0,
+      "category": "Porções",
+      "id": 10243,
+      "bot_id": 1300,
+      "is_available": true
+    },
+    {
+      "name": "MINI CHURROS",
+      "description": "Adicionais: 3 unidades. 1 porção de 6 unidades.",
+      "price": 20.0,
+      "category": "Porções",
+      "id": 10244,
+      "bot_id": 1300,
+      "is_available": true
+    }
+  ],
+  "category": "hamburgueria"
+}

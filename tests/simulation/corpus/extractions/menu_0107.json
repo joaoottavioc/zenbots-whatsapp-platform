@@ -1,0 +1,104 @@
+{
+  "products": [
+    {
+      "name": "Banana",
+      "description": "",
+      "price": 15.0,
+      "category": "Uramaki Doce",
+      "id": 10078,
+      "bot_id": 1289,
+      "is_available": true
+    },
+    {
+      "name": "Banana + Doce de Leite",
+      "description": "",
+      "price": 23.0,
+      "category": "Uramaki Doce",
+      "id": 10079,
+      "bot_id": 1289,
+      "is_available": true
+    },
+    {
+      "name": "Morango",
+      "description": "",
+      "price": 16.0,
+      "category": "Uramaki Doce",
+      "id": 10076,
+      "bot_id": 1289,
+      "is_available": true
+    },
+    {
+      "name": "Morango + Nutella",
+      "description": "",
+      "price": 27.0,
+      "category": "Uramaki Doce",
+      "id": 10077,
+      "bot_id": 1289,
+      "is_available": true
+    },
+    {
+      "name": "Romeu e Julieta",
+      "description": "Goiabada - creamcheese",
+      "price": 18.0,
+      "category": "Uramaki Doce",
+      "id": 10080,
+      "bot_id": 1289,
+      "is_available": true
+    },
+    {
+      "name": "Ebimaki Especial",
+      "description": "Cada peça coberta com camarão",
+      "price": 28.0,
+      "category": "Uramakis Especiais",
+      "id": 10072,
+      "bot_id": 1289,
+      "is_available": true
+    },
+    {
+      "name": "Ebi Toast",
+      "description": "Recheado com camarão empanado",
+      "price": 30.0,
+      "category": "Uramakis Especiais",
+      "id": 10073,
+      "bot_id": 1289,
+      "is_available": true
+    },
+    {
+      "name": "Ebi Toast Especial",
+      "description": "Cada peça coberta de camarão - creamcheese",
+      "price": 35.0,
+      "category": "Uramakis Especiais",
+      "id": 10074,
+      "bot_id": 1289,
+      "is_available": true
+    },
+    {
+      "name": "Filadélfia Especial",
+      "description": "Cada peça coberta de patê de salmão",
+      "price": 28.0,
+      "category": "Uramakis Especiais",
+      "id": 10070,
+      "bot_id": 1289,
+      "is_available": true
+    },
+    {
+      "name": "Filadélfia Esp. Maçaricado",
+      "description": "",
+      "price": 30.0,
+      "category": "Uramakis Especiais",
+      "id": 10071,
+      "bot_id": 1289,
+      "is_available": true
+    },
+    {
+      "name": "Vegetariano",
+      "description": "Cenoura, pepino, manga",
+      "price": 16.0,
+      "category": "Uramakis Especiais",
+      "id": 10075,
+      "bot_id": 1289,
+      "is_available": true
+    }
+  ],
+  "category": "sushi"
+}
