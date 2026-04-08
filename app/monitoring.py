@@ -27,7 +27,13 @@ from app.time import utcnow
 logger = logging.getLogger(__name__)
 
 # ────────────────────────────────────────────────────────────────
-# Pricing (USD per token)
+# Pricing (USD per token) — verified 2026-04-08 against OpenAI's
+# published rates. Update this file when OpenAI changes prices.
+# Whisper transcription (Groq + OpenAI fallback) is tracked separately
+# without a per-token cost — Groq is free under their dev tier and
+# OpenAI Whisper is $0.006/minute, but we don't currently track audio
+# duration. If we ever switch to OpenAI Whisper as primary, instrument
+# duration and add a per-minute constant here.
 # ────────────────────────────────────────────────────────────────
 
 PRICING: dict[str, dict[str, float]] = {
@@ -41,16 +47,31 @@ PRICING: dict[str, dict[str, float]] = {
     },
 }
 
-# Fixed costs per API call
+# Fixed costs per API call (USD).
+# These are upper-bound rate-card prices. Several services have free tiers
+# or volume credits that make the actual paid cost lower until ZenBots
+# scales past those tiers — see per-line comments.
 API_COSTS: dict[str, float] = {
-    "google_maps_geocode": 0.005,  # ~$5 per 1K requests
-    "s3_put": 0.000005,  # $0.005 per 1K PUTs
+    # Google Maps Geocoding API: $5 per 1000 requests at the rate-card price.
+    # Google grants $200/month free credit which covers ~40,000 geocodes/mo.
+    # ZenBots is well inside that today, so the real cost is currently $0.
+    # Constant kept at the worst case so the dashboard tracks correctly when
+    # we eventually scale past the free credit.
+    "google_maps_geocode": 0.005,
+    # S3 PUT: $0.005 per 1000 PUTs in us-east-1 standard.
+    "s3_put": 0.000005,
+    # S3 storage: $0.023 per GB-month standard tier.
     "s3_storage_gb": 0.023 / (1024**3),
-    # WhatsApp service conversations (customer-initiated, the only kind
-    # ZenBots currently sends) are FREE under Meta's Nov 2024 pricing.
-    # Paid template categories (added later when we send order-status
-    # notifications): utility ~$0.008, authentication ~$0.0315,
-    # marketing ~$0.0625 — Brazil rates.
+    # WhatsApp Cloud API bills per CONVERSATION (24h window), not per
+    # message. Service conversations (customer messages first, business
+    # replies within 24h) are FREE under Meta's Nov 2024 pricing —
+    # ZenBots' entire flow is service-conversation based, so the
+    # realistic cost is $0. The hardcoded $0.05 used to be here was an
+    # outdated overestimate based on the old US marketing rate.
+    # When we start sending paid templates (order-status notifications,
+    # OTPs, marketing blasts), instrument them with their own operation
+    # name and use the per-template constants below — Brazil rates verified
+    # against Meta's 2024 rate card.
     "whatsapp_message": 0.0,
     "whatsapp_template_utility": 0.008,
     "whatsapp_template_authentication": 0.0315,
