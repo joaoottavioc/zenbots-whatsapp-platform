@@ -3829,8 +3829,21 @@ async def send_whatsapp_message(
                 response.status_code,
                 response.text[:500],
             )
+            # WhatsApp Cloud API bills per CONVERSATION (24h window), not per
+            # message. Service conversations (customer messages first, business
+            # replies within 24h) are FREE since Meta's Nov 2024 pricing change.
+            # ZenBots' entire flow is service-conversation based — every chat
+            # starts with the customer typing "oi" — so the realistic cost per
+            # send_message call is $0.00. The previous $0.05 hardcoded constant
+            # was an outdated overestimate.
+            #
+            # When we start sending paid templates (Marketing/Utility/Auth)
+            # for order-status updates, OTPs, or marketing blasts, we should
+            # add a separate record_api_usage call with the appropriate
+            # operation name and per-template cost (Brazil rates: utility
+            # ~$0.008, auth ~$0.0315, marketing ~$0.0625).
             await record_api_usage(
-                None, "whatsapp", "send_message", cost_usd=0.05, duration_ms=_elapsed
+                None, "whatsapp", "send_message", cost_usd=0.0, duration_ms=_elapsed
             )
         except httpx.HTTPStatusError as e:
             _elapsed = (_time.perf_counter_ns() - _start) // 1_000_000

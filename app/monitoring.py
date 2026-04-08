@@ -46,7 +46,15 @@ API_COSTS: dict[str, float] = {
     "google_maps_geocode": 0.005,  # ~$5 per 1K requests
     "s3_put": 0.000005,  # $0.005 per 1K PUTs
     "s3_storage_gb": 0.023 / (1024**3),
-    "whatsapp_message": 0.05,  # ~$0.05 per conversation window
+    # WhatsApp service conversations (customer-initiated, the only kind
+    # ZenBots currently sends) are FREE under Meta's Nov 2024 pricing.
+    # Paid template categories (added later when we send order-status
+    # notifications): utility ~$0.008, authentication ~$0.0315,
+    # marketing ~$0.0625 — Brazil rates.
+    "whatsapp_message": 0.0,
+    "whatsapp_template_utility": 0.008,
+    "whatsapp_template_authentication": 0.0315,
+    "whatsapp_template_marketing": 0.0625,
 }
 
 # ────────────────────────────────────────────────────────────────
