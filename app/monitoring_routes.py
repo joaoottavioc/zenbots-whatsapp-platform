@@ -21,8 +21,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth import get_current_user, require_admin
 from app.database import get_session
-from app.models import Bot, DailyCostSummary, User
-from app.monitoring import get_buffer_size
+from app.models import Bot, DailyCostSummary, UsageEvent, User
+from app.monitoring import aggregate_daily_costs, flush_buffer, get_buffer_size
 
 logger = logging.getLogger(__name__)
 
@@ -312,10 +312,20 @@ async def admin_overview(
     session: AsyncSession = Depends(get_session),
     _admin: User = Depends(require_admin),
 ):
-    """Aggregate cost overview across ALL bots (admin only)."""
-    start_date = date.today() - timedelta(days=days)
+    """Aggregate cost overview across ALL bots (admin only).
 
-    stmt = (
+    Reads historical data from daily_cost_summary AND merges in today's
+    raw usage_events so the response is "live" — costs incurred since
+    the last 3 AM aggregation are visible immediately.
+
+    Includes a static AWS infrastructure estimate row so customers see
+    the full cost picture, not just OpenAI/API call costs.
+    """
+    today = date.today()
+    start_date = today - timedelta(days=days)
+
+    # 1. Historical: from daily_cost_summary (excludes today)
+    historical_stmt = (
         select(
             DailyCostSummary.service,
             func.sum(DailyCostSummary.total_cost_usd).label("total_cost_usd"),
@@ -324,27 +334,99 @@ async def admin_overview(
             func.sum(DailyCostSummary.total_api_calls).label("total_api_calls"),
             func.sum(DailyCostSummary.total_failed_calls).label("total_failed_calls"),
         )
-        .where(DailyCostSummary.date >= start_date)
+        .where(
+            DailyCostSummary.date >= start_date,
+            DailyCostSummary.date < today,
+        )
         .group_by(DailyCostSummary.service)
     )
-    result = await session.execute(stmt)
-    rows = result.all()
+    historical_rows = (await session.execute(historical_stmt)).all()
 
+    # 2. Today: from raw usage_events (real-time, not yet aggregated).
+    # Flush the in-memory monitoring buffer first so the query sees
+    # everything that's been recorded since the last periodic flush.
+    # Use naive datetime — usage_events.created_at is TIMESTAMP WITHOUT
+    # TIME ZONE so passing tz-aware here would crash asyncpg.
+    await flush_buffer()
+    today_start = datetime.combine(today, datetime.min.time())
+    from sqlalchemy import case as sa_case
+
+    today_stmt = (
+        select(
+            UsageEvent.service,
+            func.sum(UsageEvent.cost_usd).label("total_cost_usd"),
+            func.sum(UsageEvent.input_tokens).label("total_input_tokens"),
+            func.sum(UsageEvent.output_tokens).label("total_output_tokens"),
+            func.count().label("total_api_calls"),
+            func.sum(
+                sa_case((UsageEvent.success == False, 1), else_=0)  # noqa: E712
+            ).label("total_failed_calls"),
+        )
+        .where(UsageEvent.created_at >= today_start)
+        .group_by(UsageEvent.service)
+    )
+    today_rows = (await session.execute(today_stmt)).all()
+
+    # 3. Merge historical + today by service
+    services_map: dict[str, dict] = {}
+
+    def _merge(row):
+        svc = row.service
+        d = services_map.setdefault(
+            svc,
+            {
+                "service": svc,
+                "total_cost_usd": 0.0,
+                "total_input_tokens": 0,
+                "total_output_tokens": 0,
+                "total_api_calls": 0,
+                "total_failed_calls": 0,
+            },
+        )
+        d["total_cost_usd"] += float(row.total_cost_usd or 0)
+        d["total_input_tokens"] += int(row.total_input_tokens or 0)
+        d["total_output_tokens"] += int(row.total_output_tokens or 0)
+        d["total_api_calls"] += int(row.total_api_calls or 0)
+        d["total_failed_calls"] += int(row.total_failed_calls or 0)
+
+    for row in historical_rows:
+        _merge(row)
+    for row in today_rows:
+        _merge(row)
+
+    # 4. Round costs and compute total
     services = []
     total_cost = 0.0
-    for row in rows:
-        cost = float(row.total_cost_usd or 0)
-        total_cost += cost
-        services.append(
-            {
-                "service": row.service,
-                "total_cost_usd": round(cost, 6),
-                "total_input_tokens": int(row.total_input_tokens or 0),
-                "total_output_tokens": int(row.total_output_tokens or 0),
-                "total_api_calls": int(row.total_api_calls or 0),
-                "total_failed_calls": int(row.total_failed_calls or 0),
-            }
-        )
+    for d in services_map.values():
+        d["total_cost_usd"] = round(d["total_cost_usd"], 6)
+        total_cost += d["total_cost_usd"]
+        services.append(d)
+
+    # 5. Append static AWS infrastructure cost estimate.
+    # Source: docs/aws_architecture.md and CLAUDE.md — dev env runs ~50 hrs/wk
+    # at ~$20/month total (ECS Fargate Spot + RDS + fck-nat + S3 + Redis ECS).
+    # When prod is provisioned, switch to ~$108/month.
+    # Replace with AWS Cost Explorer API integration in P5+.
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    if "prod" in environment:
+        infra_monthly = 108.0
+        infra_label = "AWS Infrastructure (prod, estimated)"
+    else:
+        infra_monthly = 20.0
+        infra_label = "AWS Infrastructure (dev, estimated)"
+    infra_cost = round((infra_monthly / 30.0) * days, 6)
+    services.append(
+        {
+            "service": infra_label,
+            "total_cost_usd": infra_cost,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_api_calls": 0,
+            "total_failed_calls": 0,
+            "estimated": True,
+        }
+    )
+    total_cost += infra_cost
 
     # Total bots and users
     bot_count = (await session.execute(select(func.count(Bot.id)))).scalar() or 0
@@ -354,6 +436,33 @@ async def admin_overview(
         "total_cost_usd": round(total_cost, 6),
         "services": services,
         "total_bots": bot_count,
+    }
+
+
+@router.post("/admin/aggregate-now")
+async def admin_aggregate_now(
+    _admin: User = Depends(require_admin),
+):
+    """Manually trigger daily cost aggregation for yesterday + today.
+
+    The cron job runs at 3 AM UTC daily and only processes "yesterday".
+    This endpoint lets the operator refresh the Costs tab on demand by:
+    1. Flushing the in-memory monitoring buffer to PostgreSQL
+    2. Aggregating yesterday's events into daily_cost_summary (idempotent)
+    3. Aggregating today's events into daily_cost_summary (partial day)
+
+    Returns counts so the caller can verify the aggregation worked.
+    """
+    flushed = await flush_buffer()
+    yesterday = date.today() - timedelta(days=1)
+    yesterday_upserted = await aggregate_daily_costs(yesterday)
+    today_upserted = await aggregate_daily_costs(date.today())
+    return {
+        "flushed_events": flushed,
+        "yesterday_date": str(yesterday),
+        "yesterday_upserted": yesterday_upserted,
+        "today_date": str(date.today()),
+        "today_upserted": today_upserted,
     }
 
 

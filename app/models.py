@@ -5,7 +5,7 @@ from typing import Optional, List, Dict, Any
 from datetime import date as date_type, datetime, timezone
 import enum
 from sqlmodel import JSON as SA_JSON
-from sqlalchemy import JSON, DateTime, UniqueConstraint, Index
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, UniqueConstraint, Index
 from app.time import utcnow
 
 
@@ -389,7 +389,14 @@ class Plan(SQLModel, table=True):
 
 
 class UsageEvent(SQLModel, table=True):
-    """Append-only log of every external API call with cost attribution."""
+    """Append-only log of every external API call with cost attribution.
+
+    bot_id is nullable: events recorded outside a WhatsApp request context
+    (Cadastro Mágico image extraction, alias regeneration, ad-hoc CLI tools)
+    are tracked as "system / untracked" instead of being silently dropped.
+    The FK uses ON DELETE SET NULL so deleting a bot preserves its cost
+    history (the events become orphaned but readable).
+    """
 
     __tablename__ = "usage_events"
     __table_args__ = (
@@ -398,7 +405,15 @@ class UsageEvent(SQLModel, table=True):
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    bot_id: int = Field(foreign_key="bot.id", index=True)
+    bot_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            Integer,
+            ForeignKey("bot.id", ondelete="SET NULL"),
+            nullable=True,
+            index=True,
+        ),
+    )
     bot: Optional["Bot"] = Relationship(back_populates="usage_events")
     service: str  # "openai" | "google_maps" | "aws_s3" | "whatsapp" | "mercado_pago" | "facebook"
     operation: str  # "get_ai_decision" | "geocode" | "s3_put" | "send_message" | ...
@@ -430,7 +445,12 @@ class UsageEvent(SQLModel, table=True):
 
 
 class DailyCostSummary(SQLModel, table=True):
-    """Materialized daily cost aggregates per bot per service."""
+    """Materialized daily cost aggregates per bot per service.
+
+    bot_id is nullable to mirror UsageEvent: events without a bot context
+    are aggregated under bot_id=NULL ("system / untracked"). FK uses
+    ON DELETE SET NULL so deleting a bot preserves the cost history.
+    """
 
     __tablename__ = "daily_cost_summary"
     __table_args__ = (
@@ -440,7 +460,15 @@ class DailyCostSummary(SQLModel, table=True):
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    bot_id: int = Field(foreign_key="bot.id", index=True)
+    bot_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            Integer,
+            ForeignKey("bot.id", ondelete="SET NULL"),
+            nullable=True,
+            index=True,
+        ),
+    )
     bot: Optional["Bot"] = Relationship(back_populates="daily_cost_summaries")
     date: date_type = Field(index=True)
     service: str

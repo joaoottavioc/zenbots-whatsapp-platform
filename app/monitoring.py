@@ -98,13 +98,21 @@ async def record_llm_usage(
     contact_id: int | None = None,
     success: bool = True,
 ) -> None:
-    """Record an LLM API call with token counts and cost."""
+    """Record an LLM API call with token counts and cost.
+
+    bot_id resolution order: explicit arg → ContextVar → None. Events with
+    bot_id=None are recorded as "system / untracked" rather than dropped —
+    they represent real money spent (Cadastro Mágico extraction, alias
+    regeneration, ad-hoc CLI tools) and the operator needs to see them.
+    """
     # Resolve bot_id / contact_id from context if not passed
     if bot_id is None:
         bot_id = current_bot_id.get(None)
     if not bot_id:
-        logger.debug("Skipping LLM usage event for %s — no bot_id", operation)
-        return
+        logger.debug(
+            "Recording LLM event without bot attribution: %s/%s", operation, model
+        )
+        # Fall through — bot_id stays None, which is now allowed by the schema.
     if contact_id is None:
         contact_id = current_contact_id.get(None)
 
@@ -143,12 +151,18 @@ async def record_api_usage(
     success: bool = True,
     contact_id: int | None = None,
 ) -> None:
-    """Record a non-LLM external API call."""
+    """Record a non-LLM external API call.
+
+    bot_id=None events are recorded as "system / untracked" rather than
+    dropped — see record_llm_usage docstring for rationale.
+    """
     if bot_id is None:
         bot_id = current_bot_id.get(None)
     if not bot_id:
-        logger.debug("Skipping usage event for %s/%s — no bot_id", service, operation)
-        return
+        logger.debug(
+            "Recording API event without bot attribution: %s/%s", service, operation
+        )
+        # Fall through — bot_id stays None, which is now allowed by the schema.
     if contact_id is None:
         contact_id = current_contact_id.get(None)
 
@@ -233,16 +247,22 @@ async def flush_buffer(session=None) -> int:
 
 
 async def _update_redis_counters(event: UsageEvent) -> None:
-    """Update hourly and daily counters in Redis DB 2."""
+    """Update hourly and daily counters in Redis DB 2.
+
+    Events without a bot_id (system/untracked) use the literal string
+    "system" as their bot key so the counters are still aggregated under
+    a stable bucket and the leaderboard sorted set gets a system entry.
+    """
     r = await _get_redis_monitor()
     hour_key = event.created_at.strftime("%Y%m%d%H")
+    bot_key = str(event.bot_id) if event.bot_id is not None else "system"
 
     pipe = r.pipeline()
 
     # Hourly counters
-    calls_key = f"monitor:hourly:{event.bot_id}:{event.service}:{hour_key}:calls"
-    cost_key = f"monitor:hourly:{event.bot_id}:{event.service}:{hour_key}:cost"
-    tokens_key = f"monitor:hourly:{event.bot_id}:{event.service}:{hour_key}:tokens"
+    calls_key = f"monitor:hourly:{bot_key}:{event.service}:{hour_key}:calls"
+    cost_key = f"monitor:hourly:{bot_key}:{event.service}:{hour_key}:cost"
+    tokens_key = f"monitor:hourly:{bot_key}:{event.service}:{hour_key}:tokens"
 
     pipe.incr(calls_key)
     pipe.incrbyfloat(cost_key, event.cost_usd)
@@ -256,12 +276,14 @@ async def _update_redis_counters(event: UsageEvent) -> None:
     # Daily cost sorted set (for leaderboard)
     date_str = event.created_at.strftime("%Y%m%d")
     daily_key = f"monitor:daily_cost:{date_str}"
-    pipe.zincrby(daily_key, event.cost_usd, str(event.bot_id))
+    pipe.zincrby(daily_key, event.cost_usd, bot_key)
     pipe.expire(daily_key, 8 * 86400)  # 8-day TTL
 
     await pipe.execute()
 
-    # Check for anomalies
+    # Anomaly check only meaningful for real bots — skip for system events
+    if event.bot_id is None:
+        return
     try:
         await _check_anomaly(event, r)
     except Exception as e:
@@ -502,10 +524,14 @@ async def aggregate_daily_costs(target_date=None) -> int:
     from app.database import async_session
 
     async with async_session() as session:
-        # 1. Aggregate usage_events for the target date
-        day_start = datetime.combine(target_date, datetime.min.time()).replace(
-            tzinfo=timezone.utc
-        )
+        # 1. Aggregate usage_events for the target date.
+        # The created_at column is TIMESTAMP WITHOUT TIME ZONE (declared
+        # without timezone=True), so we MUST pass naive datetimes here or
+        # asyncpg raises "can't subtract offset-naive and offset-aware".
+        # Records are inserted with timezone-aware utcnow(), and asyncpg
+        # silently strips the tz on insert, so the stored values are
+        # effectively UTC-naive. Use naive UTC for the comparison.
+        day_start = datetime.combine(target_date, datetime.min.time())
         day_end = day_start + timedelta(days=1)
 
         stmt = (
@@ -594,9 +620,10 @@ async def aggregate_daily_costs(target_date=None) -> int:
         except Exception as e:
             logger.warning("Failed to update Redis avg7d: %s", e)
 
-        # 3. Purge old events (older than 90 days) in batches
+        # 3. Purge old events (older than 90 days) in batches.
+        # Use naive datetime — see day_start comment above for the tz reasoning.
         try:
-            cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+            cutoff = datetime.utcnow() - timedelta(days=90)
             from sqlalchemy import delete
 
             deleted = await session.execute(

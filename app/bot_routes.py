@@ -29,6 +29,7 @@ from app.menu_extraction import (
 from app.openai_client import extract_products_from_image
 from app.data_extractor import extract_products_from_text
 from app.whatsapp import send_whatsapp_message
+from app.context import current_bot_id
 from app.encryption import encrypt_value, decrypt_value
 from app.webhook_security import verify_whatsapp_signature, FB_APP_SECRET
 
@@ -157,6 +158,9 @@ async def upload_catalog_from_text(
     db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
     if not db_bot or db_bot.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Acesso negado.")
+
+    # Set bot_id ContextVar so the LLM extraction call gets cost-attributed.
+    current_bot_id.set(bot_id)
 
     # 1. Extrai os produtos do texto usando o LLM (como antes)
     extracted_products = await data_extractor.extract_products_from_text(
@@ -435,6 +439,11 @@ async def upload_catalog_from_file_endpoint(
     db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
     if not db_bot or db_bot.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Acesso negado.")
+
+    # Set bot_id in the request-scoped ContextVar so any OpenAI / external
+    # API calls (Cadastro Mágico extraction, alias regen) get attributed
+    # to this bot in the monitoring/cost tracking system.
+    current_bot_id.set(bot_id)
 
     # 2. Leitura Segura do Arquivo com limite de tamanho
     try:
