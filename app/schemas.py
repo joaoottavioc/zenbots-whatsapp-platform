@@ -74,6 +74,11 @@ class BotCreate(BaseModel):
     phone_number_id: Optional[str] = Field(default=None, max_length=30)
     timezone: str = Field(default="America/Sao_Paulo")
 
+    # Store status & schedule (accepted at creation so the form can set them)
+    is_open: Optional[bool] = True
+    closing_message: Optional[str] = Field(default=None, max_length=500)
+    schedule: Optional[Dict[str, Any]] = None
+
     # NOVOS CAMPOS (Opcionais na criação, o usuário configura depois)
     max_delivery_radius: Optional[float] = 10.0
     cep: Optional[str] = Field(default=None, max_length=10)
