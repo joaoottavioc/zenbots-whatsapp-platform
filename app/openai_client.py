@@ -151,6 +151,55 @@ async def get_extraction_response(
         return "[]"
 
 
+async def get_forced_tool_call(
+    messages: List[Dict], tool: Dict, model: str = "gpt-4o-mini"
+) -> str:
+    """Call the LLM forcing a single tool; return the tool_call arguments as
+    a JSON string. The OpenAI API validates tool_call args against the tool
+    schema, making this path far more reliable than `response_format=json_object`
+    when you need a specific shape. Returns an empty JSON object ("{}") on
+    failure so callers can parse uniformly.
+    """
+    tool_name = tool["function"]["name"]
+
+    def sync_call():
+        return client_openai_api.chat.completions.create(
+            model=model,
+            messages=messages,
+            tools=[tool],
+            tool_choice={"type": "function", "function": {"name": tool_name}},
+            temperature=0.0,
+        )
+
+    start = time.perf_counter_ns()
+    try:
+        response = await asyncio.to_thread(sync_call)
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        await record_llm_usage(
+            bot_id=None,
+            operation=f"tool:{tool_name}",
+            model=model,
+            usage=response.usage,
+            duration_ms=elapsed_ms,
+        )
+        tool_calls = response.choices[0].message.tool_calls
+        if tool_calls:
+            return tool_calls[0].function.arguments
+        return "{}"
+    except Exception as e:
+        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
+        await record_llm_usage(
+            bot_id=None,
+            operation=f"tool:{tool_name}",
+            model=model,
+            usage=None,
+            duration_ms=elapsed_ms,
+            success=False,
+        )
+        logger.error("Forced tool call (%s) failed: %s", tool_name, e)
+        return "{}"
+
+
 async def get_chat_response_gpt(messages: List[Dict]) -> str:
     """
     Usa um modelo rápido e de alta fiabilidade (gpt-4o-mini) da API da OpenAI
@@ -321,113 +370,111 @@ async def extract_potential_items(user_query: str) -> List[str]:
         return []
 
 
-async def classify_user_intent(user_query: str, cart_items: List[Dict]) -> str:
-    """
-    Inclui CONFIRM e NEGATE para confirmações/negações curtas.
-    """
-    possible_intents = [
-        "ADD_ITEMS",
-        "REQUEST_SUGGESTION",
-        "FINISH_ORDER",
-        "GREETING_OR_QUESTION",
-        "SHOW_CART",
-        "CONFIRM",
-        "NEGATE",
-    ]
-    if cart_items:
-        possible_intents.extend(["REMOVE_ITEMS", "MODIFY_QUANTITY", "CLEAR_CART"])
-
-    prompt = f"""
-    Classifique a intenção em UMA destas: {", ".join(possible_intents)}.
-
-    Regras:
-    - "CONFIRM": mensagem curta, equivalente a "sim", "ok", "claro", "perfeito", "fechou", "uhum", "aham", "👍".
-      Use APENAS quando a mensagem for essencialmente só isso.
-    - "NEGATE": mensagem curta equivalente a "não", "nope", "nah". Só isso.
-    - "FINISH_ORDER": "só isso", "pode fechar".
-    - "REQUEST_SUGGESTION": pede sugestão.
-    - "ADD_ITEMS": pede itens.
-    - "REMOVE_ITEMS"/"MODIFY_QUANTITY"/"CLEAR_CART": ajustes do carrinho.
-    - "SHOW_CART": quer ver o carrinho.
-    - "GREETING_OR_QUESTION": saudações/perguntas gerais do restaurante.
-
-    Sua resposta DEVE ser JSON {{ "intent": "<UMA_INTENCAO>" }}.
-
-    Exemplos:
-    "sim" -> {{"intent":"CONFIRM"}}
-    "ok" -> {{"intent":"CONFIRM"}}
-    "não" -> {{"intent":"NEGATE"}}
-    "sim, quero mais" -> {{"intent":"ADD_ITEMS"}}
-    "pode fechar a conta" -> {{"intent":"FINISH_ORDER"}}
-    "tem pratos com carne?" -> {{"intent":"REQUEST_SUGGESTION"}}
-
-    Frase: "{user_query}"
-    Resultado:
-    """
-
-    def sync_call():
-        return client_openai_api.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.0,
-            response_format={"type": "json_object"},
-        )
-
-    start = time.perf_counter_ns()
-    try:
-        response = await asyncio.to_thread(sync_call)
-        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-        await record_llm_usage(
-            bot_id=None,
-            operation="classify_user_intent",
-            model="gpt-4o-mini",
-            usage=response.usage,
-            duration_ms=elapsed_ms,
-        )
-        data = json.loads(response.choices[0].message.content)
-        intent = data.get("intent", "GREETING_OR_QUESTION")
-        return intent if intent in possible_intents else "GREETING_OR_QUESTION"
-    except Exception as e:
-        elapsed_ms = (time.perf_counter_ns() - start) // 1_000_000
-        await record_llm_usage(
-            bot_id=None,
-            operation="classify_user_intent",
-            model="gpt-4o-mini",
-            usage=None,
-            duration_ms=elapsed_ms,
-            success=False,
-        )
-        logger.error("Intent classification failed: %s", e)
-        return "GREETING_OR_QUESTION"
-
-
 # Função auxiliar para codificar imagem
 def encode_image(image_file):
     return base64.b64encode(image_file).decode("utf-8")
 
 
 async def extract_products_from_image(
-    image_bytes: bytes, media_type: str
+    image_bytes: bytes,
+    media_type: str,
+    page_text: str | None = None,
+    retry_hint: bool = False,
+    expected_item_count: int | None = None,
 ) -> list[dict]:
-    """
-    Envia uma imagem (cardápio) para o GPT-4o-mini e extrai os produtos estruturados.
-    Uses gpt-4o-mini for speed (~5-15s vs 30-60s with gpt-4o).
+    """Extract products from one menu page image via gpt-4o-mini vision.
+
+    Args:
+        image_bytes: the page rendered as image bytes.
+        media_type: MIME type of the image ("image/jpeg", "image/png").
+        page_text: optional fitz-extracted text of the same page. Even when
+            multi-column layout makes the raw text jumbled, it carries
+            correct prices and product names the vision model can
+            cross-reference.
+        retry_hint: when True, the prompt adds a "you missed items last time"
+            framing. Used by the menu_extraction retry path for pages that
+            returned 0 products on the first pass.
+        expected_item_count: number of price patterns fitz found on this page.
+            Seeds the prompt so the model has a concrete target and knows
+            NOT to return an empty list when items demonstrably exist.
     """
     base64_image = encode_image(image_bytes)
 
-    prompt = (
-        "Você é um assistente especializado em digitalizar cardápios. "
-        "Analise esta imagem. Extraia TODOS os itens que possuem preço, "
-        "incluindo adicionais, complementos, extras, acompanhamentos, combos e promoções. "
-        "Para cada item, identifique: nome, descrição, preço, CATEGORIA e KEYWORDS. "
-        "Regras de Categoria: agrupe itens similares (ex: Coca, Água, Suco -> 'Bebidas'). "
-        "Adicionais/extras devem ter categoria 'Adicionais'. "
-        "Use APENAS categorias que existem no cardápio. NÃO invente categorias. "
-        "Use nomes curtos e em Português. "
-        "Ex: 'Entradas', 'Pratos Principais', 'Sobremesas', 'Lanches', 'Porções', 'Adicionais'. "
-        "Keywords: inclua sinônimos, abreviações, erros de digitação comuns e variações "
-        "(ex: 'burguer' para 'burger', 'refri' para refrigerante, nome sem acentos, singular/plural)."
-    )
+    # Chain-of-thought: force the model to enumerate names, then prices,
+    # then pair them. Eliminates mis-assignment on dense multi-column
+    # layouts where description-to-item distance is unstable.
+    prompt_parts = [
+        "Você é um assistente especializado em digitalizar cardápios.",
+        "",
+        "PROCESSO (siga nesta ordem, internamente):",
+        "1. Liste TODOS os nomes de produtos visíveis — incluindo sidebars, "
+        "rodapés, callouts, textos pequenos, tabelas e imagens com legenda. "
+        "Não pule nenhum item.",
+        "2. Liste TODOS os preços visíveis na página.",
+        "3. Pareie cada produto com seu preço correspondente usando "
+        "proximidade visual e contexto de seção.",
+        "4. Chame save_extracted_products UMA VEZ com todos os pareamentos.",
+        "",
+        "REGRAS DE ITEM:",
+        "- Extraia TODOS os itens com preço: adicionais, complementos, "
+        "extras, acompanhamentos, combos e promoções.",
+        "- Para cada item: nome, descrição (se visível), preço (número), "
+        "categoria (curta, Título em Português), keywords "
+        "(sinônimos, abreviações, nome sem acentos, singular/plural).",
+        "",
+        "REGRAS DE CATEGORIA:",
+        "- Use APENAS categorias que existem no cardápio. NÃO invente.",
+        "- Exemplos: 'Entradas', 'Cortes', 'Saladas', 'Acompanhamentos', "
+        "'Bebidas', 'Sobremesas'.",
+        "- Adicionais/extras: categoria 'Adicionais'.",
+        "- Não mescle Bebidas, Sobremesas e Adicionais entre si.",
+    ]
+
+    if retry_hint:
+        if expected_item_count and expected_item_count > 0:
+            # We KNOW items exist — fitz counted the prices. Drop the
+            # "maybe nothing here" escape hatch and be direct.
+            retry_msg = (
+                f"ATENÇÃO: a primeira extração retornou 0 produtos, mas foram "
+                f"detectados {expected_item_count} padrões de preço no texto "
+                "desta página. Os itens EXISTEM. Olhe a página inteira "
+                "(incluindo grids, sidebars, callouts, rodapés e texto "
+                "pequeno) e extraia TODOS os itens com preço. Não retorne "
+                "lista vazia."
+            )
+        else:
+            retry_msg = (
+                "ATENÇÃO: a primeira extração desta página retornou 0 "
+                "produtos. Olhe a página inteira com mais atenção — itens "
+                "podem estar em grids, sidebars, callouts, rodapés ou texto "
+                "pequeno. Se realmente não há produtos com preço, retorne "
+                "lista vazia."
+            )
+        prompt_parts.insert(0, retry_msg)
+    elif expected_item_count and expected_item_count > 0:
+        # Soft hint on first-pass: gives the model a target count without
+        # being alarmist.
+        prompt_parts.append("")
+        prompt_parts.append(
+            f"DICA: o texto desta página contém {expected_item_count} "
+            "padrões de preço. Espera-se aproximadamente esse número de itens."
+        )
+
+    if page_text:
+        # Truncate aggressively — we just need prices and names. Even jumbled
+        # text helps the model anchor its OCR on correct spellings/prices.
+        snippet = page_text[:3000]
+        prompt_parts.append("")
+        prompt_parts.append(
+            "TEXTO DESTA PÁGINA (extraído automaticamente — pode estar "
+            "embaralhado em layouts multi-coluna; use como referência de "
+            "ortografia e preços, mas o layout visual é autoritativo):"
+        )
+        prompt_parts.append("---")
+        prompt_parts.append(snippet)
+        prompt_parts.append("---")
+
+    prompt = "\n".join(prompt_parts)
 
     def sync_call():
         return client_openai_api.chat.completions.create(
