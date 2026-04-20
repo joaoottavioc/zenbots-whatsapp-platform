@@ -43,8 +43,10 @@ docs/
 tests/simulation/corpus/extractions/
 tests/simulation/corpus/rejected/
 tests/simulation/corpus/images/
+tests/simulation/corpus/pdfs/
 tests/simulation/corpus/.selected_for_validation.json
 tests/simulation/corpus/baseline_pool.json
+tests/simulation/corpus/prospect_pool.json
 
 # Scraper/runner scratch
 tmp_chrome_profile/
