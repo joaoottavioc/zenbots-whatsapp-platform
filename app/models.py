@@ -364,21 +364,40 @@ class Subscription(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=utcnow)
     plan_type: str = Field(default="pro")
 
+    plan_id: Optional[int] = Field(default=None, foreign_key="plan.id", index=True)
+    is_founder: bool = Field(default=False)
+
 
 class Plan(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
-    # A "chave" para o frontend achar (ex: 'basic', 'pro', 'enterprise')
+    # A "chave" para o frontend achar (ex: 'free', 'pro_monthly', 'pro_annual', 'founder')
     key: str = Field(unique=True, index=True)
 
     title: str  # Ex: "ZenBotZ Pro"
     description: str
-    price: float  # Ex: 199.00
+    price: float  # Ex: 129.90
 
     # Configurações opcionais
     currency: str = Field(default="BRL")
     frequency: int = Field(default=1)  # 1 mês
     allows_bot_usage: bool = Field(default=True)
+
+    # Pricing tier fields (2026-04 Free/Pro rollout)
+    tier: str = Field(
+        default="pro", index=True
+    )  # free | pro | plus | founder | enterprise
+    # None on Pro/Founder = unlimited (subject to fair_use_orders_cap)
+    # Set on Free = hard soft-cap that triggers overage billing
+    monthly_order_cap: Optional[int] = Field(default=None)
+    # Advisory soft cap for Pro/Founder — triggers Enterprise outreach, never blocks bot
+    fair_use_orders_cap: Optional[int] = Field(default=None)
+    # R$ per order above monthly_order_cap (Free tier only)
+    overage_per_order_brl: Optional[float] = Field(default=None)
+    billing_cycle_months: int = Field(default=1)  # 1 = monthly, 12 = annual
+    is_active: bool = Field(default=True)
+    max_bots: int = Field(default=1)
+    allows_template_messages: bool = Field(default=False)
 
     created_at: datetime = Field(default_factory=utcnow)
 
@@ -484,3 +503,67 @@ class DailyCostSummary(SQLModel, table=True):
     # Anomaly detection helpers
     avg_cost_per_call: float = Field(default=0.0)
     max_cost_single_call: float = Field(default=0.0)
+
+
+class BotMonthlyUsage(SQLModel, table=True):
+    """Per-bot, per-calendar-month order counter driving pricing enforcement.
+
+    `year_month` is "YYYY-MM" in BRT (UTC-3) — Brazilian customers expect
+    month rollover at midnight BRT, not UTC. Rows are created lazily via
+    UPSERT on the first counted order of each month.
+
+    bot_id uses ON DELETE SET NULL so billing history survives bot deletion
+    (mirrors usage_events and daily_cost_summary).
+
+    The hot-path increment only bumps `completed_orders` + `updated_at`.
+    Overage amounts (`overage_*`) and fair-use flags are populated lazily
+    by the billing cron / outreach job — reading the plan cap at hot-path
+    time would add a join we don't need.
+
+    See tech_debt/backlog_pricing.md §1.2.
+    """
+
+    __tablename__ = "bot_monthly_usage"
+    __table_args__ = (
+        UniqueConstraint("bot_id", "year_month", name="uq_bot_monthly_usage_bot_month"),
+        Index("ix_bot_monthly_usage_year_month", "year_month"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    bot_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            Integer,
+            ForeignKey("bot.id", ondelete="SET NULL"),
+            nullable=True,
+            index=True,
+        ),
+    )
+    year_month: str  # "YYYY-MM" in BRT calendar
+
+    completed_orders: int = Field(default=0)
+
+    # Free-tier overage (populated by the monthly billing cron)
+    overage_orders: int = Field(default=0)
+    overage_amount_brl: float = Field(default=0.0)
+    overage_billed_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+    overage_billed_amount: Optional[float] = Field(default=None)
+    overage_charge_id: Optional[str] = Field(default=None)
+
+    # Pro/Founder fair-use (populated by the outreach job)
+    fair_use_warning_sent_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+    fair_use_exceeded_sent_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+    # null | "notified" | "in_conversation" | "upgraded" | "declined"
+    enterprise_outreach_status: Optional[str] = Field(default=None)
+
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)

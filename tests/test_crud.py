@@ -674,14 +674,14 @@ class TestUpdateOrderStatusForUpdate:
             session, order_id=1, new_status=OrderStatus.PAID
         )
 
-        session.execute.assert_awaited_once()
-        compiled = str(
-            session.execute.call_args[0][0].compile(
-                compile_kwargs={"literal_binds": True}
-            )
-        )
+        # A PENDING -> PAID transition also fires the monthly-order counter
+        # UPSERT (see increment_monthly_orders), so there are 2 execute calls.
+        # The SELECT ... FOR UPDATE must be the first one.
+        assert session.execute.await_count >= 1
+        first_stmt = session.execute.call_args_list[0][0][0]
+        compiled = str(first_stmt.compile(compile_kwargs={"literal_binds": True}))
         assert "FOR UPDATE" in compiled.upper(), (
-            f"Query should include FOR UPDATE but got: {compiled}"
+            f"First query should include FOR UPDATE but got: {compiled}"
         )
 
 

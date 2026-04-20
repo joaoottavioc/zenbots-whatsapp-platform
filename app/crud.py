@@ -7,8 +7,8 @@ from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any
 from datetime import timedelta
 from app.utils import normalize_phone, mask_phone
-from app.time import utcnow
-from sqlalchemy import func, desc
+from app.time import utcnow, current_brt_year_month
+from sqlalchemy import func, desc, text
 from sqlalchemy.exc import IntegrityError
 from app.models import (
     Bot,
@@ -1163,6 +1163,57 @@ async def delete_order(session: AsyncSession, order_id: int) -> bool:
     return True
 
 
+# Status set that counts as a "completed order" for pricing / overage billing.
+# An order is counted once on its first transition into any of these; further
+# transitions between them (paid -> preparing -> ready -> completed) are NOT
+# double-counted. See tech_debt/backlog_pricing.md §1.2.
+_BILLABLE_ORDER_STATUSES: frozenset[OrderStatus] = frozenset(
+    {
+        OrderStatus.PAID,
+        OrderStatus.PREPARING,
+        OrderStatus.READY,
+        OrderStatus.COMPLETED,
+    }
+)
+
+
+async def increment_monthly_orders(
+    session: AsyncSession,
+    bot_id: int,
+    year_month: Optional[str] = None,
+) -> None:
+    """UPSERT the per-bot per-month order counter.
+
+    Participates in the caller's transaction — does not commit. Uses
+    PostgreSQL ON CONFLICT so the first call of a month creates the row
+    and subsequent calls atomically increment `completed_orders`.
+
+    Only `completed_orders` and `updated_at` are touched; overage amounts
+    and fair-use flags are populated later by the billing cron and the
+    outreach job (they need the plan cap, which we intentionally don't
+    join in the hot path).
+    """
+    if year_month is None:
+        year_month = current_brt_year_month()
+
+    await session.execute(
+        text(
+            """
+            INSERT INTO bot_monthly_usage
+                (bot_id, year_month, completed_orders, created_at, updated_at)
+            VALUES
+                (:bot_id, :year_month, 1,
+                 (NOW() AT TIME ZONE 'UTC'),
+                 (NOW() AT TIME ZONE 'UTC'))
+            ON CONFLICT ON CONSTRAINT uq_bot_monthly_usage_bot_month DO UPDATE
+            SET completed_orders = bot_monthly_usage.completed_orders + 1,
+                updated_at = (NOW() AT TIME ZONE 'UTC')
+            """
+        ),
+        {"bot_id": bot_id, "year_month": year_month},
+    )
+
+
 async def update_order_status_by_id(
     session: AsyncSession,
     order_id: int,
@@ -1208,11 +1259,23 @@ async def update_order_status_by_id(
         )
         return None
 
+    # Detect the first transition into a billable state so we count the
+    # order exactly once, regardless of how many downstream status changes
+    # it goes through.
+    was_billable = order.status in _BILLABLE_ORDER_STATUSES
+    will_be_billable = new_status in _BILLABLE_ORDER_STATUSES
+    should_count = will_be_billable and not was_billable
+    bot_id_for_counter = order.bot_id if should_count else None
+
     order.status = new_status
     if psp_charge_id:
         order.psp_charge_id = psp_charge_id
 
     session.add(order)
+
+    if bot_id_for_counter is not None:
+        await increment_monthly_orders(session, bot_id_for_counter)
+
     await session.commit()
     await session.refresh(
         order, attribute_names=["bot", "items"]
