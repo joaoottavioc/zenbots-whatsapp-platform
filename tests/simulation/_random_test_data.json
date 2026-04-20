@@ -1,282 +1,959 @@
 {
   "rand0": {
-    "bot_id": 1392,
-    "phone_number_id": "rand-test-0-1775593404",
-    "name": "Menu em Pizza para você - Pontal do Paraná restaur",
-    "category": "pizzaria",
+    "bot_id": 2233,
+    "phone_number_id": "rand-test-0-1776694811",
+    "name": "O Padeiro Padaria & Cafeteria",
+    "category": "padaria",
     "scenarios": {
-      "add_single_msg": "me faz 1 pizza frango cheddar",
+      "add_single_msg": "quero 1 café expresso grande caprichada",
       "add_single_expected": [
         [
-          "Pizza Frango Cheddar",
+          "Café Expresso Grande",
           1
         ]
       ],
-      "add_multi_msg": "quero pedir 2 pizza frango crocante e me faz um pizza milho",
+      "add_multi_msg": "tu manda 2 suco de abacaxi e to querendo um chocolate quente médio",
       "add_multi_expected": [
         [
-          "Pizza Frango Crocante",
+          "Suco de Abacaxi",
           2
         ],
         [
-          "Pizza Milho",
+          "Chocolate Quente Médio",
           1
         ]
       ],
-      "remove_add_msg": "solta 2 bacon",
+      "remove_add_msg": "me arruma 2 pão com linguiça",
       "remove_add_expected": [
-        "Bacon",
+        "Pão com Linguiça",
         2
       ],
-      "remove_msg": "tira o bacon",
-      "suggestion_msg": "o que é bom aí?",
-      "checkout_product_msg": "coloca um chocolate branco",
+      "remove_msg": "pode tirar o pão com linguiça",
+      "suggestion_msg": "não sei o que pedir",
+      "checkout_product_msg": "vou de x-burger",
       "checkout_product_expected": [
-        "Chocolate Branco",
+        "X-Burger",
         1
       ],
-      "abbreviation_product": "Batata Palha",
-      "abbreviation_msg": "quero pedir 1 batata",
-      "double_add_product": "Pizza Frango Catupiry",
-      "double_add_msg_1": "e mais 1 pizza frango catupiry",
-      "double_add_msg_2": "quero um pizza frango catupiry",
-      "question_product": "Pizza Quatro Queijos",
-      "question_msg": "qual o tamanho do pizza quatro queijos?",
-      "add_remove_product": "Pizza Frango Cheddar",
-      "add_remove_add_msg": "manda um pizza frango cheddar",
-      "add_remove_remove_msg": "pode tirar o pizza frango cheddar",
-      "greeting_msg": "oi",
-      "continuation_first_msg": "coloca 1 pizza frango cheddar",
-      "continuation_first_product": "Pizza Frango Cheddar",
-      "continuation_followup_msg": "e uma pizza milho",
-      "continuation_followup_product": "Pizza Milho",
-      "unavailable_msg": "manda um duas amores ae e quero 1 batata palha",
-      "unavailable_available": "Batata Palha",
-      "unavailable_name": "Duas Amores"
+      "abbreviation_product": "Açaí na Tigela - 500 ml",
+      "abbreviation_msg": "joga 1 açaí na tigela - no pedido",
+      "double_add_product": "Café Coado Médio",
+      "double_add_msg_1": "me vê um café coado médio",
+      "double_add_msg_2": "1 café coado médio por favor",
+      "question_product": "Sanduíche Tropical",
+      "question_msg": "o sanduíche tropical vem com o quê?",
+      "add_remove_product": "Café Expresso Grande",
+      "add_remove_add_msg": "manda 1 café expresso grande",
+      "add_remove_remove_msg": "pode tirar o café expresso grande",
+      "greeting_msg": "voltei",
+      "continuation_first_msg": "pode mandar um café expresso grande",
+      "continuation_first_product": "Café Expresso Grande",
+      "continuation_followup_msg": "e uma chocolate quente médio",
+      "continuation_followup_product": "Chocolate Quente Médio",
+      "trap_question_msg": "quanto custa o sanduíche tropical?",
+      "trap_question_product": "Sanduíche Tropical",
+      "trap_unrelated_add_msg": "vou querer um chocolate quente médio",
+      "trap_unrelated_add_product": "Chocolate Quente Médio",
+      "subset_remove_msg": "deixa o chocolate quente médio pra la",
+      "subset_remove_target_product": "Chocolate Quente Médio",
+      "subset_remove_keeper": [
+        "Suco de Abacaxi",
+        2
+      ],
+      "multi_remove_setup_msg": "quero um suco de abacaxi, um chocolate quente médio e um pão com linguiça",
+      "multi_remove_msg": "tira o suco de abacaxi e o pão com linguiça",
+      "multi_remove_targets": [
+        "Suco de Abacaxi",
+        "Pão com Linguiça"
+      ],
+      "multi_remove_keeper": "Chocolate Quente Médio",
+      "qty_reduce_setup_msg": "quero 3 suco de abacaxi e 2 chocolate quente médio",
+      "qty_reduce_msg": "deixa só 1 suco de abacaxi",
+      "qty_reduce_expected": [
+        [
+          "Suco de Abacaxi",
+          1
+        ],
+        [
+          "Chocolate Quente Médio",
+          2
+        ]
+      ],
+      "digit_in_name_product": null,
+      "digit_in_name_msg": null,
+      "unavailable_msg": "me vê 1 açaí na tigela e me ve 1 pão com mortadela ceratti ai",
+      "unavailable_available": "Pão com Mortadela Ceratti",
+      "unavailable_name": "Açaí na Tigela"
     }
   },
   "rand1": {
-    "bot_id": 1393,
-    "phone_number_id": "rand-test-1-1775593409",
-    "name": "Para Comprar",
-    "category": "sushi",
+    "bot_id": 2234,
+    "phone_number_id": "rand-test-1-1776694817",
+    "name": "Cafeteria Sujinho",
+    "category": "cafeteria",
     "scenarios": {
-      "add_single_msg": "1 atum",
+      "add_single_msg": "um natural de peito de peru e queijo prato com cream cheese",
       "add_single_expected": [
         [
-          "Atum",
+          "Natural de Peito de Peru e Queijo Prato com Cream Cheese",
           1
         ]
       ],
-      "add_multi_msg": "manda 2 temaki pfv e me faz um hot roll ai",
+      "add_multi_msg": "me arruma 2 tapioca tradicional e quero pedir um croissant com geleia",
       "add_multi_expected": [
         [
-          "Temaki",
+          "Tapioca Tradicional",
           2
         ],
         [
-          "Hot Roll",
+          "Croissant com Geleia",
           1
         ]
       ],
-      "remove_add_msg": "solta 2 sunomono",
+      "remove_add_msg": "quero 2 café da manhã pit",
       "remove_add_expected": [
-        "Sunomono",
+        "Café da Manhã Pit",
         2
       ],
-      "remove_msg": "ah, esquece o sunomono",
-      "suggestion_msg": "dicas?",
-      "checkout_product_msg": "coloca um salmão",
+      "remove_msg": "remove o café da manhã pit",
+      "suggestion_msg": "qual o carro chefe?",
+      "checkout_product_msg": "manda 1 pão com nutella pfv",
       "checkout_product_expected": [
-        "Salmão",
+        "Pão com Nutella",
         1
       ],
-      "abbreviation_product": "Hot Roll",
-      "abbreviation_msg": "quero um roll caprichada",
-      "double_add_product": "Tempurá",
-      "double_add_msg_1": "quero um tempurá",
-      "double_add_msg_2": "me vê 1 tempurá",
-      "question_product": "Kappa Maki",
-      "question_msg": "qt ta o kappa maki",
-      "add_remove_product": "Atum",
-      "add_remove_add_msg": "bota 1 atum pra mim",
-      "add_remove_remove_msg": "tira o atum",
-      "greeting_msg": "oi, tudo bem?",
-      "continuation_first_msg": "me vê 1 atum",
-      "continuation_first_product": "Atum",
-      "continuation_followup_msg": "e uma hot roll",
-      "continuation_followup_product": "Hot Roll",
-      "unavailable_msg": "me vê um harumaki e manda um niguiri pfv",
-      "unavailable_available": "Niguiri",
-      "unavailable_name": "Harumaki"
+      "abbreviation_product": "Pão Baguette",
+      "abbreviation_msg": "to querendo um baguette",
+      "double_add_product": "Natural Pão de Queijo Desfiado com Cream Cheese",
+      "double_add_msg_1": "1 natural pão de queijo desfiado com cream cheese",
+      "double_add_msg_2": "1 natural pão de queijo desfiado com cream cheese",
+      "question_product": "Ovos com Presunto",
+      "question_msg": "manda o preço do ovos com presunto ae",
+      "add_remove_product": "Natural de Peito de Peru e Queijo Prato com Cream Cheese",
+      "add_remove_add_msg": "quero 1 natural de peito de peru e queijo prato com cream cheese",
+      "add_remove_remove_msg": "pode tirar o natural de peito de peru e queijo prato com cream cheese",
+      "greeting_msg": "oi",
+      "continuation_first_msg": "e mais um natural de peito de peru e queijo prato com cream cheese",
+      "continuation_first_product": "Natural de Peito de Peru e Queijo Prato com Cream Cheese",
+      "continuation_followup_msg": "e uma croissant com geleia",
+      "continuation_followup_product": "Croissant com Geleia",
+      "trap_question_msg": "quanto custa o ovos com presunto?",
+      "trap_question_product": "Ovos com Presunto",
+      "trap_unrelated_add_msg": "vou querer um croissant com geleia",
+      "trap_unrelated_add_product": "Croissant com Geleia",
+      "subset_remove_msg": "manda sem o croissant com geleia",
+      "subset_remove_target_product": "Croissant com Geleia",
+      "subset_remove_keeper": [
+        "Tapioca Tradicional",
+        2
+      ],
+      "multi_remove_setup_msg": "quero um tapioca tradicional, um croissant com geleia e um café da manhã pit",
+      "multi_remove_msg": "tira o tapioca tradicional e o café da manhã pit",
+      "multi_remove_targets": [
+        "Tapioca Tradicional",
+        "Café da Manhã Pit"
+      ],
+      "multi_remove_keeper": "Croissant com Geleia",
+      "qty_reduce_setup_msg": "quero 3 tapioca tradicional e 2 croissant com geleia",
+      "qty_reduce_msg": "deixa só 1 tapioca tradicional",
+      "qty_reduce_expected": [
+        [
+          "Tapioca Tradicional",
+          1
+        ],
+        [
+          "Croissant com Geleia",
+          2
+        ]
+      ],
+      "digit_in_name_product": null,
+      "digit_in_name_msg": null,
+      "unavailable_msg": "manda um pão ciabatta ae e entao manda um pão de queijo com presunto e queijo",
+      "unavailable_available": "Pão de Queijo com Presunto e Queijo",
+      "unavailable_name": "Pão Ciabatta"
     }
   },
   "rand2": {
-    "bot_id": 1394,
-    "phone_number_id": "rand-test-2-1775593410",
-    "name": "Cardápio de Espetos para Restaurante Rústico Marro",
-    "category": "padaria",
+    "bot_id": 2235,
+    "phone_number_id": "rand-test-2-1776694820",
+    "name": "Design Cardápio Açaí / Açaiteria :: Behance",
+    "category": "açaiteria",
     "scenarios": {
-      "add_single_msg": "manda 1 carne ae",
+      "add_single_msg": "pode mandar um tacaí coloré",
       "add_single_expected": [
         [
-          "Carne",
+          "Tacaí Coloré",
           1
         ]
       ],
-      "add_multi_msg": "ah e 2 apimentada e joga um suco lata no pedido",
+      "add_multi_msg": "manda 2 tacaí caramelo ae e tacaí floresta negra",
       "add_multi_expected": [
         [
-          "Apimentada",
+          "Tacaí Caramelo",
           2
         ],
         [
-          "Suco Lata",
+          "Tacaí Floresta Negra",
           1
         ]
       ],
-      "remove_add_msg": "to querendo 2 coraçãozinho",
+      "remove_add_msg": "2 tacaí fit por favor",
       "remove_add_expected": [
-        "Coraçãozinho",
+        "Tacaí Fit",
         2
       ],
-      "remove_msg": "tira o coraçãozinho",
-      "suggestion_msg": "sugestão?",
-      "checkout_product_msg": "pode mandar 1 linguiça",
+      "remove_msg": "muda ae, sem tacaí fit",
+      "suggestion_msg": "o que vocês recomendam?",
+      "checkout_product_msg": "ah e um tacaí tortuguita",
       "checkout_product_expected": [
-        "Linguiça",
+        "Tacaí Tortuguita",
         1
       ],
-      "abbreviation_product": "Jantinha Acomp",
-      "abbreviation_msg": "me vê 1 jantinha",
-      "double_add_product": "Queijo",
-      "double_add_msg_1": "coloca um queijo",
-      "double_add_msg_2": "bota um queijo pra mim",
-      "question_product": "Caipirinha",
-      "question_msg": "preço do caipirinha",
-      "add_remove_product": "Carne",
-      "add_remove_add_msg": "carne",
-      "add_remove_remove_msg": "tira o carne",
-      "greeting_msg": "oi boa noite",
-      "continuation_first_msg": "bota um carne pra mim",
-      "continuation_first_product": "Carne",
-      "continuation_followup_msg": "e uma suco lata",
-      "continuation_followup_product": "Suco Lata",
-      "unavailable_msg": "coloca um vinagrete e panceta",
-      "unavailable_available": "Panceta",
-      "unavailable_name": "Vinagrete"
+      "abbreviation_product": null,
+      "abbreviation_msg": null,
+      "double_add_product": "Tacaí Kids",
+      "double_add_msg_1": "vou querer 1 tacaí kids",
+      "double_add_msg_2": "me ve um tacaí kids ai",
+      "question_product": "Tacaí Power",
+      "question_msg": "ainda tem tacaí power ae",
+      "add_remove_product": "Tacaí Coloré",
+      "add_remove_add_msg": "me vê 1 tacaí coloré",
+      "add_remove_remove_msg": "eu nao quero tacaí coloré",
+      "greeting_msg": "oi",
+      "continuation_first_msg": "tacaí coloré",
+      "continuation_first_product": "Tacaí Coloré",
+      "continuation_followup_msg": "e uma tacaí floresta negra",
+      "continuation_followup_product": "Tacaí Floresta Negra",
+      "trap_question_msg": "preço do tacaí power",
+      "trap_question_product": "Tacaí Power",
+      "trap_unrelated_add_msg": "vou querer um tacaí floresta negra",
+      "trap_unrelated_add_product": "Tacaí Floresta Negra",
+      "subset_remove_msg": "ah, esquece o tacaí floresta negra",
+      "subset_remove_target_product": "Tacaí Floresta Negra",
+      "subset_remove_keeper": [
+        "Tacaí Caramelo",
+        2
+      ],
+      "multi_remove_setup_msg": "quero um tacaí caramelo, um tacaí floresta negra e um tacaí fit",
+      "multi_remove_msg": "tira o tacaí caramelo e o tacaí fit",
+      "multi_remove_targets": [
+        "Tacaí Caramelo",
+        "Tacaí Fit"
+      ],
+      "multi_remove_keeper": "Tacaí Floresta Negra",
+      "qty_reduce_setup_msg": "quero 3 tacaí caramelo e 2 tacaí floresta negra",
+      "qty_reduce_msg": "deixa só 1 tacaí caramelo",
+      "qty_reduce_expected": [
+        [
+          "Tacaí Caramelo",
+          1
+        ],
+        [
+          "Tacaí Floresta Negra",
+          2
+        ]
+      ],
+      "digit_in_name_product": null,
+      "digit_in_name_msg": null,
+      "unavailable_msg": "bota um tacaí nutella bem feito e um tacaí sulfair",
+      "unavailable_available": "Tacaí Sulfair",
+      "unavailable_name": "Tacaí Nutella"
     }
   },
   "rand3": {
-    "bot_id": 1395,
-    "phone_number_id": "rand-test-3-1775593412",
-    "name": "Menu em Doce Café Cafeteria, Linhares",
-    "category": "doceria",
+    "bot_id": 2236,
+    "phone_number_id": "rand-test-3-1776694821",
+    "name": "Marmita e Marmitex Restaurante Rainha da Galinhada",
+    "category": "marmitaria",
     "scenarios": {
-      "add_single_msg": "um cookies",
+      "add_single_msg": "1 filé de frango",
       "add_single_expected": [
         [
-          "COOKIES",
+          "Filé de Frango",
           1
         ]
       ],
-      "add_multi_msg": "manda 2 pudim pfv e bota um soda italiana bem feito",
+      "add_multi_msg": "quero 2 sarapateira caprichada e me ve 1 guarana ai",
       "add_multi_expected": [
         [
-          "PUDIM",
+          "Sarapateira",
           2
         ],
         [
-          "SODA ITALIANA",
+          "Guarana",
           1
         ]
       ],
-      "remove_add_msg": "bota 2 chocolate quente tipo europa",
+      "remove_add_msg": "coloca 2 calabresa",
       "remove_add_expected": [
-        "CHOCOLATE QUENTE TIPO EUROPA",
+        "Calabresa",
         2
       ],
-      "remove_msg": "nao quero mais chocolate quente tipo europa nao",
-      "suggestion_msg": "o que tem de bom?",
-      "checkout_product_msg": "um capuccino nutella por favor",
+      "remove_msg": "nao precisa do calabresa",
+      "suggestion_msg": "o que tem aí?",
+      "checkout_product_msg": "me ve 1 contra filé ai",
       "checkout_product_expected": [
-        "CAPUCCINO NUTELLA",
+        "Contra Filé",
         1
       ],
-      "abbreviation_product": "ÁGUA MINERAL",
-      "abbreviation_msg": "entao manda 1 mineral",
-      "double_add_product": "TORTA DE LIMÃO",
-      "double_add_msg_1": "coloca 1 torta de limão",
-      "double_add_msg_2": "me vê um torta de limão",
-      "question_product": "BOMBOM DE MORANGO",
-      "question_msg": "qual o valor do bombom de morango?",
-      "add_remove_product": "COOKIES",
-      "add_remove_add_msg": "bota um cookies bem feito",
-      "add_remove_remove_msg": "pode tirar o cookies",
-      "greeting_msg": "olá",
-      "continuation_first_msg": "me vê um cookies",
-      "continuation_first_product": "COOKIES",
-      "continuation_followup_msg": "e uma soda italiana",
-      "continuation_followup_product": "SODA ITALIANA",
-      "unavailable_msg": "manda 1 capuccino paçoca e vou querer 1 capuccino italiano",
-      "unavailable_available": "CAPUCCINO ITALIANO",
-      "unavailable_name": "CAPUCCINO PAÇOCA"
+      "abbreviation_product": "Limão Frutania",
+      "abbreviation_msg": "vou de limão",
+      "double_add_product": "Costela Suína no Forno e Cozida",
+      "double_add_msg_1": "quero pedir 1 costela suína no forno e cozida",
+      "double_add_msg_2": "me ve um costela suína no forno e cozida ai",
+      "question_product": "Costela Cozida",
+      "question_msg": "aceita pix?",
+      "add_remove_product": "Filé de Frango",
+      "add_remove_add_msg": "quero pedir um filé de frango",
+      "add_remove_remove_msg": "manda sem o filé de frango",
+      "greeting_msg": "oi",
+      "continuation_first_msg": "tipo um filé de frango",
+      "continuation_first_product": "Filé de Frango",
+      "continuation_followup_msg": "e uma guarana",
+      "continuation_followup_product": "Guarana",
+      "trap_question_msg": "manda o preço do costela cozida ae",
+      "trap_question_product": "Costela Cozida",
+      "trap_unrelated_add_msg": "vou querer um guarana",
+      "trap_unrelated_add_product": "Guarana",
+      "subset_remove_msg": "muda ae, sem guarana",
+      "subset_remove_target_product": "Guarana",
+      "subset_remove_keeper": [
+        "Sarapateira",
+        2
+      ],
+      "multi_remove_setup_msg": "quero um sarapateira, um guarana e um calabresa",
+      "multi_remove_msg": "tira o sarapateira e o calabresa",
+      "multi_remove_targets": [
+        "Sarapateira",
+        "Calabresa"
+      ],
+      "multi_remove_keeper": "Guarana",
+      "qty_reduce_setup_msg": "quero 3 sarapateira e 2 guarana",
+      "qty_reduce_msg": "deixa só 1 sarapateira",
+      "qty_reduce_expected": [
+        [
+          "Sarapateira",
+          1
+        ],
+        [
+          "Guarana",
+          2
+        ]
+      ],
+      "digit_in_name_product": null,
+      "digit_in_name_msg": null,
+      "unavailable_msg": "solta um costela cozida c/ mandioca e bota 1 porções méd.",
+      "unavailable_available": "Porções Méd.",
+      "unavailable_name": "Costela Cozida c/ Mandioca"
     }
   },
   "rand4": {
-    "bot_id": 1396,
-    "phone_number_id": "rand-test-4-1775593416",
-    "name": "Menu em Big Burger Hamburgueria Artesanal restaura",
-    "category": "hamburgueria",
+    "bot_id": 2237,
+    "phone_number_id": "rand-test-4-1776694823",
+    "name": "Pastelaria em São Paulo",
+    "category": "pastelaria",
     "scenarios": {
-      "add_single_msg": "vou querer um mini churros",
+      "add_single_msg": "fecha 1 esfiha bauru",
       "add_single_expected": [
         [
-          "MINI CHURROS",
+          "Esfiha Bauru",
           1
         ]
       ],
-      "add_multi_msg": "solta 2 big tudo e e mais 1 suco 500ml",
+      "add_multi_msg": "me vê 2 pastel camarão e ah e 1 pastel presunto e queijo",
       "add_multi_expected": [
         [
-          "BIG TUDO",
+          "Pastel Camarão",
           2
         ],
         [
-          "SUCO 500ml",
+          "Pastel Presunto e Queijo",
           1
         ]
       ],
-      "remove_add_msg": "me vê 2 big picanha",
+      "remove_add_msg": "me vê 2 pastel dois queijos",
       "remove_add_expected": [
-        "BIG PICANHA",
+        "Pastel Dois Queijos",
         2
       ],
-      "remove_msg": "remove o big picanha",
-      "suggestion_msg": "o que tá saindo mais?",
-      "checkout_product_msg": "da pra mandar 1 hamburger artesanal 150g",
+      "remove_msg": "muda ae, sem pastel dois queijos",
+      "suggestion_msg": "o que tem de bom?",
+      "checkout_product_msg": "coloca 1 pastel palmito c/ queijo",
       "checkout_product_expected": [
-        "HAMBURGER ARTESANAL 150g",
+        "Pastel Palmito c/ Queijo",
         1
       ],
-      "abbreviation_product": "HAMBURGER ARTESANAL 150g",
-      "abbreviation_msg": "joga 1 hamburger artesanal no pedido",
-      "double_add_product": "BIG MONSTER",
-      "double_add_msg_1": "bota 1 big monster pra mim",
-      "double_add_msg_2": "quero pedir um big monster",
-      "question_product": "BIG DUPLO ESPECIAL",
-      "question_msg": "ainda tem big duplo especial ae",
-      "add_remove_product": "MINI CHURROS",
-      "add_remove_add_msg": "quero um mini churros",
-      "add_remove_remove_msg": "nao quero mais mini churros nao",
+      "abbreviation_product": "Pastel Bacalhau",
+      "abbreviation_msg": "um bacalhau",
+      "double_add_product": "Pastel Calabresa c/ Catupiry",
+      "double_add_msg_1": "da pra mandar 1 pastel calabresa c/ catupiry",
+      "double_add_msg_2": "manda 1 pastel calabresa c/ catupiry",
+      "question_product": "Pastel Carne c/ Molho",
+      "question_msg": "quanto fica o pastel carne c/ molho?",
+      "add_remove_product": "Esfiha Bauru",
+      "add_remove_add_msg": "vou de esfiha bauru",
+      "add_remove_remove_msg": "cancela esse esfiha bauru",
+      "greeting_msg": "boa noite",
+      "continuation_first_msg": "1 esfiha bauru",
+      "continuation_first_product": "Esfiha Bauru",
+      "continuation_followup_msg": "e uma pastel presunto e queijo",
+      "continuation_followup_product": "Pastel Presunto e Queijo",
+      "trap_question_msg": "quanto custa esse pastel carne c/ molho",
+      "trap_question_product": "Pastel Carne c/ Molho",
+      "trap_unrelated_add_msg": "vou querer um pastel presunto e queijo",
+      "trap_unrelated_add_product": "Pastel Presunto e Queijo",
+      "subset_remove_msg": "sem o pastel presunto e queijo",
+      "subset_remove_target_product": "Pastel Presunto e Queijo",
+      "subset_remove_keeper": [
+        "Pastel Camarão",
+        2
+      ],
+      "multi_remove_setup_msg": "quero um pastel camarão, um pastel presunto e queijo e um pastel dois queijos",
+      "multi_remove_msg": "tira o pastel camarão e o pastel dois queijos",
+      "multi_remove_targets": [
+        "Pastel Camarão",
+        "Pastel Dois Queijos"
+      ],
+      "multi_remove_keeper": "Pastel Presunto e Queijo",
+      "qty_reduce_setup_msg": "quero 3 pastel camarão e 2 pastel presunto e queijo",
+      "qty_reduce_msg": "deixa só 1 pastel camarão",
+      "qty_reduce_expected": [
+        [
+          "Pastel Camarão",
+          1
+        ],
+        [
+          "Pastel Presunto e Queijo",
+          2
+        ]
+      ],
+      "digit_in_name_product": null,
+      "digit_in_name_msg": null,
+      "unavailable_msg": "esfiha carne c/ queijo e me ve 1 esfiha atum ai",
+      "unavailable_available": "Esfiha Atum",
+      "unavailable_name": "Esfiha Carne c/ Queijo"
+    }
+  },
+  "rand5": {
+    "bot_id": 2238,
+    "phone_number_id": "rand-test-5-1776694827",
+    "name": "Belô",
+    "category": "doceria",
+    "scenarios": {
+      "add_single_msg": "milkshake belô",
+      "add_single_expected": [
+        [
+          "Milkshake Belô",
+          1
+        ]
+      ],
+      "add_multi_msg": "quero pedir 2 prensa francesa 300 ml e manda um chá matte thai ae",
+      "add_multi_expected": [
+        [
+          "Prensa francesa 300 ml",
+          2
+        ],
+        [
+          "Chá matte thai",
+          1
+        ]
+      ],
+      "remove_add_msg": "manda 2 chocolate quente ae",
+      "remove_add_expected": [
+        "Chocolate quente",
+        2
+      ],
+      "remove_msg": "deixa o chocolate quente pra la",
+      "suggestion_msg": "o que vocês recomendam?",
+      "checkout_product_msg": "me vê um verde",
+      "checkout_product_expected": [
+        "Verde",
+        1
+      ],
+      "abbreviation_product": "GT ginger",
+      "abbreviation_msg": "me vê 1 ginger",
+      "double_add_product": "Espresso martini",
+      "double_add_msg_1": "manda 1 espresso martini",
+      "double_add_msg_2": "manda 1 espresso martini pfv",
+      "question_product": "Nutellinha",
+      "question_msg": "o nutellinha vem com o quê?",
+      "add_remove_product": "Milkshake Belô",
+      "add_remove_add_msg": "manda 1 milkshake belô",
+      "add_remove_remove_msg": "pode tirar o milkshake belô",
+      "greeting_msg": "opa",
+      "continuation_first_msg": "tipo um milkshake belô",
+      "continuation_first_product": "Milkshake Belô",
+      "continuation_followup_msg": "e uma chá matte thai",
+      "continuation_followup_product": "Chá matte thai",
+      "trap_question_msg": "quanto é o nutellinha?",
+      "trap_question_product": "Nutellinha",
+      "trap_unrelated_add_msg": "vou querer um chá matte thai",
+      "trap_unrelated_add_product": "Chá matte thai",
+      "subset_remove_msg": "tira o chá matte thai",
+      "subset_remove_target_product": "Chá matte thai",
+      "subset_remove_keeper": [
+        "Prensa francesa 300 ml",
+        2
+      ],
+      "multi_remove_setup_msg": "quero um prensa francesa 300 ml, um chá matte thai e um chocolate quente",
+      "multi_remove_msg": "tira o prensa francesa 300 ml e o chocolate quente",
+      "multi_remove_targets": [
+        "Prensa francesa 300 ml",
+        "Chocolate quente"
+      ],
+      "multi_remove_keeper": "Chá matte thai",
+      "qty_reduce_setup_msg": "quero 3 prensa francesa 300 ml e 2 chá matte thai",
+      "qty_reduce_msg": "deixa só 1 prensa francesa 300 ml",
+      "qty_reduce_expected": [
+        [
+          "Prensa francesa 300 ml",
+          1
+        ],
+        [
+          "Chá matte thai",
+          2
+        ]
+      ],
+      "digit_in_name_product": null,
+      "digit_in_name_msg": null,
+      "unavailable_msg": "um cappuccino gelado com creme e joga um sangria no pedido",
+      "unavailable_available": "Sangria",
+      "unavailable_name": "Cappuccino gelado com creme"
+    }
+  },
+  "rand6": {
+    "bot_id": 2239,
+    "phone_number_id": "rand-test-6-1776694830",
+    "name": "Lanchonete Souza Lapa",
+    "category": "lanchonete",
+    "scenarios": {
+      "add_single_msg": "um filé de tilápia simples",
+      "add_single_expected": [
+        [
+          "Filé de Tilápia simples",
+          1
+        ]
+      ],
+      "add_multi_msg": "coloca 2 filé de frango simples e vou de omelete simples",
+      "add_multi_expected": [
+        [
+          "Filé de frango simples",
+          2
+        ],
+        [
+          "Omelete simples",
+          1
+        ]
+      ],
+      "remove_add_msg": "entao manda 2 cobertura de queijo",
+      "remove_add_expected": [
+        "Cobertura de queijo",
+        2
+      ],
+      "remove_msg": "nao quero mais cobertura de queijo nao",
+      "suggestion_msg": "não sei o que pedir",
+      "checkout_product_msg": "pode mandar um vinagrete",
+      "checkout_product_expected": [
+        "Vinagrete",
+        1
+      ],
+      "abbreviation_product": "Caldo de feijão com legumes",
+      "abbreviation_msg": "manda 1 de feijão com legumes ae",
+      "double_add_product": "Calabresa simples",
+      "double_add_msg_1": "manda um calabresa simples ae",
+      "double_add_msg_2": "pode mandar um calabresa simples",
+      "question_product": "Feijão",
+      "question_msg": "quanto fica o feijão?",
+      "add_remove_product": "Filé de Tilápia simples",
+      "add_remove_add_msg": "bota 1 filé de tilápia simples",
+      "add_remove_remove_msg": "manda sem o filé de tilápia simples",
+      "greeting_msg": "oi boa noite",
+      "continuation_first_msg": "manda 1 filé de tilápia simples ae",
+      "continuation_first_product": "Filé de Tilápia simples",
+      "continuation_followup_msg": "e uma omelete simples",
+      "continuation_followup_product": "Omelete simples",
+      "trap_question_msg": "qual o valor do feijão?",
+      "trap_question_product": "Feijão",
+      "trap_unrelated_add_msg": "vou querer um omelete simples",
+      "trap_unrelated_add_product": "Omelete simples",
+      "subset_remove_msg": "nao quero mais omelete simples nao",
+      "subset_remove_target_product": "Omelete simples",
+      "subset_remove_keeper": [
+        "Filé de frango simples",
+        2
+      ],
+      "multi_remove_setup_msg": "quero um filé de frango simples, um omelete simples e um cobertura de queijo",
+      "multi_remove_msg": "tira o filé de frango simples e o cobertura de queijo",
+      "multi_remove_targets": [
+        "Filé de frango simples",
+        "Cobertura de queijo"
+      ],
+      "multi_remove_keeper": "Omelete simples",
+      "qty_reduce_setup_msg": "quero 3 filé de frango simples e 2 omelete simples",
+      "qty_reduce_msg": "deixa só 1 filé de frango simples",
+      "qty_reduce_expected": [
+        [
+          "Filé de frango simples",
+          1
+        ],
+        [
+          "Omelete simples",
+          2
+        ]
+      ],
+      "digit_in_name_product": null,
+      "digit_in_name_msg": null,
+      "unavailable_msg": "um caldo verde, creme de palmito ou creme de mandioca e me arruma um omelete com legumes simples",
+      "unavailable_available": "Omelete com Legumes Simples",
+      "unavailable_name": "Caldo verde, creme de palmito ou creme de mandioca"
+    }
+  },
+  "rand7": {
+    "bot_id": 2240,
+    "phone_number_id": "rand-test-7-1776694831",
+    "name": "Burger Company",
+    "category": "hamburgueria",
+    "scenarios": {
+      "add_single_msg": "rola um mousse de chocolate",
+      "add_single_expected": [
+        [
+          "Mousse de Chocolate",
+          1
+        ]
+      ],
+      "add_multi_msg": "e mais 2 filet peito de frango e quero um heineken",
+      "add_multi_expected": [
+        [
+          "Filet Peito de Frango",
+          2
+        ],
+        [
+          "Heineken",
+          1
+        ]
+      ],
+      "remove_add_msg": "me arruma 2 batata waffle - 6 unidades",
+      "remove_add_expected": [
+        "Batata Waffle - 6 unidades",
+        2
+      ],
+      "remove_msg": "sem o batata waffle - 6 unidades",
+      "suggestion_msg": "qual o carro chefe?",
+      "checkout_product_msg": "1 parrillada de legumes por favor",
+      "checkout_product_expected": [
+        "Parrillada de Legumes",
+        1
+      ],
+      "abbreviation_product": "Monte o Seu",
+      "abbreviation_msg": "coloca um monte",
+      "double_add_product": "Green Salad",
+      "double_add_msg_1": "coloca um green salad",
+      "double_add_msg_2": "to querendo 1 green salad",
+      "question_product": "Monte o Seu",
+      "question_msg": "ce tem monte o seu",
+      "add_remove_product": "Mousse de Chocolate",
+      "add_remove_add_msg": "manda uma mousse de chocolate gelada",
+      "add_remove_remove_msg": "tira esse mousse de chocolate ae",
       "greeting_msg": "oi",
-      "continuation_first_msg": "tipo um mini churros",
-      "continuation_first_product": "MINI CHURROS",
-      "continuation_followup_msg": "e uma suco 500ml",
-      "continuation_followup_product": "SUCO 500ml",
-      "unavailable_msg": "hamburger cremoso 150g e entao manda um refrigerante 500ml",
-      "unavailable_available": "REFRIGERANTE 500ml",
-      "unavailable_name": "HAMBURGER CREMOSO 150g"
+      "continuation_first_msg": "bota um mousse de chocolate bem feito",
+      "continuation_first_product": "Mousse de Chocolate",
+      "continuation_followup_msg": "e uma heineken",
+      "continuation_followup_product": "Heineken",
+      "trap_question_msg": "vcs aceitam pix",
+      "trap_question_product": "Monte o Seu",
+      "trap_unrelated_add_msg": "vou querer um heineken",
+      "trap_unrelated_add_product": "Heineken",
+      "subset_remove_msg": "tira o heineken pfv",
+      "subset_remove_target_product": "Heineken",
+      "subset_remove_keeper": [
+        "Filet Peito de Frango",
+        2
+      ],
+      "multi_remove_setup_msg": "quero um filet peito de frango, um heineken e um batata waffle - 6 unidades",
+      "multi_remove_msg": "tira o filet peito de frango e o batata waffle - 6 unidades",
+      "multi_remove_targets": [
+        "Filet Peito de Frango",
+        "Batata Waffle - 6 unidades"
+      ],
+      "multi_remove_keeper": "Heineken",
+      "qty_reduce_setup_msg": "quero 3 filet peito de frango e 2 heineken",
+      "qty_reduce_msg": "deixa só 1 filet peito de frango",
+      "qty_reduce_expected": [
+        [
+          "Filet Peito de Frango",
+          1
+        ],
+        [
+          "Heineken",
+          2
+        ]
+      ],
+      "digit_in_name_product": "Batata Waffle - 6 unidades",
+      "digit_in_name_msg": "quero um batata waffle - 6 unidades",
+      "unavailable_msg": "vou querer um 3º queijo e rola um creme de espinafre",
+      "unavailable_available": "Creme de Espinafre",
+      "unavailable_name": "3º Queijo"
+    }
+  },
+  "rand8": {
+    "bot_id": 2241,
+    "phone_number_id": "rand-test-8-1776694835",
+    "name": "Pizzaria Buon Gusto",
+    "category": "pizzaria",
+    "scenarios": {
+      "add_single_msg": "bota um carnes d.c. bem feito",
+      "add_single_expected": [
+        [
+          "CARNES D.C.",
+          1
+        ]
+      ],
+      "add_multi_msg": "solta 2 longbo especial e coloca 1 a moda da casa",
+      "add_multi_expected": [
+        [
+          "LONGBO ESPECIAL",
+          2
+        ],
+        [
+          "A MODA DA CASA",
+          1
+        ]
+      ],
+      "remove_add_msg": "quero 2 pepperoni d.c. caprichada",
+      "remove_add_expected": [
+        "PEPPERONI D.C.",
+        2
+      ],
+      "remove_msg": "ah, esquece o pepperoni d.c.",
+      "suggestion_msg": "me indica alguma coisa",
+      "checkout_product_msg": "pode ser um bacon",
+      "checkout_product_expected": [
+        "BACON",
+        1
+      ],
+      "abbreviation_product": "MINI BIRIBIRI",
+      "abbreviation_msg": "entao manda um biribiri",
+      "double_add_product": "BAURU",
+      "double_add_msg_1": "tipo um bauru",
+      "double_add_msg_2": "manda um bauru ae",
+      "question_product": "PEPPERONI",
+      "question_msg": "qt ta o pepperoni",
+      "add_remove_product": "CARNES D.C.",
+      "add_remove_add_msg": "e mais um carnes d.c.",
+      "add_remove_remove_msg": "eu nao quero carnes d.c.",
+      "greeting_msg": "oi, tudo bem?",
+      "continuation_first_msg": "manda um carnes d.c. ae",
+      "continuation_first_product": "CARNES D.C.",
+      "continuation_followup_msg": "e uma a moda da casa",
+      "continuation_followup_product": "A MODA DA CASA",
+      "trap_question_msg": "o pepperoni ta saindo?",
+      "trap_question_product": "PEPPERONI",
+      "trap_unrelated_add_msg": "vou querer um a moda da casa",
+      "trap_unrelated_add_product": "A MODA DA CASA",
+      "subset_remove_msg": "tira esse a moda da casa ae",
+      "subset_remove_target_product": "A MODA DA CASA",
+      "subset_remove_keeper": [
+        "LONGBO ESPECIAL",
+        2
+      ],
+      "multi_remove_setup_msg": "quero um longbo especial, um a moda da casa e um pepperoni d.c.",
+      "multi_remove_msg": "tira o longbo especial e o pepperoni d.c.",
+      "multi_remove_targets": [
+        "LONGBO ESPECIAL",
+        "PEPPERONI D.C."
+      ],
+      "multi_remove_keeper": "A MODA DA CASA",
+      "qty_reduce_setup_msg": "quero 3 longbo especial e 2 a moda da casa",
+      "qty_reduce_msg": "deixa só 1 longbo especial",
+      "qty_reduce_expected": [
+        [
+          "LONGBO ESPECIAL",
+          1
+        ],
+        [
+          "A MODA DA CASA",
+          2
+        ]
+      ],
+      "digit_in_name_product": null,
+      "digit_in_name_msg": null,
+      "unavailable_msg": "manda 1 especial ae e bota um lorra pra mim",
+      "unavailable_available": "LORRA",
+      "unavailable_name": "ESPECIAL"
+    }
+  },
+  "rand9": {
+    "bot_id": 2242,
+    "phone_number_id": "rand-test-9-1776694838",
+    "name": "Combinadões Entradinhas Usuzukuri / Carpaccios Sas",
+    "category": "sushi",
+    "scenarios": {
+      "add_single_msg": "quero 1 camarão trufado na manteiga",
+      "add_single_expected": [
+        [
+          "CAMARÃO TRUFADO NA MANTEIGA",
+          1
+        ]
+      ],
+      "add_multi_msg": "2 bolinhas de camarão e quero um sunomono",
+      "add_multi_expected": [
+        [
+          "BOLINHAS DE CAMARÃO",
+          2
+        ],
+        [
+          "SUNOMONO",
+          1
+        ]
+      ],
+      "remove_add_msg": "da pra mandar 2 pigyosa",
+      "remove_add_expected": [
+        "PIGYOSA",
+        2
+      ],
+      "remove_msg": "não manda o pigyosa não",
+      "suggestion_msg": "o que é bom aí?",
+      "checkout_product_msg": "coloca 1 gyoza",
+      "checkout_product_expected": [
+        "GYOZA",
+        1
+      ],
+      "abbreviation_product": "ARCOS DA LAPA",
+      "abbreviation_msg": "quero pedir 1 arcos",
+      "double_add_product": "TARTAR DE SALMÃO ESPECIAL",
+      "double_add_msg_1": "manda um tartar de salmão especial ae",
+      "double_add_msg_2": "um tartar de salmão especial por favor",
+      "question_product": "POKE",
+      "question_msg": "qual o preço de um poke",
+      "add_remove_product": "CAMARÃO TRUFADO NA MANTEIGA",
+      "add_remove_add_msg": "me faz um camarão trufado na manteiga",
+      "add_remove_remove_msg": "pode esquecer o camarão trufado na manteiga",
+      "greeting_msg": "oi",
+      "continuation_first_msg": "ah e um camarão trufado na manteiga",
+      "continuation_first_product": "CAMARÃO TRUFADO NA MANTEIGA",
+      "continuation_followup_msg": "e uma sunomono",
+      "continuation_followup_product": "SUNOMONO",
+      "trap_question_msg": "eh quanto o poke",
+      "trap_question_product": "POKE",
+      "trap_unrelated_add_msg": "vou querer um sunomono",
+      "trap_unrelated_add_product": "SUNOMONO",
+      "subset_remove_msg": "deixa o sunomono pra la",
+      "subset_remove_target_product": "SUNOMONO",
+      "subset_remove_keeper": [
+        "BOLINHAS DE CAMARÃO",
+        2
+      ],
+      "multi_remove_setup_msg": "quero um bolinhas de camarão, um sunomono e um pigyosa",
+      "multi_remove_msg": "tira o bolinhas de camarão e o pigyosa",
+      "multi_remove_targets": [
+        "BOLINHAS DE CAMARÃO",
+        "PIGYOSA"
+      ],
+      "multi_remove_keeper": "SUNOMONO",
+      "qty_reduce_setup_msg": "quero 3 bolinhas de camarão e 2 sunomono",
+      "qty_reduce_msg": "deixa só 1 bolinhas de camarão",
+      "qty_reduce_expected": [
+        [
+          "BOLINHAS DE CAMARÃO",
+          1
+        ],
+        [
+          "SUNOMONO",
+          2
+        ]
+      ],
+      "digit_in_name_product": null,
+      "digit_in_name_msg": null,
+      "unavailable_msg": "e mais 1 combomaki mini e manda um harunatcho",
+      "unavailable_available": "HARUNATCHO",
+      "unavailable_name": "COMBOMAKI MINI"
+    }
+  },
+  "rand10": {
+    "bot_id": 2243,
+    "phone_number_id": "rand-test-10-1776694844",
+    "name": "Quintal Do Peter Espetaria",
+    "category": "espetaria",
+    "scenarios": {
+      "add_single_msg": "quero um banana",
+      "add_single_expected": [
+        [
+          "Banana",
+          1
+        ]
+      ],
+      "add_multi_msg": "quero 2 batata frita caprichada e quero 1 linguiça mineira c/batata frita",
+      "add_multi_expected": [
+        [
+          "Batata Frita",
+          2
+        ],
+        [
+          "Linguiça Mineira c/batata frita",
+          1
+        ]
+      ],
+      "remove_add_msg": "entao manda 2 picanha aperitiva",
+      "remove_add_expected": [
+        "Picanha Aperitiva",
+        2
+      ],
+      "remove_msg": "nao quero mais picanha aperitiva nao",
+      "suggestion_msg": "qual o mais pedido?",
+      "checkout_product_msg": "vou querer 1 costelinha suína",
+      "checkout_product_expected": [
+        "Costelinha suína",
+        1
+      ],
+      "abbreviation_product": "Farofa Simples",
+      "abbreviation_msg": "rola um farofa",
+      "double_add_product": "Sem parar de Carne",
+      "double_add_msg_1": "ah e um sem parar de carne",
+      "double_add_msg_2": "bota um sem parar de carne pra mim",
+      "question_product": "Carne seca c/aipim frito",
+      "question_msg": "quanto eh o carne seca c/aipim frito",
+      "add_remove_product": "Banana",
+      "add_remove_add_msg": "manda 1 banana pfv",
+      "add_remove_remove_msg": "pode tirar o banana",
+      "greeting_msg": "boa noite",
+      "continuation_first_msg": "manda um banana pfv",
+      "continuation_first_product": "Banana",
+      "continuation_followup_msg": "e uma linguiça mineira c/batata frita",
+      "continuation_followup_product": "Linguiça Mineira c/batata frita",
+      "trap_question_msg": "preço do carne seca c/aipim frito",
+      "trap_question_product": "Carne seca c/aipim frito",
+      "trap_unrelated_add_msg": "vou querer um linguiça mineira c/batata frita",
+      "trap_unrelated_add_product": "Linguiça Mineira c/batata frita",
+      "subset_remove_msg": "tira fora o linguiça mineira c/batata frita",
+      "subset_remove_target_product": "Linguiça Mineira c/batata frita",
+      "subset_remove_keeper": [
+        "Batata Frita",
+        2
+      ],
+      "multi_remove_setup_msg": "quero um batata frita, um linguiça mineira c/batata frita e um picanha aperitiva",
+      "multi_remove_msg": "tira o batata frita e o picanha aperitiva",
+      "multi_remove_targets": [
+        "Batata Frita",
+        "Picanha Aperitiva"
+      ],
+      "multi_remove_keeper": "Linguiça Mineira c/batata frita",
+      "qty_reduce_setup_msg": "quero 3 batata frita e 2 linguiça mineira c/batata frita",
+      "qty_reduce_msg": "deixa só 1 batata frita",
+      "qty_reduce_expected": [
+        [
+          "Batata Frita",
+          1
+        ],
+        [
+          "Linguiça Mineira c/batata frita",
+          2
+        ]
+      ],
+      "digit_in_name_product": null,
+      "digit_in_name_msg": null,
+      "unavailable_msg": "bota 1 molho barbecue e entao manda 1 frango a passarinho",
+      "unavailable_available": "Frango a Passarinho",
+      "unavailable_name": "Molho Barbecue"
     }
   }
 }

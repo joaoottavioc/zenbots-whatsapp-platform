@@ -199,6 +199,22 @@ async def delete_bot(bot_id: int):
             await session.commit()
 
 
+def _get_cli_args():
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Validate corpus images via Cadastro Mágico."
+    )
+    parser.add_argument(
+        "--entry",
+        type=str,
+        default=None,
+        help="Validate a single entry by ID (e.g., menu_0045 or prospect_0001)",
+    )
+    args, _ = parser.parse_known_args()
+    return args
+
+
 async def validate_all():
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     # An image needs validation if either:
@@ -213,6 +229,19 @@ async def validate_all():
         if e.get("validated") is not True
         and not e.get("file", "").startswith("rejected/")
     ]
+
+    # --entry flag: process a single entry instead of all unvalidated
+    args = _get_cli_args()
+    if args.entry:
+        unvalidated = [e for e in unvalidated if e["id"] == args.entry]
+        if not unvalidated:
+            # Also check if the entry exists but is already validated
+            exists = any(e["id"] == args.entry for e in manifest)
+            if exists:
+                print(f"Entry {args.entry} is already validated.")
+            else:
+                print(f"Entry {args.entry} not found in manifest.")
+            return
 
     if not unvalidated:
         print("All images already validated!")
@@ -263,13 +292,21 @@ async def validate_all():
                 ext = image_path.suffix
                 mime = "image/jpeg" if ext in (".jpg", ".jpeg") else f"image/{ext[1:]}"
 
-                with open(image_path, "rb") as f:
-                    upload_resp = await client.post(
-                        f"/bots/{bot_id}/catalog/upload-from-file",
-                        files={"file": (f"menu{ext}", f, mime)},
-                        headers=headers,
-                        timeout=120,
-                    )
+                try:
+                    with open(image_path, "rb") as f:
+                        upload_resp = await client.post(
+                            f"/bots/{bot_id}/catalog/upload-from-file",
+                            files=[("files", (f"menu{ext}", f, mime))],
+                            headers=headers,
+                            timeout=240,
+                        )
+                except httpx.ReadTimeout:
+                    print("TIMEOUT (extraction >240s) — leaving as unvalidated")
+                    # Don't mark as rejected — let it retry in a future run
+                    continue
+                except httpx.HTTPError as http_err:
+                    print(f"HTTP ERROR ({type(http_err).__name__})")
+                    continue
 
                 if upload_resp.status_code != 201:
                     print(f"FAIL (extraction: {upload_resp.status_code})")
@@ -287,10 +324,17 @@ async def validate_all():
                 products = prod_resp.json() if prod_resp.status_code == 200 else []
 
                 if len(products) >= 8:
-                    category = detect_category(products)
+                    # Preserve pre-set category (from scrape-time search query) —
+                    # auto-detection is unreliable for mixed menus (a pizzaria
+                    # with Arabic sides gets flagged "comida árabe", etc.).
+                    # Only infer if no category was set yet.
+                    if entry.get("category"):
+                        category = entry["category"]
+                    else:
+                        category = detect_category(products)
+                        entry["category"] = category
                     entry["validated"] = True
                     entry["product_count"] = len(products)
-                    entry["category"] = category
 
                     extraction_file = EXTRACTIONS / f"{entry['id']}.json"
                     extraction_file.write_text(
@@ -318,6 +362,10 @@ async def validate_all():
 
             finally:
                 await delete_bot(bot_id)
+                # Save after every entry — crash/timeout preserves progress
+                MANIFEST.write_text(
+                    json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
 
         MANIFEST.write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"

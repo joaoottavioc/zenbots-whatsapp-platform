@@ -38,3 +38,14 @@ docs/
 *.tfplan
 .qa_report_tmp.json
 .qa_run_output.log
+
+# Corpus QA framework — generated artifacts (never commit)
+tests/simulation/corpus/extractions/
+tests/simulation/corpus/rejected/
+tests/simulation/corpus/images/
+tests/simulation/corpus/.selected_for_validation.json
+tests/simulation/corpus/baseline_pool.json
+
+# Scraper/runner scratch
+tmp_chrome_profile/
+.claude/scheduled_tasks.lock

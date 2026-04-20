@@ -407,8 +407,34 @@ def format_add(name: str, qty: int = 1) -> str:
 
     Phrase pool depends on PHRASE_TIER env var (see module docstring).
     Tier 3 ("hard") additionally applies typos to the product name.
+
+    When qty > 1, the pool is filtered to only templates that explicitly
+    reference {qty} AND don't hardcode a singular qty word ("um"/"uma"/
+    "uns"/"umas"). Without this filter, str.format silently ignores the
+    qty kwarg on `{name}`-only templates and the rendered phrase says
+    "taça tentação" instead of "2 taça tentação" — the test scenario
+    asserts qty=2 and fails through no fault of the bot. Discovered
+    2026-04-09 when Doce Café's add_multi cascade-failed 3 dependent
+    scenarios (subset_remove, multiturn_flow, multi_remove) because
+    add_multi_msg was reused as setup with the wrong qty.
     """
-    phrase = pick_weighted(_add_pool())
+    pool = _add_pool()
+    if qty > 1:
+        pool = [
+            (p, w)
+            for p, w in pool
+            if "{qty}" in p
+            and not re.search(r"\b(um|uma|uns|umas)\b", p, re.IGNORECASE)
+        ]
+        if not pool:
+            # Defensive fallback: should never happen with current pools, but
+            # if a future tier removes all qty-aware templates, raise loudly
+            # rather than silently dropping the qty.
+            raise RuntimeError(
+                f"format_add(qty={qty}): no qty-aware templates in pool. "
+                f"Phrase bank pool is misconfigured."
+            )
+    phrase = pick_weighted(pool)
     qty_str = str(qty) if qty > 1 else ("um" if random.random() < 0.5 else "1")
     typo_name = apply_typo(name) if get_tier() == "hard" else name
     result = phrase.format(name=typo_name.lower(), qty=qty_str)
@@ -446,7 +472,9 @@ def format_question(name: str) -> str:
     return phrase.format(name=typo_name.lower()).strip()
 
 
-def generate_abbreviations(product_name: str) -> list[str]:
+def generate_abbreviations(
+    product_name: str, all_product_names: list[str] | None = None
+) -> list[str]:
     """Generate natural abbreviations a customer would use for a product.
 
     Examples:
@@ -454,6 +482,15 @@ def generate_abbreviations(product_name: str) -> list[str]:
         "Coca-Cola 2L" → ["coca", "coca-cola", "coca 2l"]
         "Pizza Calabresa" → ["calabresa"]
         "X-Tudo Completo" → ["x-tudo"]
+
+    If `all_product_names` is provided, the result is filtered to abbreviations
+    that UNIQUELY identify this product within the menu. Ambiguous abbreviations
+    (those matching 2+ products as a substring) are rejected — a real customer
+    using that abbreviation would also need clarification, so there's no
+    "correct" behavior for the bot to demonstrate.
+
+    Returns [] when the product has no unique abbreviation — caller should
+    then pick a different product for the abbreviation test.
     """
     name_lower = product_name.lower()
     abbreviations = []
@@ -492,7 +529,7 @@ def generate_abbreviations(product_name: str) -> list[str]:
     if "guaraná" in name_lower or "guarana" in name_lower:
         abbreviations.append("guaraná")
 
-    # Deduplicate and filter
+    # Deduplicate and filter by length
     seen = set()
     result = []
     for a in abbreviations:
@@ -501,7 +538,56 @@ def generate_abbreviations(product_name: str) -> list[str]:
             seen.add(a)
             result.append(a)
 
+    # Filter by menu uniqueness: abbreviation must identify exactly ONE product
+    # (the target). If it matches 0 or 2+, it's not a fair test.
+    if all_product_names:
+        target_lower = product_name.lower().strip()
+        others = [
+            p.lower().strip()
+            for p in all_product_names
+            if p.lower().strip() != target_lower
+        ]
+        unique = []
+        for abbr in result:
+            abbr_lower = abbr.lower()
+            matches_target = abbr_lower in target_lower
+            matches_others = sum(1 for p in others if abbr_lower in p)
+            # Accept only if abbreviation is in the target AND in 0 other products
+            if matches_target and matches_others == 0:
+                unique.append(abbr)
+        return unique
+
     return result
+
+
+def _is_verbalizable(product: dict) -> bool:
+    """True if a real customer could naturally SAY this product name.
+
+    Rejects products whose names are clearly not meant to be spoken verbatim:
+    compound names with 3+ commas, variant parentheticals, very long names,
+    and names starting with a standalone digit. These products exist in real
+    menus but customers order them via abbreviation, category, or number —
+    not by reading the full name. Testing "quero um Carne, Queijo, Bacon e
+    Catupiry" is a test-phrasing issue, not a bot bug.
+    """
+    name = product.get("name", "")
+    if not name:
+        return False
+    if len(name) > 60:
+        return False
+    if name.count(",") >= 3:
+        return False
+    if "(" in name and ")" in name:
+        return False
+    # Name starts with standalone digit (e.g. "3 Queijos") — parser will
+    # strip the digit as quantity
+    stripped = name.strip()
+    if stripped and stripped[0].isdigit():
+        # Allow "X.Y" version numbers ("2.0")
+        first_token = stripped.split()[0] if stripped.split() else ""
+        if "." not in first_token:
+            return False
+    return True
 
 
 def pick_random_products(
@@ -510,8 +596,15 @@ def pick_random_products(
     """Pick random products for test scenarios, avoiding selection bias.
 
     Returns a dict of role → product, picking from different parts of the menu.
+    Filters out products with non-verbalizable names (too long, too many
+    commas, parenthetical variants) — real customers wouldn't order by
+    reading those names verbatim.
     """
-    available = [p for i, p in enumerate(products) if i not in unavail_indices]
+    available = [
+        p
+        for i, p in enumerate(products)
+        if i not in unavail_indices and _is_verbalizable(p)
+    ]
     unavailable = [products[i] for i in unavail_indices if i < len(products)]
 
     main = [
