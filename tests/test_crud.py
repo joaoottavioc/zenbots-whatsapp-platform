@@ -9,7 +9,6 @@ Covered:
 - clear_db_cart           (clears items and resets state / missing cart)
 - save_address_to_cart    (saves address / missing cart)
 - save_customer_name_to_contact (saves name / missing contact)
-- delete_order            (deletes existing / missing order)
 - is_message_processed    (found / not found)
 """
 
@@ -21,7 +20,6 @@ from app.crud import (
     clear_db_cart,
     save_address_to_cart,
     save_customer_name_to_contact,
-    delete_order,
     is_message_processed,
     upsert_subscription,
     is_plan_active,
@@ -34,7 +32,7 @@ from app.crud import (
     bulk_create_products,
 )
 from app.models import OrderStatus
-from app.schemas import BotUpdate
+from app.schemas import BotCreate, BotUpdate
 
 
 # ---------------------------------------------------------------------------
@@ -325,36 +323,6 @@ class TestSaveCustomerNameToContact:
         session.add.assert_not_called()
         session.flush.assert_not_called()
         session.refresh.assert_not_called()
-
-
-# ===========================================================================
-# TestDeleteOrder
-# ===========================================================================
-
-
-class TestDeleteOrder:
-    async def test_deletes_existing_order(self):
-        """session.delete is called with the order and True is returned."""
-        session = _make_session()
-        order = _make_order(order_id=42)
-        session.get.return_value = order
-
-        result = await delete_order(session, order_id=42)
-
-        assert result is True
-        session.delete.assert_awaited_once_with(order)
-        session.commit.assert_awaited_once()
-
-    async def test_returns_false_for_missing_order(self):
-        """When the order is not found, False is returned and nothing is deleted."""
-        session = _make_session()
-        session.get.return_value = None
-
-        result = await delete_order(session, order_id=999)
-
-        assert result is False
-        session.delete.assert_not_called()
-        session.commit.assert_not_called()
 
 
 # ===========================================================================
@@ -768,10 +736,13 @@ class TestCreateBotEncryptsToken:
             await create_bot(
                 session,
                 user_id=1,
-                whatsapp_number="5511999999999",
-                restaurant_name="Test",
-                pix_key=None,
-                whatsapp_token="my_secret_token",
+                bot_data=BotCreate(
+                    restaurant_name="Test",
+                    whatsapp_number="5511999999999",
+                    whatsapp_token="my_secret_token",
+                    cep="01001000",
+                    address="Test Address",
+                ),
             )
 
         mock_enc.assert_called_once_with("my_secret_token")

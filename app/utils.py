@@ -20,16 +20,6 @@ def mask_phone(phone: str) -> str:
     return digits[:4] + "***" + digits[-2:]
 
 
-def mask_email(email: str) -> str:
-    """Mask an email address, keeping first 2 chars + domain."""
-    if "@" not in email:
-        return "***"
-    local, domain = email.split("@", 1)
-    if len(local) <= 2:
-        return f"**@{domain}"
-    return f"{local[:2]}***@{domain}"
-
-
 router = APIRouter(prefix="/utils", tags=["Utils"])
 
 
@@ -74,39 +64,6 @@ def calculate_distance(lat1, lon1, lat2, lon2):
     except Exception as e:
         logger.error("Distance calculation failed: %s", e)
         return 9999.0
-
-
-async def check_delivery_radius(bot, customer_lat, customer_lon):
-    """
-    Valida se o cliente está dentro do raio permitido pelo bot.
-    Retorna (is_within_radius, distance).
-    """
-    logger.info("Checking delivery radius for bot_id=%s", bot.id)
-
-    if not bot.latitude or not bot.longitude:
-        logger.warning(
-            "Bot %s has no coordinates configured, blocking delivery", bot.id
-        )
-        return False, 0.0
-
-    if customer_lat is None or customer_lon is None:
-        logger.warning("Customer coordinates missing, blocking delivery")
-        return False, 9999.0
-
-    distance = calculate_distance(
-        bot.latitude, bot.longitude, customer_lat, customer_lon
-    )
-    max_radius = float(getattr(bot, "max_delivery_radius", 10.0))
-
-    is_ok = distance <= max_radius
-    if is_ok:
-        logger.info("Delivery radius OK: %.2fkm <= %.1fkm limit", distance, max_radius)
-    else:
-        logger.warning(
-            "Outside delivery radius: %.2fkm > %.1fkm limit", distance, max_radius
-        )
-
-    return is_ok, distance
 
 
 async def _fetch_coordinates(

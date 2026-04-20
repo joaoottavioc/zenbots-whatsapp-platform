@@ -11,24 +11,73 @@ import threading  # <--- ADICIONADO PARA PROTEÇÃO
 
 logger = logging.getLogger(__name__)
 
+
+class EmbeddingsUnavailable(Exception):
+    """Raised when the embedding model cannot be loaded.
+
+    Callers should catch this and degrade gracefully — for product search,
+    that means skipping the semantic similarity layer and returning whatever
+    the keyword/ILIKE layers found. For the semantic router, it means
+    falling back to a low-confidence default intent so the LLM tool-calling
+    path can still handle the message.
+
+    Added 2026-04-09 after Hugging Face Hub rate-limited the model_info()
+    call during SentenceTransformer init, which used to cascade into a
+    process-wide outage where every shopping intent crashed with "algo
+    deu errado".
+    """
+
+
 # ========= Config do modelo (384d, compartilhado entre router e catálogo) =========
 _MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"  # 384 dims
 
 # Lazy-load: single shared instance (same model for router + products)
 _model = None
 _model_lock = threading.Lock()
+_model_load_failed = False  # sticky flag — once set, stop retrying
 
 
 def _get_model():
-    global _model
-    if _model is None:
-        with _model_lock:
-            if _model is None:
-                logger.info("Loading embedding model (thread-safe)")
-                from sentence_transformers import SentenceTransformer
+    """Return the loaded SentenceTransformer model, or raise EmbeddingsUnavailable.
 
-                _model = SentenceTransformer(_MODEL_NAME)
-    return _model
+    Sticky failure: once a load attempt fails, subsequent calls raise
+    immediately rather than retrying every time. This avoids hammering
+    HF Hub when it's rate-limiting. The flag clears only on container
+    restart (which is the right escalation — if HF is down for more
+    than a minute, embeddings genuinely aren't available).
+    """
+    global _model, _model_load_failed
+    if _model is not None:
+        return _model
+    if _model_load_failed:
+        raise EmbeddingsUnavailable(
+            "Embedding model previously failed to load; not retrying. "
+            "Restart the container to retry."
+        )
+    with _model_lock:
+        if _model is not None:
+            return _model
+        if _model_load_failed:
+            raise EmbeddingsUnavailable(
+                "Embedding model previously failed to load; not retrying."
+            )
+        logger.info("Loading embedding model (thread-safe)")
+        try:
+            from sentence_transformers import SentenceTransformer
+
+            _model = SentenceTransformer(_MODEL_NAME)
+            logger.info("Embedding model loaded successfully")
+            return _model
+        except Exception as e:
+            _model_load_failed = True
+            logger.error(
+                "FAILED to load embedding model: %s. "
+                "Embedding-dependent features will degrade gracefully — "
+                "semantic router falls back to default intent, product "
+                "search uses keyword/ILIKE layers only.",
+                e,
+            )
+            raise EmbeddingsUnavailable(str(e)) from e
 
 
 # Public aliases for backward compat (both return the same instance)
@@ -136,26 +185,8 @@ async def embed_async(
     return await loop.run_in_executor(None, _encode_sync, lst, space, normalize)
 
 
-# ---- Compat para código já existente no catálogo ----
-
-
-def generate_embedding(text: str) -> List[float]:
-    """Compat: embedding individual para catálogo (products)."""
-    # MANTÉM SÍNCRONO POR COMPATIBILIDADE, MAS EVITE USAR EM ROTAS ASYNC
-    return embed_sync([text], space="products", normalize=False)[0]
-
-
-def generate_embeddings(texts: List[str]) -> List[List[float]]:
-    """Compat: batch para catálogo (products)."""
-    return embed_sync(texts, space="products", normalize=False)
-
-
 # ---- Atalhos ergonomicos (router) ----
 
 
 async def embed_router(texts: Iterable[str]) -> List[List[float]]:
     return await embed_async(texts, space="router", normalize=True)
-
-
-async def embed_products(texts: Iterable[str]) -> List[List[float]]:
-    return await embed_async(texts, space="products", normalize=False)

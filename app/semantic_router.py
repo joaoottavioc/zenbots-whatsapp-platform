@@ -228,8 +228,29 @@ def _argmax(xs: List[float]) -> Tuple[int, float]:
 
 
 async def semantic_intent(text: str) -> Tuple[str, float, str]:
-    await _ensure_proto_embeddings()
-    q = (await embed_router([text]))[0]
+    """Classify intent via embedding similarity against intent prototypes.
+
+    Graceful degradation: if the embedding model is unavailable (HF Hub
+    rate-limited, network outage, etc.), returns a low-confidence default
+    intent so the LLM tool-calling path can still process the message.
+    Without this fallback, the entire shopping pipeline would crash with
+    "algo deu errado" whenever HF Hub returns 429.
+    """
+    from app.embedding_service import EmbeddingsUnavailable
+
+    try:
+        await _ensure_proto_embeddings()
+        q = (await embed_router([text]))[0]
+    except EmbeddingsUnavailable:
+        logger.warning(
+            "[ROUTER] embeddings unavailable — falling back to default intent. "
+            "Pre-router guards still apply; LLM tool-calling will handle the message."
+        )
+        # Score below ALL thresholds → resolve_intent treats it as low
+        # confidence and defaults to GREETING_OR_QUESTION (which then routes
+        # to the LLM tool-calling path that can still handle ADD/REMOVE/etc).
+        return "GREETING_OR_QUESTION", 0.0, "(embeddings_unavailable)"
+
     best_intent, best_score, best_phrase = "GREETING_OR_QUESTION", -1.0, ""
     for intent, embs in _EMB_CACHE.items():
         sims = [cos_sim(q, e) for e in embs]

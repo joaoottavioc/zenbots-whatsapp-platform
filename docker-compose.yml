@@ -58,7 +58,26 @@ services:
     build:
       context: .
       target: backend
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # Phase 1A (Phase 1A.OOM): exclude non-source directories from the
+    # uvicorn --reload file watcher. The previous QA Run 3 was corrupted
+    # by `WatchfilesRustInternalError: Cannot allocate memory` — uvicorn's
+    # rust-based watcher had run out of inotify slots / RAM trying to
+    # watch the corpus image dirs (~100+ JSON extractions, hundreds of
+    # PNG images) and pycache trees that don't matter for hot-reload.
+    # Excluding them lets pytest subprocesses run inside the same
+    # container without competing for memory with the watcher.
+    command: >
+      uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      --reload-exclude '*.pyc'
+      --reload-exclude '__pycache__'
+      --reload-exclude '.git'
+      --reload-exclude '.ruff_cache'
+      --reload-exclude '.pytest_cache'
+      --reload-exclude '.claude'
+      --reload-exclude 'tests/simulation/corpus/extractions'
+      --reload-exclude 'tests/simulation/corpus/images'
+      --reload-exclude 'tests/simulation/corpus/rejected'
+      --reload-exclude 'node_modules'
     ports:
       - "8000:8000"
     volumes:
@@ -76,6 +95,15 @@ services:
       - REDIS_URL=redis://redis:6379/0
       # Host para a Fila ARQ (Banco 1 configurado no código python)
       - REDIS_HOST=redis
+      # 2026-04-09: HF cache is at /home/appuser/.cache/huggingface so the
+      # appuser runtime can read what gets downloaded. Pre-warm at startup
+      # caches the model in memory for the container's lifetime; subsequent
+      # find_relevant_products calls hit the in-memory model with no
+      # network IO. (The previous Dockerfile pre-warm cached as root and
+      # appuser couldn't see it — leaving lazy-load runtime to hit HF Hub
+      # and crash on 429 rate limits.)
+      - HF_HOME=/home/appuser/.cache/huggingface
+      - TRANSFORMERS_CACHE=/home/appuser/.cache/huggingface
     restart: unless-stopped
 
   # WORKER (Consumidor de mensagens)
@@ -101,6 +129,11 @@ services:
       # Precisa das mesmas configs do backend para acessar Banco e Redis
       - REDIS_URL=redis://redis:6379/0
       - REDIS_HOST=redis
+      # Same HF cache config as backend — worker uses find_relevant_products
+      # via the embedding service. Cache lives in appuser's home so the
+      # runtime user can read what gets downloaded by the lazy-load.
+      - HF_HOME=/home/appuser/.cache/huggingface
+      - TRANSFORMERS_CACHE=/home/appuser/.cache/huggingface
     restart: unless-stopped
 
 volumes:

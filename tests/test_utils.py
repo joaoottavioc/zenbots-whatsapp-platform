@@ -5,7 +5,6 @@ Tests for app/utils.py.
 Covered:
 - normalize_phone        (strip non-digits, strip "55" prefix, edge cases)
 - calculate_distance     (Haversine, same point, None coords, invalid strings)
-- check_delivery_radius  (within radius, outside radius, missing coords)
 - get_address_from_cep   (valid CEP with mocked HTTP, invalid format, API error)
 """
 
@@ -15,7 +14,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from app.utils import (
     normalize_phone,
     calculate_distance,
-    check_delivery_radius,
     get_address_from_cep,
     _fetch_coordinates,
 )
@@ -130,73 +128,6 @@ class TestCalculateDistance:
         d1 = calculate_distance(self.SP_LAT, self.SP_LON, self.RJ_LAT, self.RJ_LON)
         d2 = calculate_distance(self.RJ_LAT, self.RJ_LON, self.SP_LAT, self.SP_LON)
         assert d1 == pytest.approx(d2, rel=1e-6)
-
-
-# ===========================================================================
-# TestCheckDeliveryRadius
-# ===========================================================================
-
-
-class TestCheckDeliveryRadius:
-    """check_delivery_radius is async; pytest-asyncio handles coroutine execution."""
-
-    def _make_bot(self, lat, lon, radius=10.0):
-        bot = MagicMock()
-        bot.latitude = lat
-        bot.longitude = lon
-        bot.max_delivery_radius = radius
-        return bot
-
-    # SP coords used as the bot location
-    BOT_LAT, BOT_LON = -23.5505, -46.6333
-
-    async def test_within_radius_returns_true(self):
-        """A customer very close to the restaurant is within the delivery radius."""
-        bot = self._make_bot(self.BOT_LAT, self.BOT_LON, radius=10.0)
-        # Shift ~0.01 degrees (~1 km) — well within 10 km
-        is_ok, dist = await check_delivery_radius(
-            bot, self.BOT_LAT + 0.01, self.BOT_LON + 0.01
-        )
-        assert is_ok is True
-        assert dist < 10.0
-
-    async def test_outside_radius_returns_false(self):
-        """A customer far away (RJ) is outside a 10 km delivery radius."""
-        bot = self._make_bot(self.BOT_LAT, self.BOT_LON, radius=10.0)
-        RJ_LAT, RJ_LON = -22.9068, -43.1729
-        is_ok, dist = await check_delivery_radius(bot, RJ_LAT, RJ_LON)
-        assert is_ok is False
-        assert dist > 10.0
-
-    async def test_missing_bot_coords_returns_false(self):
-        """Bot without lat/lon always denies delivery (returns False, 0.0)."""
-        bot = self._make_bot(None, None, radius=10.0)
-        is_ok, dist = await check_delivery_radius(bot, -23.55, -46.63)
-        assert is_ok is False
-        assert dist == 0.0
-
-    async def test_missing_customer_lat_returns_false(self):
-        """None customer latitude returns (False, 9999.0)."""
-        bot = self._make_bot(self.BOT_LAT, self.BOT_LON, radius=10.0)
-        is_ok, dist = await check_delivery_radius(bot, None, -46.63)
-        assert is_ok is False
-        assert dist == 9999.0
-
-    async def test_missing_customer_lon_returns_false(self):
-        """None customer longitude returns (False, 9999.0)."""
-        bot = self._make_bot(self.BOT_LAT, self.BOT_LON, radius=10.0)
-        is_ok, dist = await check_delivery_radius(bot, -23.55, None)
-        assert is_ok is False
-        assert dist == 9999.0
-
-    async def test_exactly_on_radius_boundary_is_ok(self):
-        """A distance exactly equal to max_radius is accepted (<=)."""
-        bot = self._make_bot(self.BOT_LAT, self.BOT_LON, radius=10.0)
-        # Patch calculate_distance to return exactly 10.0
-        with patch("app.utils.calculate_distance", return_value=10.0):
-            is_ok, dist = await check_delivery_radius(bot, -23.60, -46.70)
-        assert is_ok is True
-        assert dist == 10.0
 
 
 # ===========================================================================

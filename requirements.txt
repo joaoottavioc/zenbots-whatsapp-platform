@@ -15,6 +15,13 @@ pgvector==0.2.5
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch
 sentence-transformers==3.0.1
+# protobuf is required by transformers' slow-tokenizer fallback (used by
+# the multilingual MiniLM tokenizer). Without it, SentenceTransformer init
+# crashes with ImportError → embedding model never loads → semantic search
+# and semantic router silently degrade to keyword/ILIKE only. Discovered
+# 2026-04-09 when Pão do Jão's bot tests scored 14% comprehension because
+# every embedding-dependent path was crashing.
+protobuf>=4.25
 openai==1.35.3
 python-multipart
 pymupdf

@@ -27,7 +27,7 @@ from app.models import (
     OrderStatus,
     CartState,
 )
-from app.schemas import BotUpdate, ProductUpdate
+from app.schemas import BotCreate, BotUpdate, ProductUpdate
 from app.embedding_service import embed_async
 from app.encryption import encrypt_value
 
@@ -434,25 +434,33 @@ async def find_relevant_products(
         if not _found_for_item:
             _EMBEDDING_MAX_DISTANCE = 0.3
             text_to_embed = f"PRODUTO PRINCIPAL: {item_name}"
-            embeddings = await embed_async(
-                [text_to_embed], space="products", normalize=False
-            )
-            query_embedding = embeddings[0]
-            embedding_query = (
-                select(Product)
-                .where(
-                    Product.bot_id == bot_id,
-                    Product.is_available == True,
-                    Product.is_deleted == False,
-                    Product.embedding.cosine_distance(query_embedding)
-                    < _EMBEDDING_MAX_DISTANCE,
+            try:
+                from app.embedding_service import EmbeddingsUnavailable
+
+                embeddings = await embed_async(
+                    [text_to_embed], space="products", normalize=False
                 )
-                .order_by(Product.embedding.cosine_distance(query_embedding))
-                .limit(limit_per_item)
-            )
-            for p in (await session.execute(embedding_query)).scalars().all():
-                if p.id not in all_results_map:
-                    all_results_map[p.id] = p
+                query_embedding = embeddings[0]
+                embedding_query = (
+                    select(Product)
+                    .where(
+                        Product.bot_id == bot_id,
+                        Product.is_available == True,
+                        Product.is_deleted == False,
+                        Product.embedding.cosine_distance(query_embedding)
+                        < _EMBEDDING_MAX_DISTANCE,
+                    )
+                    .order_by(Product.embedding.cosine_distance(query_embedding))
+                    .limit(limit_per_item)
+                )
+                for p in (await session.execute(embedding_query)).scalars().all():
+                    if p.id not in all_results_map:
+                        all_results_map[p.id] = p
+            except EmbeddingsUnavailable:
+                # Embedding model unavailable (HF rate limit, network outage, etc.)
+                # Skip the semantic layer — keyword/ILIKE results from layers 1-5
+                # are already collected and that's what we'll return.
+                pass
 
     # Retorna apenas os valores do dicionário, garantindo produtos únicos
     return list(all_results_map.values())
@@ -581,25 +589,32 @@ async def find_unavailable_products(
         if not _found_for_item:
             _UNAVAIL_EMBEDDING_MAX_DISTANCE = 0.35
             text_to_embed = f"PRODUTO PRINCIPAL: {item_name}"
-            embeddings = await embed_async(
-                [text_to_embed], space="products", normalize=False
-            )
-            query_embedding = embeddings[0]
-            emb_query = (
-                select(Product)
-                .where(
-                    Product.bot_id == bot_id,
-                    Product.is_available == False,
-                    Product.is_deleted == False,
-                    Product.embedding.cosine_distance(query_embedding)
-                    < _UNAVAIL_EMBEDDING_MAX_DISTANCE,
+            try:
+                from app.embedding_service import EmbeddingsUnavailable
+
+                embeddings = await embed_async(
+                    [text_to_embed], space="products", normalize=False
                 )
-                .order_by(Product.embedding.cosine_distance(query_embedding))
-                .limit(limit)
-            )
-            for p in (await session.execute(emb_query)).scalars().all():
-                if p.id not in results_map:
-                    results_map[p.id] = p
+                query_embedding = embeddings[0]
+                emb_query = (
+                    select(Product)
+                    .where(
+                        Product.bot_id == bot_id,
+                        Product.is_available == False,
+                        Product.is_deleted == False,
+                        Product.embedding.cosine_distance(query_embedding)
+                        < _UNAVAIL_EMBEDDING_MAX_DISTANCE,
+                    )
+                    .order_by(Product.embedding.cosine_distance(query_embedding))
+                    .limit(limit)
+                )
+                for p in (await session.execute(emb_query)).scalars().all():
+                    if p.id not in results_map:
+                        results_map[p.id] = p
+            except EmbeddingsUnavailable:
+                # Same graceful-degrade pattern as find_relevant_products: skip
+                # the semantic layer when the model is unavailable.
+                pass
 
     return list(results_map.values())
 
@@ -617,41 +632,29 @@ async def get_user_by_id(session: AsyncSession, user_id: int) -> Optional[User]:
 async def create_bot(
     session: AsyncSession,
     user_id: int,
-    whatsapp_number: Optional[str] = None,
-    restaurant_name: Optional[str] = None,
-    pix_key: Optional[str] = None,
-    whatsapp_token: Optional[str] = None,
-    phone_number_id: Optional[str] = None,
-    delivery_fee: float = 0.0,
-    min_order_value: float = 0.0,
-    is_open: bool = True,
-    closing_message: Optional[str] = None,
-    schedule: Optional[Dict[str, Any]] = None,
+    bot_data: BotCreate,
 ) -> Optional[Bot]:
 
     # Check if a bot with this number already exists (skip if no number yet)
-    if whatsapp_number:
+    if bot_data.whatsapp_number:
         existing_bot_result = await session.execute(
-            select(Bot).where(Bot.whatsapp_number == whatsapp_number)
+            select(Bot).where(Bot.whatsapp_number == bot_data.whatsapp_number)
         )
         if existing_bot_result.scalars().first():
             return None
 
-    # Create the new Bot object with all fields
-    new_bot = Bot(
-        user_id=user_id,
-        whatsapp_number=whatsapp_number,
-        restaurant_name=restaurant_name,
-        pix_key=pix_key,
-        # ▼▼▼ ASSIGN NEW FIELDS ▼▼▼
-        whatsapp_token=encrypt_value(whatsapp_token) if whatsapp_token else "",
-        phone_number_id=phone_number_id or "",
-        delivery_fee=delivery_fee,
-        min_order_value=min_order_value,
-        is_open=is_open,
-        closing_message=closing_message or "Olá! No momento estamos fechados.",
-        schedule=schedule or {},
+    # Build bot from all schema fields
+    data = bot_data.dict(exclude_unset=False)
+    # Encrypt token before storing
+    token = data.pop("whatsapp_token", None)
+    data["whatsapp_token"] = encrypt_value(token) if token else ""
+    data["phone_number_id"] = data.get("phone_number_id") or ""
+    data["closing_message"] = (
+        data.get("closing_message") or "Olá! No momento estamos fechados."
     )
+    data["schedule"] = data.get("schedule") or {}
+
+    new_bot = Bot(user_id=user_id, **data)
 
     session.add(new_bot)
     await session.commit()
@@ -737,8 +740,28 @@ async def create_product(
         f"DESCRIÇÃO E INGREDIENTES: {description or 'N/A'}. "
         f"CATEGORIAS E TAGS: {keywords or 'N/A'}."
     )
-    embeddings = await embed_async([text_to_embed], space="products", normalize=False)
-    embedding_vector = embeddings[0]
+    # Graceful degradation: if the embedding model is unavailable, persist
+    # the product with a zero vector. The product remains fully searchable
+    # via the keyword/ILIKE layers (1-5) of find_relevant_products. Layer 6
+    # (semantic similarity) skips this product because cosine distance to a
+    # zero vector is undefined / always at the threshold ceiling. When
+    # embeddings come back online, a future re-embedding pass can backfill.
+    try:
+        from app.embedding_service import EmbeddingsUnavailable
+
+        embeddings = await embed_async(
+            [text_to_embed], space="products", normalize=False
+        )
+        embedding_vector = embeddings[0]
+    except EmbeddingsUnavailable:
+        import logging as _log
+
+        _log.getLogger(__name__).warning(
+            "Embedding model unavailable — persisting product '%s' with zero vector. "
+            "Will need re-embedding when the model is back online.",
+            name,
+        )
+        embedding_vector = [0.0] * 384
 
     new_product = Product(
         bot_id=bot_id,
@@ -1146,23 +1169,6 @@ async def set_human_takeover_by_phone(
     return True
 
 
-async def delete_order(session: AsyncSession, order_id: int) -> bool:
-    """
-    Encontra e deleta um pedido pelo seu ID.
-    Útil para reverter a criação de um pedido se o pagamento falhar.
-    """
-    order_to_delete = await session.get(Order, order_id)
-
-    if not order_to_delete:
-        logger.warning("Order %s not found for deletion", order_id)
-        return False
-
-    await session.delete(order_to_delete)
-    await session.commit()
-    logger.info("Order %s deleted", order_id)
-    return True
-
-
 # Status set that counts as a "completed order" for pricing / overage billing.
 # An order is counted once on its first transition into any of these; further
 # transitions between them (paid -> preparing -> ready -> completed) are NOT
@@ -1402,28 +1408,11 @@ async def update_item_notes(
     return None
 
 
-async def get_subscription_by_mp_id(
-    session: AsyncSession, mp_id: str
-) -> Optional[Subscription]:
-    stmt = select(Subscription).where(Subscription.mp_subscription_id == mp_id)
-    result = await session.execute(stmt)
-    return result.scalars().first()
-
-
 # ▼▼▼ NOVA FUNÇÃO PARA BUSCAR ASSINATURA POR BOT ▼▼▼
 async def get_subscription_by_bot(
     session: AsyncSession, bot_id: int
 ) -> Optional[Subscription]:
     stmt = select(Subscription).where(Subscription.bot_id == bot_id)
-    result = await session.execute(stmt)
-    return result.scalars().first()
-
-
-# (Esta função fica deprecada, mas mantida por segurança)
-async def get_subscription_by_user(
-    session: AsyncSession, user_id: int
-) -> Optional[Subscription]:
-    stmt = select(Subscription).where(Subscription.user_id == user_id)
     result = await session.execute(stmt)
     return result.scalars().first()
 
@@ -1578,10 +1567,6 @@ async def cancel_expired_pix_orders(session: AsyncSession):
 async def list_plans(session: AsyncSession) -> List[Plan]:
     result = await session.execute(select(Plan).order_by(Plan.id))
     return result.scalars().all()
-
-
-async def get_plan_by_id(session: AsyncSession, plan_id: int) -> Optional[Plan]:
-    return await session.get(Plan, plan_id)
 
 
 async def get_plan_by_key(session: AsyncSession, key: str) -> Optional[Plan]:
