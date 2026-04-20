@@ -353,10 +353,10 @@ class TestPrefixCachingStructure:
 
 
 class TestReducedExamples:
-    """T1-2: Verify example count reduced from 13 to 10."""
+    """T1-2: Verify the few-shot example count."""
 
-    def test_example_count_is_12(self):
-        """Prompt must contain exactly 12 example groups (36 messages: user+assistant+tool each)."""
+    def test_example_count(self):
+        """Prompt must contain exactly 13 example groups (39 messages: user+assistant+tool each)."""
         messages = create_central_prompt(
             user_query="oi",
             history=[],
@@ -369,7 +369,7 @@ class TestReducedExamples:
         ]
         example_msgs = messages[system_indices[0] + 1 : system_indices[1]]
         # Each example is a triplet (user, assistant, tool)
-        assert len(example_msgs) == 36  # 12 examples * 3 messages each
+        assert len(example_msgs) == 39  # 13 examples * 3 messages each
 
     def test_removed_examples_not_present(self):
         """Removed examples (ex7, ex_ordinals, ex_notes_simple) must not appear."""

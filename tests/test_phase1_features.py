@@ -2343,3 +2343,74 @@ class TestPartialRemovalFewShot:
         assert "tirar" in system_content.lower()
         assert "subtrair" in system_content.lower() or "SUBTRAIR" in system_content
         assert "NUNCA use `add_items_to_cart` quando" in system_content
+
+
+# ---------------------------------------------------------------------------
+# Day 2.0 — F1b: _FINISH_KEYWORD_RE regression tests
+#
+# The pre-router FINISH guard previously required "fechar" to be followed by
+# "pedido" / "a conta", missing very common Brazilian slang like "vamo
+# fechar", "bora fechar", "pode fechar", "vou fechar". F1b extends the regex
+# to accept those verb-prefixed bare-fechar forms while keeping the original
+# alternatives. These tests lock the new patterns AND verify we did not
+# accidentally regress the original ones.
+# ---------------------------------------------------------------------------
+
+
+class TestFinishKeywordRegex:
+    """Direct regex tests for _FINISH_KEYWORD_RE (F1b, 2026-04-08)."""
+
+    def test_finalizar_still_matches(self):
+        from app.whatsapp import _FINISH_KEYWORD_RE
+
+        assert _FINISH_KEYWORD_RE.search("vamo finalizar pode mandar")
+        assert _FINISH_KEYWORD_RE.search("finaliza aí")
+        assert _FINISH_KEYWORD_RE.search("to com fome vamo finalizar pode mandar")
+
+    def test_fechar_pedido_still_matches(self):
+        from app.whatsapp import _FINISH_KEYWORD_RE
+
+        assert _FINISH_KEYWORD_RE.search("fechar pedido")
+        assert _FINISH_KEYWORD_RE.search("fechar o pedido")
+        assert _FINISH_KEYWORD_RE.search("fechar meu pedido")
+        assert _FINISH_KEYWORD_RE.search("fechar a conta")
+        assert _FINISH_KEYWORD_RE.search("encerrar o pedido")
+
+    def test_vamo_fechar_now_matches(self):
+        """F1b: bare 'vamo fechar' (no 'pedido') is now a FINISH signal."""
+        from app.whatsapp import _FINISH_KEYWORD_RE
+
+        assert _FINISH_KEYWORD_RE.search("vamo fechar")
+        assert _FINISH_KEYWORD_RE.search("vamos fechar")
+        assert _FINISH_KEYWORD_RE.search("vamo fecha")  # colloquial -r drop
+        assert _FINISH_KEYWORD_RE.search("to com fome vamo fechar pode mandar")
+        assert _FINISH_KEYWORD_RE.search("isso, vamo fechar isso aí")
+
+    def test_other_fechar_prefixes_now_match(self):
+        """F1b: bora/vou/pode + fechar are also FINISH signals."""
+        from app.whatsapp import _FINISH_KEYWORD_RE
+
+        assert _FINISH_KEYWORD_RE.search("bora fechar")
+        assert _FINISH_KEYWORD_RE.search("vou fechar")
+        assert _FINISH_KEYWORD_RE.search("pode fechar")
+        assert _FINISH_KEYWORD_RE.search("pode já fechar")
+        assert _FINISH_KEYWORD_RE.search("pode ja fechar")  # no accent
+
+    def test_bare_fechar_alone_does_not_match(self):
+        """A standalone 'fechar' without a verb prefix or 'pedido' must NOT
+        match — that would over-trigger on phrases like 'vou fechar a porta'
+        which never appear in our corpus but could be ambiguous."""
+        from app.whatsapp import _FINISH_KEYWORD_RE
+
+        # Just the bare verb in isolation
+        assert _FINISH_KEYWORD_RE.search("fechar") is None
+        # In a non-finishing context — note the lack of vamo/bora/vou/pode
+        assert _FINISH_KEYWORD_RE.search("posso fechar?") is None
+
+    def test_unrelated_text_does_not_match(self):
+        from app.whatsapp import _FINISH_KEYWORD_RE
+
+        assert _FINISH_KEYWORD_RE.search("oi") is None
+        assert _FINISH_KEYWORD_RE.search("quero 2 x burger") is None
+        assert _FINISH_KEYWORD_RE.search("o que tem de bom") is None
+        assert _FINISH_KEYWORD_RE.search("tira o coca") is None

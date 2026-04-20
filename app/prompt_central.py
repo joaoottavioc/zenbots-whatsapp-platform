@@ -106,6 +106,12 @@ Regra de remoção parcial (IMPORTANTE):
 - Exemplo: se o carrinho tem 12x Prensadão e o cliente diz “tire dois prensadão”, a nova quantidade é 12 - 2 = 10. Use `modify_item_quantity` com new_quantity=10 ou `bulk_modify_quantities` para múltiplos itens.
 - NUNCA use `add_items_to_cart` quando o cliente pedir para tirar/remover itens.
 
+Regra de quantidade fixa "deixa só N" (IMPORTANTE — padrão DIFERENTE de "tire N"):
+- Quando o cliente disser "deixa só N X", "fica só N X", "muda pra N X", "põe só N X", "coloca só N X" — isso significa que a quantidade FINAL do item X deve ser N (não adicione N, não subtraia N — DEFINA o total como N).
+- Exemplo: o carrinho tem 3x Latte. Cliente diz "deixa só 1 latte". Use `modify_item_quantity` com new_quantity=1. Resultado: o carrinho fica com 1x Latte. Os outros itens NÃO são afetados.
+- NUNCA use `add_items_to_cart` para "deixa só N X" — isso resultaria em N+atual = errado (3+1=4 em vez de 1).
+- Isto é diferente de "tire 2 latte" (que SUBTRAI 2 do atual). "deixa só N" SOBRESCREVE; "tire N" SUBTRAI.
+
 3. Se for uma dúvida genérica (ex: “tem algo com chocolate?”) → use `answer_with_found_products` com nomes reais dos produtos encontrados.
 4. Você **sempre** deve responder usando UMA chamada de ferramenta do catálogo (`tools_schema`), sem nunca responder em texto puro.
 7. Se o pedido for uma SUGESTÃO GENÉRICA (ex: "tem algo com chocolate?", "quais as sobremesas?", "me ve um prato com pato", "o que tem com bacon aí?") → use a ferramenta `search_catalog_for_suggestions` e extraia apenas o conceito principal da comida para o parâmetro `search_concept`.
@@ -462,6 +468,40 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
         "content": "Quantidades atualizadas.",
     }
 
+    # F2 (2026-04-09) — "deixa só N" pattern (quantity SET, not subtract).
+    # Critical: this is structurally different from "tire N" / partial remove.
+    # "tire N" means SUBTRACT N from current. "deixa só N" means SET to N.
+    # The cart in this example has 3x Latte before the message; after
+    # "deixa só 1 latte", the new_quantity must be 1 (NOT 3-1=2 and NOT
+    # add 1 to make 4). Without this example, the LLM defaults to
+    # add_items_to_cart(latte, qty=1) which merges to 4 — exactly the
+    # 0%-failure pattern observed for the qty_reduction test scenario.
+    ex_qty_set_user = {
+        "role": "user",
+        "content": "deixa só 1 latte",
+    }
+    ex_qty_set_assistant = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": "call-ex-qty-set",
+                "type": "function",
+                "function": {
+                    "name": "modify_item_quantity",
+                    "arguments": json.dumps(
+                        {"product_id": 701, "new_quantity": 1}  # SET to 1, not add
+                    ),
+                },
+            }
+        ],
+    }
+    ex_qty_set_tool = {
+        "role": "tool",
+        "tool_call_id": "call-ex-qty-set",
+        "content": "Quantidade do item atualizada.",
+    }
+
     # Exemplo: Adicionar com observação complexa
     ex_notes_complex_user = {
         "role": "user",
@@ -564,6 +604,12 @@ Após a confirmação do cliente, NÃO gere outra resposta: o backend executará
         ex_partial_remove_user,
         ex_partial_remove_assistant,
         ex_partial_remove_tool,
+        # F2: quantity-set "deixa só N X" pattern — paired with the partial
+        # remove example so the LLM sees both "subtract N" and "set to N"
+        # back-to-back and learns the distinction.
+        ex_qty_set_user,
+        ex_qty_set_assistant,
+        ex_qty_set_tool,
         ex_notes_complex_user,
         ex_notes_complex_assistant,
         ex_notes_complex_tool,

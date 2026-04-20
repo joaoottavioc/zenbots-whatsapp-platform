@@ -1427,20 +1427,37 @@ async def _handle_shopping_intent(
             # means explicit qty. No standalone digit = remove ALL.
             import re as _re_mod
 
+            # F2 fix (2026-04-09): the unit alternation needs `\b` AFTER it
+            # because the bare letters `l` and `g` would otherwise match the
+            # first letter of words like "latte", "limão", "linguiça",
+            # "galinha", "goiabada", causing "deixa só 1 latte" to be parsed
+            # as "1L atte" (a 1-litre size token), which made
+            # _has_explicit_qty=False → full_removal=True → bot removes the
+            # entire item instead of setting it to qty 1. The bug was latent
+            # because pre-F2, "deixa só N X" went to ADD intent, never
+            # reaching this code path.
             _has_explicit_qty = bool(
                 _re_mod.search(
-                    r"(?<![a-záàâãéèêíìîóòôõúùûç])\d+(?!\s*(?:ml|l|g|kg|un|pç|pecas|peças))\b",
+                    r"(?<![a-záàâãéèêíìîóòôõúùûç])\d+(?!\s*(?:ml|l|g|kg|un|pç|pecas|peças)\b)\b",
                     text_body,
                     _re_mod.IGNORECASE,
                 )
             ) or any(q != 1 for q, _ in _qty_pairs)
             _full_removal = not _has_explicit_qty
 
+            # F2: detect "deixa só N X" / "fica só N X" / "muda pra N X" —
+            # SET semantics (N is the final qty), not subtract semantics.
+            _qty_set_mode = bool(_QTY_REDUCE_RE.search(text_body))
+            if _qty_set_mode:
+                # Override full_removal — set-mode always has an explicit qty
+                _full_removal = False
+
             _reduce_result = _programmatic_cart_reduce(
                 _qty_pairs,
                 cart.items,
                 text_body,
                 full_removal=_full_removal,
+                set_mode=_qty_set_mode,
             )
             if _reduce_result:
                 _updates, _response_parts = _reduce_result
@@ -3124,6 +3141,57 @@ async def _process_contact_message_inner(
             )
             cart.last_suggestions = None
             clear_pending(cart)
+    # F5 (2026-04-09) — verb-prefix bypass for ADD and QTY_REDUCE patterns.
+    #
+    # Without this, the suggestion handler's name-overlap matcher fires on
+    # explicit shopping commands that happen to mention products sharing
+    # 4+ char words with the active suggestion list. Example failure:
+    # bot offers [Coca Cola Zero, Guaraná, Sprite] as suggestions, customer
+    # says "vou querer um Coca Lata" — handler sees "coca" overlapping
+    # with "Coca Cola Zero", treats it as selection of option 1, adds the
+    # WRONG product. The trap_unrelated_add scenario fails this way.
+    #
+    # Part A — ADD verb + qty + product, no selection signal: same safety
+    # pattern as the FINISH guard above. _ADD_KEYWORD_RE only matches when
+    # the message has the unambiguous "verb + qty word/digit + product
+    # letter" shape, which is a clear shopping command. The selection-signal
+    # check (digit OR ordinal anywhere in the message) is the safety net
+    # for ambiguous cases like "vou querer 1 do primeiro" — let the
+    # suggestion handler try those first.
+    if cart.last_suggestions and _ADD_KEYWORD_RE.search(text_body):
+        _has_selection_signal = bool(re.search(r"\b\d+\b", text_body)) or any(
+            o in text_body.lower()
+            for o in ("primeir", "segund", "terceir", "quart", "quint")
+        )
+        if not _has_selection_signal:
+            logger.info(
+                "[SUGGESTION] cleared by ADD verb (no selection signal): %r",
+                text_body[:80],
+            )
+            cart.last_suggestions = None
+            clear_pending(cart)
+    # Part B — QTY_REDUCE patterns are NEVER selections. The "deixa só N X"
+    # / "fica só N X" / "muda pra N X" shape is unambiguously a quantity
+    # update on an existing cart item — bypass unconditionally so F2's
+    # pre-router QTY_REDUCE guard can take over and dispatch SET semantics
+    # via _programmatic_cart_reduce(set_mode=True).
+    if cart.last_suggestions and _QTY_REDUCE_RE.search(text_body):
+        logger.info("[SUGGESTION] cleared by QTY_REDUCE pattern: %r", text_body[:80])
+        cart.last_suggestions = None
+        clear_pending(cart)
+    # Part C (F4, 2026-04-09) — CLEAR keywords are NEVER selections.
+    # "limpa tudo" / "esvazia o carrinho" / "zera o pedido" / "apaga tudo"
+    # is unambiguously a total-clear command — bypass unconditionally so
+    # F4's pre-router CLEAR guard can take over and route to CLEAR_CART
+    # (which then dispatches `_handle_clear_cart` → `clear_db_cart`).
+    # Without this, the suggestion handler intercepts "limpa tudo",
+    # extracts (1, 'limpa tudo'), fails to match any product, and falls
+    # through to the LLM with no intent hint — clears the cart only ~30%
+    # of the time. The trap_clear scenario specifically tests this.
+    if cart.last_suggestions and _CLEAR_KEYWORD_RE.search(text_body):
+        logger.info("[SUGGESTION] cleared by CLEAR keyword: %r", text_body[:80])
+        cart.last_suggestions = None
+        clear_pending(cart)
     if cart.state in [CartState.GREETING, CartState.SHOPPING] and cart.last_suggestions:
         sug_result = await _handle_suggestion_selection(mctx)
         if sug_result is not None:
@@ -3615,11 +3683,18 @@ def _programmatic_cart_reduce(
     cart_items: list,
     text_body: str,
     full_removal: bool = False,
+    set_mode: bool = False,
 ) -> tuple[list[tuple], list[str]] | None:
     """Programmatically reduce cart quantities for 'tire/tira N X' patterns.
 
     When full_removal=True (no explicit quantity in a remove message),
     "tira o X" removes ALL of X instead of just 1.
+
+    F2 (2026-04-09): when set_mode=True, the function uses SET semantics
+    instead of SUBTRACT — for "deixa só N X" / "fica só N X" / "muda pra N X"
+    patterns where N is the desired FINAL quantity (not the amount to
+    subtract). Caller is responsible for distinguishing the two modes
+    via the pre-router QTY_REDUCE guard.
 
     Returns list of (cart_item, new_quantity) tuples and response parts,
     or None if no matches found.
@@ -3713,6 +3788,9 @@ def _programmatic_cart_reduce(
             if full_removal:
                 # "tira o X" without explicit qty → remove all
                 new_qty = 0
+            elif set_mode:
+                # F2: "deixa só N X" — N is the final qty, not a delta.
+                new_qty = max(0, req_qty)
             elif best_item.id in updates:
                 _, prev_qty = updates[best_item.id]
                 new_qty = max(0, prev_qty - req_qty)
@@ -3726,13 +3804,15 @@ def _programmatic_cart_reduce(
                     f"{best_item.product.name}: {best_item.quantity} \u2192 {new_qty}"
                 )
             logger.info(
-                "[REDUCE] %s: %d - %s = %d (score=%.2f, full_removal=%s)",
+                "[REDUCE] %s: %d %s %s = %d (score=%.2f, full_removal=%s, set_mode=%s)",
                 best_item.product.name,
                 best_item.quantity,
+                "→" if set_mode else "-",
                 "ALL" if full_removal else str(req_qty),
                 new_qty,
                 best_score,
                 full_removal,
+                set_mode,
             )
 
     if not updates:
@@ -4181,6 +4261,14 @@ _ADD_KEYWORD_RE = re.compile(
 # misclassifies slang phrases like "vamo finalizar, pode mandar aí" as ADD
 # (because "pode mandar" is an ADD prototype) even though "finalizar" is the
 # real intent. Matches at word boundaries to avoid false positives.
+#
+# Day 1.5 finding F1b (2026-04-08): the regex previously required "fechar"
+# to be followed by "pedido" / "a conta". Real Brazilian customers very
+# commonly say "vamo fechar", "pode fechar", "vou fechar", "bora fechar"
+# without the noun. We now match those verb-prefixed bare-fechar forms too.
+# False-positive risk ("fechar com X" meaning "include X") is small in our
+# corpus and the bot recovers gracefully — the customer can just say "ainda
+# quero adicionar X" and we route back through ADD.
 _FINISH_KEYWORD_RE = re.compile(
     r"\b("
     r"finaliz\w*"
@@ -4188,6 +4276,8 @@ _FINISH_KEYWORD_RE = re.compile(
     r"|fecho\s+(?:o\s+|meu\s+)?pedido"
     r"|fecha(?:r)?\s+a\s+conta"
     r"|encerra(?:r)?\s+(?:o\s+)?pedido"
+    # F1b: verb-prefixed bare fechar
+    r"|(?:vamo[s]?|bora|vou|pode(?:\s+j[aá])?)\s+fecha(?:r)?\b"
     r")\b",
     re.IGNORECASE,
 )
@@ -4229,6 +4319,64 @@ _BARE_ADD_RE = re.compile(
     re.IGNORECASE,
 )
 
+# F2 (2026-04-09) — Quantity-set ("deixa só N X") pre-router pattern.
+#
+# Catches messages like "deixa só 1 latte", "fica só 2 coca", "muda pra 3
+# pizza", "põe só uma água" — where the customer wants to SET an item's
+# quantity (not add to or subtract from it). Without this guard, the
+# semantic router classifies it as ADD (because "1 latte" embeds toward
+# ADD prototypes), the LLM calls add_items_to_cart with qty=1, the cart-
+# merge logic adds 1 to the existing qty, and the customer ends up with
+# qty+1 instead of just N. Reproduced live before shipping: cart had
+# Latte×3 + Café Preto×2; "deixa só 1 latte" → bot replied "✅ 4x Latte"
+# (added 1 to existing 3 instead of setting to 1).
+#
+# Routes to MODIFY intent. The static system prompt + a new few-shot
+# example teach the LLM to use modify_item_quantity with new_quantity=N
+# (NOT add_items_to_cart). The pre-router guard ensures the LLM gets
+# MODIFY intent — without it the LLM might still pick the wrong tool
+# even with examples.
+#
+# Negative lookahead excludes follow-up words that would create false
+# positives ("deixa só pensar", "deixa só pra hoje" — both lack a real
+# qty word and product name in the right position).
+_QTY_REDUCE_RE = re.compile(
+    r"\b(?:deixa|fica|muda|coloca|p[oõ]e)\s+"
+    r"(?:s[oó]|apenas|pra|para)\s+"
+    rf"(?:{_ADD_QTY_WORDS}|\d+)\s+"
+    r"\w{3,}",
+    re.IGNORECASE,
+)
+
+# F4 (2026-04-09) — Clear-cart pre-router pattern.
+#
+# Catches "limpa tudo", "esvazia o carrinho", "zera o pedido", "apaga
+# tudo" — total cart-clear commands. Without this guard, "limpa tudo"
+# falls through every pre-router branch, gets intercepted by the
+# suggestion handler (which extracts "[(1, 'limpa tudo')]" and tries
+# to match it against suggestion products → no match), then lands at
+# the LLM with no intent hint. The LLM clears the cart only ~20-40%
+# of the time.
+#
+# Routes to CLEAR_CART. The downstream `_handle_clear_cart` already
+# wires this intent to `clear_db_cart` and the suggestion-handler
+# bypass below ensures the message reaches resolve_intent.
+#
+# Verbs: limpa(r|e), esvazia(r|e), zera(r), apaga(r|e). Objects:
+# tudo / td / (o|meu|todo) (carrinho|pedido). False-positive risk on
+# "limpa o copo" / "limpa minha mesa" is zero — those don't match
+# the carrinho|pedido|tudo object alternation.
+_CLEAR_KEYWORD_RE = re.compile(
+    r"\b(?:"
+    r"limp[ae](?:r|ndo)?"
+    r"|esvazi[ae](?:r|ndo)?"
+    r"|zer[ae](?:r|ndo)?"
+    r"|apag[ae](?:r|ndo)?"
+    r")\s+"
+    r"(?:tudo|td|(?:o\s+|meu\s+|todo\s+(?:o\s+)?)?(?:carrinho|pedido))\b",
+    re.IGNORECASE,
+)
+
 
 # Score from the last resolve_intent call. Used by the checkout guard
 # to block low-confidence shopping intents from breaking checkout flow.
@@ -4242,6 +4390,38 @@ async def resolve_intent(text_body, cart, cart_items_for_intent, found_products=
     # 0. Cart-state-aware override: during checkout, some intents are reinterpreted
     cart_state = getattr(cart, "state", None)
     in_checkout = cart_state in _CHECKOUT_STATES
+
+    # 0a. Pre-router QTY-REDUCE guard (F2, 2026-04-09).
+    # Catches "deixa só N X" / "fica só N X" / "muda pra N X" — quantity-SET
+    # patterns where the customer wants the item's qty to BECOME N, not add
+    # N to the existing total. Routes to MODIFY so the LLM picks
+    # modify_item_quantity (with new_quantity=N) instead of add_items_to_cart
+    # (which would merge with the existing qty and overshoot).
+    # Placed BEFORE the REMOVE block so the precedence is explicit, even
+    # though the patterns don't actually overlap (_REMOVE_ALT_RE matches
+    # "deixa o X pra la" / "deixa sem o X" — completely different shape).
+    if _QTY_REDUCE_RE.search(text_body):
+        logger.info("[INTENT] pre-router QTY-REDUCE guard matched: %r", text_body[:80])
+        _last_router_score = 1.0
+        final_intent = "MODIFY"
+        if in_checkout and final_intent in _CHECKOUT_INTENT_OVERRIDES:
+            final_intent = _CHECKOUT_INTENT_OVERRIDES[final_intent]
+        return final_intent
+
+    # 0a2. Pre-router CLEAR guard (F4, 2026-04-09).
+    # Catches "limpa tudo" / "esvazia o carrinho" / "zera o pedido" /
+    # "apaga tudo" — total cart-clear commands. The semantic router
+    # already lists CLEAR_CART prototypes but only fires above 0.83 sim,
+    # which "limpa tudo" doesn't always clear. Pre-router gives 100% recall
+    # on the pattern. CLEAR_CART is in _CHECKOUT_INTENT_OVERRIDES so during
+    # checkout it routes to BACK_TO_SHOPPING (existing behavior preserved).
+    if _CLEAR_KEYWORD_RE.search(text_body):
+        logger.info("[INTENT] pre-router CLEAR guard matched: %r", text_body[:80])
+        _last_router_score = 1.0
+        final_intent = "CLEAR_CART"
+        if in_checkout and final_intent in _CHECKOUT_INTENT_OVERRIDES:
+            final_intent = _CHECKOUT_INTENT_OVERRIDES[final_intent]
+        return final_intent
 
     # 0b. Pre-router guard: obvious REMOVE/MODIFY patterns bypass the semantic router.
     # "tire/tira/retira/remove" + qty + product is unambiguously a cart reduction,

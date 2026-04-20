@@ -249,6 +249,12 @@ class CatalogUploadRequest(BaseModel):
     catalog_text: str
 
 
+class CatalogUrlUploadRequest(BaseModel):
+    """Schema para o endpoint que recebe um link do iFood."""
+
+    url: str = Field(max_length=500)
+
+
 class OrderItemResponse(BaseModel):
     quantity: int
     notes: Optional[str] = None

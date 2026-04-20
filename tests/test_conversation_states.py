@@ -622,7 +622,6 @@ class TestPaymentMethodState(BaseConversationTest):
         mock_order.id = 42
         mock_order.total_amount = 35.0
         self.crud_mock.create_order = AsyncMock(return_value=mock_order)
-        self.crud_mock.delete_order = AsyncMock()
         self.mock_order = mock_order
 
     @pytest.mark.asyncio

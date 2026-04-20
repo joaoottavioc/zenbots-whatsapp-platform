@@ -142,6 +142,13 @@ _STOP = frozenset(
         "faz",
         "fazer",
         "to",
+        # "rola" = informal "send/give me" (Brazilian slang). Without this,
+        # `extract_items_with_quantities("rola um chocolate quente tipo europa")`
+        # returns `[(1, 'rola'), (1, 'chocolate quente tipo europa')]` —
+        # the verb leaks into the item list, adding search noise and
+        # confusing downstream find_relevant_products. Discovered 2026-04-09
+        # via Doce Café's continuation test.
+        "rola",
     }
 )
 
@@ -458,10 +465,6 @@ def _resolve_compound_qty(words: List[str], start: int) -> Tuple[int, int]:
     total = 0
     current = _QTY_VALUES.get(words[start], 0)
     j = start + 1
-
-    def _next_val(idx: int) -> int | None:
-        """Get the numeric value of word at idx, or None."""
-        return _QTY_VALUES.get(words[idx]) if idx < len(words) else None
 
     while j < len(words):
         nxt = words[j]

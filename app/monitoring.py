@@ -409,7 +409,7 @@ async def record_business_event(
         logger.debug("Business event counter failed (non-critical): %s", e)
 
 
-async def record_error(source: str, error_type: str = "unknown") -> None:
+async def record_error(source: str, _error_type: str = "unknown") -> None:
     """Increment error counter. Source examples: 'openai', 'whatsapp', 'payment'."""
     try:
         r = await _get_redis_monitor()

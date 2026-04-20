@@ -219,11 +219,16 @@ How customers change existing orders.
 
 ### 6.2 Quantity Adjustment
 ```
-"na verdade troca a coca por guaraná"
-"são 3, não 2"
-"coloca mais 1 batata"
-"diminui pra 2 x-bacon"
+"na verdade troca a coca por guaraná"   # swap — NOT supported
+"são 3, não 2"                          # delta correction — partial
+"coloca mais 1 batata"                  # supported via continuation guard
+"diminui pra 2 x-bacon"                 # supported via F2 (deixa só 2 x-bacon)
+"deixa só 1 latte"                      # SET semantics — supported via F2
+"fica só 2 coca"                        # SET semantics — supported via F2
+"muda pra 3 pizza"                      # SET semantics — supported via F2
 ```
+
+**Status (2026-04-09):** "deixa/fica/muda + só/apenas/pra + qty + product" patterns route through F2's `_QTY_REDUCE_RE` pre-router guard → MODIFY intent → `_programmatic_cart_reduce(set_mode=True)`. The qty becomes the FINAL quantity, not a delta. Item swap (`troca X por Y`) is still not supported.
 
 ### 6.3 Remove with Explanation (the noisy case)
 ```
@@ -232,6 +237,22 @@ How customers change existing orders.
 "pode tirar a coca, ele já comeu"
 ```
 **Impact:** Explanation text absorbed into item name by extractor. Most common source of noise in MODIFY intent.
+
+### 6.4 Total cart clearing
+```
+"limpa tudo"
+"esvazia o carrinho"
+"zera o pedido"
+"apaga tudo"
+"limpa td"            # slang abbreviation
+"limpa meu carrinho"
+"esvazia carrinho"    # no article
+"apagar o pedido"     # infinitive
+```
+
+**Status (2026-04-09):** Supported via F4's `_CLEAR_KEYWORD_RE` pre-router guard → CLEAR_CART intent → `_handle_clear_cart`. Also bypasses the suggestion-handler when active suggestions are present (F5 Part C). False-positive guard ensures `"limpa o copo"` / `"apaga a luz"` don't match — the object alternation requires `tudo|td|carrinho|pedido`.
+
+Variants NOT supported (and not commonly used by Brazilian customers): `"deleta tudo"`, `"remove tudo"` (these go through the REMOVE path instead).
 
 ---
 
@@ -251,22 +272,43 @@ Described by AiPyra CRM: delivery orders spike sharply around 7:30 PM BRT. This 
 
 ## 9. Platform Capability Status
 
+> Updated 2026-04-09 to reflect Pillar 1 + Pillar 2 fixes (F1, F2, F3, F4, F5, phrase bank qty fix, `_STOP += rola`, embedding graceful degradation).
+
 | Capability | Status | Notes |
 |---|---|---|
 | Basic item extraction (qty + name) | Supported | Programmatic + LLM fallback |
 | Written-out PT-BR numbers | Supported | Including typo variants |
+| Compound numbers ("vinte e sete") | Supported | `_collapse_compound_numbers` keeps them as one token |
 | Greeting handling | Supported | Separated before extraction |
 | Multi-item single message | Supported | Programmatic path |
-| Unavailable item detection (em falta) | Supported | Programmatic path |
-| Product name typo tolerance | Supported | Fuzzy word-overlap matching |
+| Verb-less bare ADD ("1 cookies", "três coxinhas") | Supported | F1 Day 1 — `_BARE_ADD_RE` |
+| Continuation ("e uma coca", "mais um lanche") | Supported | F1 Day 1 — `_CONTINUATION_KEYWORD_RE` |
+| Slang ADD verbs ("me arruma", "rola", "joga", "solta") | Supported | Pre-router or LLM path; verbs in `_STOP` |
+| REMOVE — explicit verb + product | Supported | `_REMOVE_KEYWORD_RE` |
+| REMOVE — alt phrasing ("cancela esse X", "esquece o X", "deixa o X pra la") | Supported | `_REMOVE_ALT_RE` |
+| REMOVE — negation ("não quero X", "não manda o X") | Supported | `_REMOVE_NEGATION_RE` |
+| Multi-target REMOVE in one message | Supported | LLM tool call with multiple `product_ids` |
+| Quantity SET ("deixa só 1 X", "muda pra 3 Y") | **Supported (2026-04-09)** | F2 — `_QTY_REDUCE_RE` + `_programmatic_cart_reduce(set_mode=True)` |
+| Cart clearing ("limpa tudo", "esvazia o carrinho") | **Supported (2026-04-09)** | F4 — `_CLEAR_KEYWORD_RE` |
+| Suggestion-handler bypass for explicit shopping commands | **Supported (2026-04-09)** | F5 — Parts A/B/C — clears `last_suggestions` when ADD/QTY_REDUCE/CLEAR keyword present |
+| FINISH ("finalizar", "vamo fechar", "pode mandar") | Supported | F1 + F1b — `_FINISH_KEYWORD_RE` + Option E + Option H multi-intent chain |
+| Unavailable item detection (em falta) | Supported | Programmatic path; em falta message built outside the LLM |
+| Product name typo tolerance | Supported | Fuzzy word-overlap (Layer 4 pg_trgm) |
+| Embedding graceful degradation (HF Hub 429) | **Supported (2026-04-09)** | `EmbeddingsUnavailable` exception → falls back to ILIKE/keyword/trgm only |
 | Parenthetical noise stripping | Not yet | Zero-risk, planned |
-| Customizations (sem/com/extra) | Not supported | High-impact future feature |
+| Customizations (sem/com/extra) | Not supported | High-impact future feature (P2.3) |
+| Item swap ("troca a coca por guaraná") | Not supported | Future feature (P2.5) |
 | Multi-line fragmented orders | Partial | Conversation history provides context |
-| Voice messages | Not supported | Requires speech-to-text |
+| Voice messages | Not supported | Requires speech-to-text (P2.1) |
+| Voice transcript filler stripping | Not yet | P2.1 deliverable |
 | Address extraction | Supported | CEP-based flow in checkout |
 | Payment method selection | Supported | State machine flow |
 | Inline payment/address in order message | Not handled | Noise absorbed into item names |
-| Abbreviation expansion | Not supported | Low priority, matching is resilient |
+| Abbreviation expansion ("brahma" for "Cerveja Brahma 600ml") | Partial | LLM stochastic; F9 ambiguous-match clarification would harden it |
+| Ambiguous product disambiguation ("me vê 1 picanha" with 3 picanha variants) | Not yet | F9 deferred — `propose_and_confirm_action` tool exists, never invoked for this case |
+| Product name digit handling ("Casquinha 3 bolas") | **Broken** | Confirmed P0 extractor bug, deferred to P2 (architectural change) |
+| Joke / sarcasm markers ("100 hambúrguer, brincadeira, 1 só") | Not supported | Stretch goal |
+| Prompt injection resistance | Supported | LLM output sanitized; no role-play compliance |
 
 ---
 

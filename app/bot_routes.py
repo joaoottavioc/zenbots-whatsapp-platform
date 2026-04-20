@@ -21,13 +21,10 @@ import asyncio
 from app.menu_storage import upload_bytes_to_s3
 from app.menu_extraction import (
     _detect_file_type,
-    _extract_text_from_pdf,
-    _pdf_to_images,
     _resize_and_compress,
     _enrich_products,
 )
 from app.openai_client import extract_products_from_image
-from app.data_extractor import extract_products_from_text
 from app.whatsapp import send_whatsapp_message
 from app.context import current_bot_id
 from app.encryption import encrypt_value, decrypt_value
@@ -38,7 +35,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 WEBHOOK_VERIFY_TOKEN = os.getenv("META_VERIFY_TOKEN")
 
-MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
+MAX_UPLOAD_SIZE = 35 * 1024 * 1024  # 35 MB (hard ceiling)
+_IMAGE_COMPRESS_THRESHOLD = 10 * 1024 * 1024  # 10 MB — compress images above this
 
 # --- Rotas para Gerenciamento de Bots ---
 
@@ -54,13 +52,7 @@ async def create_new_bot(
     bot_created = await crud.create_bot(
         session=session,
         user_id=current_user.id,
-        whatsapp_number=bot_data.whatsapp_number,
-        restaurant_name=bot_data.restaurant_name,
-        pix_key=bot_data.pix_key,
-        delivery_fee=bot_data.delivery_fee,
-        min_order_value=bot_data.min_order_value,
-        whatsapp_token=bot_data.whatsapp_token,
-        phone_number_id=bot_data.phone_number_id,
+        bot_data=bot_data,
     )
 
     if not bot_created:
@@ -427,59 +419,135 @@ async def bulk_delete_products_endpoint(
     return {"message": f"{deleted_count} produtos foram excluídos com sucesso."}
 
 
+MAX_IMAGE_FILES = 10  # Multi-image limit for Cadastro Mágico
+
+
+async def _read_upload_file(file: UploadFile) -> bytes:
+    """Read an UploadFile with size limit enforcement."""
+    chunks = []
+    total_size = 0
+    while True:
+        chunk = await file.read(8192)
+        if not chunk:
+            break
+        total_size += len(chunk)
+        if total_size > MAX_UPLOAD_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Arquivo '{file.filename}' excede o limite de {MAX_UPLOAD_SIZE // (1024 * 1024)} MB.",
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _dedup_products(products: list[dict]) -> list[dict]:
+    """Deduplicate products by normalized name, keeping the richest entry."""
+    import unicodedata
+
+    seen: dict[str, dict] = {}
+    for p in products:
+        name = p.get("name", "")
+        key = (
+            unicodedata.normalize("NFKD", name)
+            .encode("ascii", "ignore")
+            .decode()
+            .lower()
+            .strip()
+        )
+        if not key:
+            continue
+        existing = seen.get(key)
+        if existing is None:
+            seen[key] = p
+        else:
+            # Keep the entry with the longer description (more info)
+            if len(p.get("description", "") or "") > len(
+                existing.get("description", "") or ""
+            ):
+                seen[key] = p
+    return list(seen.values())
+
+
 @router.post("/bots/{bot_id}/catalog/upload-from-file", status_code=201)
 async def upload_catalog_from_file_endpoint(
     bot_id: int,
-    file: UploadFile = File(...),
+    request: Request,
+    response: Response,
+    files: List[UploadFile] = File(...),
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    """Upload menu file, extract products via AI, and save to DB."""
+    """Upload menu file(s), extract products via AI, and save to DB.
+
+    Accepts up to 10 image files (JPEG/PNG/WebP) for multi-page menus,
+    or a single PDF/document file. Products from multiple images are
+    extracted in parallel and deduplicated by name.
+    """
     # 1. Validação de Segurança
     db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
     if not db_bot or db_bot.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Acesso negado.")
 
-    # Set bot_id in the request-scoped ContextVar so any OpenAI / external
-    # API calls (Cadastro Mágico extraction, alias regen) get attributed
-    # to this bot in the monitoring/cost tracking system.
     current_bot_id.set(bot_id)
 
-    # 2. Leitura Segura do Arquivo com limite de tamanho
-    try:
-        logger.info("File received: %s | Type: %s", file.filename, file.content_type)
-        chunks = []
-        total_size = 0
-        while True:
-            chunk = await file.read(8192)
-            if not chunk:
-                break
-            total_size += len(chunk)
-            if total_size > MAX_UPLOAD_SIZE:
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"Arquivo excede o limite de {MAX_UPLOAD_SIZE // (1024 * 1024)} MB.",
-                )
-            chunks.append(chunk)
-        contents = b"".join(chunks)
+    if not files:
+        raise HTTPException(status_code=400, detail="Nenhum arquivo enviado.")
 
-        # 3. Validate file type
-        is_pdf, is_image, detected_mime = _detect_file_type(
-            contents, file.filename, file.content_type
-        )
-        if not is_pdf and not is_image:
+    try:
+        # 2. Read all files, classify, and pre-compress oversized images
+        file_entries: list[tuple[UploadFile, bytes, bool, bool, str]] = []
+        for f in files:
+            contents = await _read_upload_file(f)
+            is_pdf, is_image, detected_mime = _detect_file_type(
+                contents, f.filename, f.content_type
+            )
+            if not is_pdf and not is_image:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Tipo de arquivo não suportado: '{f.filename}'. Envie PDF, JPEG, PNG ou WebP.",
+                )
+            # Pre-compress oversized images (PDFs go through _pdf_to_images later)
+            if is_image and len(contents) > _IMAGE_COMPRESS_THRESHOLD:
+                original_size = len(contents)
+                contents, detected_mime = _resize_and_compress(contents)
+                logger.info(
+                    "Pre-compressed '%s': %.1f MB → %.1f KB",
+                    f.filename,
+                    original_size / (1024 * 1024),
+                    len(contents) / 1024,
+                )
+
+            file_entries.append((f, contents, is_pdf, is_image, detected_mime))
+
+        # 3. Enforce limits: images allow up to 10, PDF/doc must be single file
+        has_document = any(is_pdf for _, _, is_pdf, _, _ in file_entries)
+        all_images = all(is_image for _, _, _, is_image, _ in file_entries)
+
+        if has_document and len(file_entries) > 1:
             raise HTTPException(
                 status_code=400,
-                detail="Tipo de arquivo não suportado. Envie PDF, JPEG, PNG ou WebP.",
+                detail="PDFs devem ser enviados individualmente. Para múltiplas páginas, use imagens (até 10).",
+            )
+        if all_images and len(file_entries) > MAX_IMAGE_FILES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Máximo de {MAX_IMAGE_FILES} imagens por envio.",
             )
 
-        # 4. Upload para S3
+        logger.info(
+            "Cadastro Mágico: %d file(s) received (%s)",
+            len(file_entries),
+            "all images" if all_images else "document",
+        )
+
+        # 4. Upload first file to S3 (for menu thumbnail)
+        first_file, first_contents = file_entries[0][0], file_entries[0][1]
         try:
             s3_url = await asyncio.to_thread(
                 upload_bytes_to_s3,
-                contents,
-                file.filename,
-                file.content_type,
+                first_contents,
+                first_file.filename,
+                first_file.content_type,
                 f"menus/bot_{bot_id}",
             )
             logger.info("S3 upload successful: %s", s3_url)
@@ -489,44 +557,60 @@ async def upload_catalog_from_file_endpoint(
         except Exception as e:
             logger.warning("S3 upload failed, proceeding with extraction: %s", e)
 
-        # 5. Extração de produtos (otimizada)
-        all_extracted_products = []
+        # 5a. PDF path: enqueue ARQ job and return 202. Extraction runs in the
+        # worker with per-page parallelism and broadcasts progress via SSE
+        # (`menu_extraction` events on the dashboard stream). The sync path
+        # below handles image-only uploads, which are already fast.
+        if has_document:
+            import base64 as _b64
 
-        if is_pdf:
-            # Try text extraction first (skips vision API for text-selectable PDFs)
-            pdf_text = _extract_text_from_pdf(contents)
+            pdf_file, pdf_contents = file_entries[0][0], file_entries[0][1]
+            redis_queue: ArqRedis = request.app.state.arq_redis
+            await redis_queue.enqueue_job(
+                "process_menu_extraction",
+                bot_id,
+                _b64.b64encode(pdf_contents).decode("ascii"),
+                pdf_file.filename or "menu.pdf",
+                pdf_file.content_type or "application/pdf",
+            )
+            response.status_code = 202
+            return {
+                "status": "processing",
+                "message": "Cardápio recebido. Processando em segundo plano...",
+            }
 
-            if len(pdf_text) > 100:
-                logger.info(
-                    "PDF has selectable text (%d chars), using text extraction",
-                    len(pdf_text),
-                )
-                all_extracted_products = await extract_products_from_text(pdf_text)
-            else:
-                # Scanned PDF — vision API with optimized images (150 DPI, JPEG)
-                logger.info("PDF is scanned/image-based, using vision API")
-                page_images = _pdf_to_images(contents)
-                tasks = [
-                    extract_products_from_image(img, "image/jpeg")
-                    for img in page_images
-                ]
-                results = await asyncio.gather(*tasks)
-                for page_products in results:
-                    if page_products:
-                        all_extracted_products.extend(page_products)
+        # 5b. Image path (sync): vision API is already parallel across pages.
+        all_extracted_products: list[dict] = []
 
-        elif is_image:
-            logger.info("Single image mode activated")
-            compressed, mime = _resize_and_compress(contents)
-            all_extracted_products = await extract_products_from_image(compressed, mime)
+        # For images, extract all in parallel (across files)
+        image_tasks = []
+        for f, contents, is_pdf, is_image, detected_mime in file_entries:
+            if is_image:
+                compressed, mime = _resize_and_compress(contents)
+                image_tasks.append(extract_products_from_image(compressed, mime))
 
-        # 6. Validação Final
+        if image_tasks:
+            logger.info(
+                "Extracting products from %d image(s) in parallel", len(image_tasks)
+            )
+            results = await asyncio.gather(*image_tasks)
+            for img_products in results:
+                if img_products:
+                    all_extracted_products.extend(img_products)
+
+        # 6. Deduplicate across pages/images
+        if len(file_entries) > 1:
+            before = len(all_extracted_products)
+            all_extracted_products = _dedup_products(all_extracted_products)
+            logger.info("Dedup: %d → %d products", before, len(all_extracted_products))
+
+        # 7. Validação Final
         if not all_extracted_products:
             msg = "O arquivo foi salvo, mas a IA não identificou nenhum produto. Verifique se a imagem está legível."
             logger.error("Extraction failed: %s", msg)
             raise HTTPException(status_code=400, detail=msg)
 
-        # 7. Salvar no Banco (Batch)
+        # 8. Salvar no Banco (Batch)
         enriched_products = _enrich_products(all_extracted_products)
         count = await crud.bulk_create_products(
             session=session, bot_id=bot_id, products_data=enriched_products
@@ -541,6 +625,59 @@ async def upload_catalog_from_file_endpoint(
     except Exception as e:
         logger.error("Unhandled error in upload route: %s", e)
         raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
+
+
+@router.post("/bots/{bot_id}/catalog/upload-from-url", status_code=201)
+async def upload_catalog_from_url(
+    bot_id: int,
+    request_data: schemas.CatalogUrlUploadRequest,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Extract products from an iFood restaurant URL and save to DB.
+
+    Fetches the iFood page, parses the __NEXT_DATA__ JSON for structured
+    menu data, enriches/deduplicates, and persists via bulk_create_products.
+    No vision AI needed — iFood provides structured data.
+    """
+    from app.menu_extraction import fetch_ifood_menu, is_valid_ifood_url
+
+    db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
+    if not db_bot or db_bot.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Acesso negado.")
+
+    current_bot_id.set(bot_id)
+
+    url = request_data.url.strip()
+    if not is_valid_ifood_url(url):
+        raise HTTPException(
+            status_code=400,
+            detail="URL inválida. Envie um link de restaurante do iFood "
+            "(ex: https://www.ifood.com.br/delivery/cidade/restaurante).",
+        )
+
+    try:
+        restaurant_name, products = await fetch_ifood_menu(url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    logger.info(
+        "Cadastro Mágico (iFood URL): %d products from '%s' for bot_id=%d",
+        len(products),
+        restaurant_name[:40],
+        bot_id,
+    )
+
+    enriched = _enrich_products(products)
+    deduped = _dedup_products(enriched)
+
+    count = await crud.bulk_create_products(
+        session=session, bot_id=bot_id, products_data=deduped
+    )
+
+    return {
+        "message": f"Sucesso! {count} produtos importados do iFood ({restaurant_name})."
+    }
 
 
 # --- Rotas de Pedidos (KDS) ---
@@ -1051,13 +1188,12 @@ async def authenticate_whatsapp_bot(
         await crud.create_bot(
             session=session,
             user_id=current_user.id,
-            whatsapp_number=clean_number,
-            restaurant_name=waba_name,
-            whatsapp_token=access_token,
-            phone_number_id=phone_number_id,
-            pix_key=None,
-            delivery_fee=0,
-            min_order_value=0,
+            bot_data=schemas.BotCreate(
+                whatsapp_number=clean_number,
+                restaurant_name=waba_name,
+                whatsapp_token=access_token,
+                phone_number_id=phone_number_id,
+            ),
         )
 
         return {
