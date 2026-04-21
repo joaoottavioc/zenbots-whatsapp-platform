@@ -3,6 +3,7 @@
 import logging
 import os
 import mercadopago
+import pytz
 
 logger = logging.getLogger(__name__)
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -286,3 +287,93 @@ async def check_subscription_status(
         "next_payment": sub.current_period_end,
         "plan_type": sub.plan_type,
     }
+
+
+@router.get("/usage", response_model=schemas.UsageSummary)
+async def get_usage(
+    bot_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Real-time usage for the dashboard widget.
+
+    Reads BotMonthlyUsage.completed_orders (populated by the hot-path order
+    counter) and applies the active plan's thresholds on the fly. Overage
+    values in the response are computed live — the row's stored
+    overage_orders/overage_amount_brl is written by the billing cron and
+    can lag, but the widget must always reflect the current state.
+    """
+    from calendar import monthrange
+
+    # 1. Ownership
+    bot = await session.get(Bot, bot_id)
+    if not bot or bot.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Acesso negado ao bot.")
+
+    # 2. Resolve plan — active Subscription's plan_type, else Free
+    sub = await crud.get_subscription_by_bot(session, bot_id)
+    plan_key = sub.plan_type if sub and sub.status == "authorized" else "free"
+    plan = await crud.get_plan_by_key(session, plan_key)
+    if plan is None:
+        # Free plan seed should always exist — hard fail if it's missing
+        raise HTTPException(status_code=500, detail=f"Plano '{plan_key}' não encontrado.")
+
+    # 3. Current BRT month window
+    brt = pytz.timezone("America/Sao_Paulo")
+    now_brt = datetime.now(brt)
+    year_month = now_brt.strftime("%Y-%m")
+    days_in_month = monthrange(now_brt.year, now_brt.month)[1]
+    start_of_month = now_brt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    days_elapsed = (now_brt - start_of_month).days + 1  # inclusive, min 1
+
+    # 4. Read the counter row (may be absent if no billable orders yet)
+    usage_row = await crud.get_monthly_usage(session, bot_id, year_month)
+    completed = usage_row.completed_orders if usage_row else 0
+
+    # 5. Thresholds + live overage math
+    cap = plan.monthly_order_cap
+    overage_threshold = plan.overage_starts_at or cap  # falls back if no grace
+    per_order = plan.overage_per_order_brl or 0.0
+
+    overage_orders = max(0, completed - overage_threshold) if overage_threshold else 0
+    overage_amount = overage_orders * per_order
+
+    # 6. Month-end projection (linear extrapolation from today's rate)
+    projected = (
+        round(completed * days_in_month / days_elapsed)
+        if days_elapsed > 0 and cap is not None
+        else None
+    )
+    projected_overage = (
+        max(0, projected - overage_threshold) * per_order
+        if projected is not None and overage_threshold is not None
+        else None
+    )
+
+    pct_used = min(1.0, completed / cap) if cap and cap > 0 else 0.0
+    orders_remaining = max(0, cap - completed) if cap is not None else None
+
+    return schemas.UsageSummary(
+        bot_id=bot_id,
+        plan=schemas.UsagePlan(
+            key=plan.key,
+            tier=plan.tier,
+            title=plan.title,
+            monthly_order_cap=cap,
+            overage_per_order_brl=per_order,
+            price=plan.price,
+        ),
+        current_period=schemas.UsageCurrentPeriod(
+            year_month=year_month,
+            completed_orders=completed,
+            cap=cap,
+            overage_starts_at=plan.overage_starts_at,
+            orders_remaining=orders_remaining,
+            pct_used=pct_used,
+            overage_orders=overage_orders,
+            overage_amount_brl=overage_amount,
+            projected_month_end_orders=projected,
+            projected_overage_brl=projected_overage,
+        ),
+        upgrade_offer=schemas.UsageUpgradeOffer(available_plans=[]),
+    )

@@ -323,6 +323,50 @@ class SubscriptionStatusResponse(BaseModel):
     plan_type: str
 
 
+# --- Usage summary (Free-tier grace + overage widget) ---
+
+
+class UsagePlan(BaseModel):
+    key: str
+    tier: str
+    title: str
+    monthly_order_cap: Optional[int]
+    overage_per_order_brl: float
+    price: float
+
+
+class UsageCurrentPeriod(BaseModel):
+    year_month: str
+    completed_orders: int
+    cap: Optional[int]
+    overage_starts_at: Optional[int]
+    orders_remaining: Optional[int]
+    pct_used: float
+    overage_orders: int
+    overage_amount_brl: float
+    projected_month_end_orders: Optional[int]
+    projected_overage_brl: Optional[float]
+
+
+class UsageUpgradePlanOption(BaseModel):
+    key: str
+    price: float
+    price_per_month: Optional[float] = None
+    label: str
+    slots_remaining: Optional[int] = None
+
+
+class UsageUpgradeOffer(BaseModel):
+    available_plans: List[UsageUpgradePlanOption]
+
+
+class UsageSummary(BaseModel):
+    bot_id: int
+    plan: UsagePlan
+    current_period: UsageCurrentPeriod
+    upgrade_offer: UsageUpgradeOffer
+
+
 class CheckoutRequest(BaseModel):
     plan_key: str = "pro"
     bot_id: int

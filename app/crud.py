@@ -26,6 +26,7 @@ from app.models import (
     DeliveryMethod,
     OrderStatus,
     CartState,
+    BotMonthlyUsage,
 )
 from app.schemas import BotCreate, BotUpdate, ProductUpdate
 from app.embedding_service import embed_async
@@ -1218,6 +1219,27 @@ async def increment_monthly_orders(
         ),
         {"bot_id": bot_id, "year_month": year_month},
     )
+
+
+async def get_monthly_usage(
+    session: AsyncSession,
+    bot_id: int,
+    year_month: Optional[str] = None,
+) -> Optional[BotMonthlyUsage]:
+    """Return the BotMonthlyUsage row for (bot_id, year_month), or None.
+
+    Missing row = no billable orders this month yet (row is created lazily
+    by the first increment_monthly_orders call).
+    """
+    if year_month is None:
+        year_month = current_brt_year_month()
+
+    stmt = select(BotMonthlyUsage).where(
+        BotMonthlyUsage.bot_id == bot_id,
+        BotMonthlyUsage.year_month == year_month,
+    )
+    result = await session.execute(stmt)
+    return result.scalars().first()
 
 
 async def update_order_status_by_id(

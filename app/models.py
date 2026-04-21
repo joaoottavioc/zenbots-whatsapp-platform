@@ -394,6 +394,10 @@ class Plan(SQLModel, table=True):
     fair_use_orders_cap: Optional[int] = Field(default=None)
     # R$ per order above monthly_order_cap (Free tier only)
     overage_per_order_brl: Optional[float] = Field(default=None)
+    # Grace threshold: orders counted but NOT charged between monthly_order_cap
+    # and overage_starts_at. Above this, each billable order costs
+    # overage_per_order_brl. NULL = no grace window (cap itself triggers overage).
+    overage_starts_at: Optional[int] = Field(default=None)
     billing_cycle_months: int = Field(default=1)  # 1 = monthly, 12 = annual
     is_active: bool = Field(default=True)
     max_bots: int = Field(default=1)
