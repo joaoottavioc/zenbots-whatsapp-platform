@@ -316,7 +316,9 @@ async def get_usage(
     plan = await crud.get_plan_by_key(session, plan_key)
     if plan is None:
         # Free plan seed should always exist — hard fail if it's missing
-        raise HTTPException(status_code=500, detail=f"Plano '{plan_key}' não encontrado.")
+        raise HTTPException(
+            status_code=500, detail=f"Plano '{plan_key}' não encontrado."
+        )
 
     # 3. Current BRT month window
     brt = pytz.timezone("America/Sao_Paulo")
