@@ -361,6 +361,15 @@ async def _check_subscription(
     if not sub:
         # No paid sub → Free plan baseline
         is_blocked = not await crud.is_plan_active(session, "free")
+    elif sub.cancel_at_period_end:
+        # Self-serve cancellation: keep the paid plan active until the
+        # period ends, then fall through to Free automatically.
+        now = utcnow()
+        period_end = sub.current_period_end.replace(tzinfo=None)
+        if now <= period_end:
+            is_blocked = not await crud.is_plan_active(session, sub.plan_type)
+        else:
+            is_blocked = not await crud.is_plan_active(session, "free")
     else:
         now = utcnow()
         expiration_limit = sub.current_period_end.replace(tzinfo=None) + timedelta(

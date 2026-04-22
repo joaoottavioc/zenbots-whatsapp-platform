@@ -101,6 +101,7 @@ def mock_cart(mock_contact):
 def active_subscription():
     sub = MagicMock()
     sub.status = "authorized"
+    sub.cancel_at_period_end = False
     sub.current_period_end = utcnow() + timedelta(days=30)
     return sub
 
@@ -109,6 +110,7 @@ def active_subscription():
 def expired_subscription():
     sub = MagicMock()
     sub.status = "cancelled"
+    sub.cancel_at_period_end = False
     sub.current_period_end = utcnow() - timedelta(days=10)
     return sub
 

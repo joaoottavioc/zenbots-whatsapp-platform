@@ -16,6 +16,7 @@ def _make_subscription(status: str, period_end_days_from_now: int = 30):
     sub = MagicMock()
     sub.status = status
     sub.plan_type = "basic"
+    sub.cancel_at_period_end = False
     sub.current_period_end = datetime.now(timezone.utc).replace(
         tzinfo=None
     ) + timedelta(days=period_end_days_from_now)

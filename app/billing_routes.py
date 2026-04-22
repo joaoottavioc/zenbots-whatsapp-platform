@@ -9,13 +9,16 @@ logger = logging.getLogger(__name__)
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select
-from datetime import datetime, timezone  # <--- Adicione timezone aqui
+from datetime import datetime, timedelta, timezone  # <--- Adicione timezone aqui
 
 from app.database import get_session
 from app.auth import get_current_user
 from app.models import User, Plan, Bot
 from app import crud, schemas, billing_cache, founder
+from app.time import utcnow
 from app.webhook_security import require_mp_signature
+
+FOUNDER_REFUND_WINDOW_DAYS = 30
 
 
 router = APIRouter(prefix="/billing", tags=["SaaS Billing"])
@@ -172,6 +175,159 @@ async def create_checkout(
             status_code=500,
             detail="Erro interno ao processar pagamento. Tente novamente mais tarde.",
         )
+
+
+@router.post("/cancel", response_model=schemas.CancelSubscriptionResponse)
+async def cancel_subscription(
+    req: schemas.CancelSubscriptionRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Schedule cancellation at end of current period.
+
+    The paid plan stays active until current_period_end (so the customer
+    keeps what they paid for), then _check_subscription falls through to
+    Free automatically. MP preapproval is cancelled best-effort here —
+    the subscribed state on our side is the source of truth.
+    """
+    bot = await session.get(Bot, req.bot_id)
+    if not bot or bot.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Acesso negado ao bot.")
+
+    sub = await crud.get_subscription_by_bot(session, req.bot_id)
+    if not sub:
+        raise HTTPException(
+            status_code=404, detail="Nenhuma assinatura ativa para cancelar."
+        )
+    if sub.mp_subscription_id.startswith("admin_grant_"):
+        raise HTTPException(
+            status_code=409,
+            detail="Assinatura gerenciada por administrador — contate o suporte.",
+        )
+    if sub.cancel_at_period_end:
+        raise HTTPException(
+            status_code=409, detail="Assinatura já está agendada para cancelamento."
+        )
+
+    now = utcnow()
+    sub.cancel_at_period_end = True
+    sub.cancelled_at = now
+    sub.cancelled_reason = req.reason
+    session.add(sub)
+
+    # Founder refund-window: if they cancel within 30 days of signup, release
+    # the slot so the promo doesn't silently shrink. Outside that window,
+    # the slot stays consumed (see founder.py rules).
+    created_at = sub.created_at
+    if created_at and created_at.tzinfo is not None:
+        created_at = created_at.replace(tzinfo=None)
+    if (
+        sub.is_founder
+        and created_at is not None
+        and (now - created_at) <= timedelta(days=FOUNDER_REFUND_WINDOW_DAYS)
+    ):
+        await founder.release_slot()
+        logger.info(
+            "Founder slot released (refund-window cancel) for bot_id=%s", bot.id
+        )
+
+    # Best-effort MP cancel — even if it fails, our gate honours
+    # cancel_at_period_end so the customer stops paying on our side.
+    try:
+        _get_sdk().preapproval().update(sub.mp_subscription_id, {"status": "cancelled"})
+    except Exception:
+        logger.warning(
+            "MP preapproval cancel failed for %s — marked locally anyway",
+            sub.mp_subscription_id,
+        )
+
+    await session.commit()
+    await billing_cache.invalidate_by_bot_id(bot.id)
+
+    return schemas.CancelSubscriptionResponse(
+        status="cancelled_at_period_end",
+        active_until=sub.current_period_end,
+        plan_type=sub.plan_type,
+        cancel_at_period_end=True,
+    )
+
+
+@router.post("/downgrade-to-free", response_model=schemas.CancelSubscriptionResponse)
+async def downgrade_to_free(
+    req: schemas.CancelSubscriptionRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Alias of /billing/cancel — backlog treats downgrade as cancel."""
+    return await cancel_subscription(
+        req=req, current_user=current_user, session=session
+    )
+
+
+@router.get("/current-plan", response_model=schemas.CurrentPlanResponse)
+async def current_plan(
+    bot_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Return the effective plan for a bot, respecting graceful cancellation.
+
+    While cancel_at_period_end=True, the customer still has their paid
+    plan until current_period_end. After that, they're on Free.
+    """
+    bot = await session.get(Bot, bot_id)
+    if not bot or bot.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Acesso negado ao bot.")
+
+    sub = await crud.get_subscription_by_bot(session, bot_id)
+    now = utcnow()
+
+    effective_key = "free"
+    period_end = None
+    cancel_flag = False
+    is_founder = False
+
+    if sub:
+        period_end = sub.current_period_end
+        cancel_flag = sub.cancel_at_period_end
+        is_founder = sub.is_founder
+        sub_period_end = sub.current_period_end
+        if sub_period_end and sub_period_end.tzinfo is not None:
+            sub_period_end = sub_period_end.replace(tzinfo=None)
+
+        if sub.cancel_at_period_end:
+            if sub_period_end and now <= sub_period_end:
+                effective_key = sub.plan_type
+        elif sub.status == "authorized":
+            effective_key = sub.plan_type
+
+    plan = await crud.get_plan_by_key(session, effective_key)
+    if plan is None:
+        raise HTTPException(
+            status_code=500, detail=f"Plano '{effective_key}' não encontrado."
+        )
+
+    # Founder lifetime lock: always show the snapshotted price, not whatever
+    # Plan.price happens to be today.
+    price = (
+        sub.snapshotted_price_brl
+        if (sub and sub.is_founder and sub.snapshotted_price_brl)
+        else plan.price
+    )
+
+    return schemas.CurrentPlanResponse(
+        plan_key=plan.key,
+        plan_tier=plan.tier,
+        plan_title=plan.title,
+        price=price,
+        monthly_order_cap=plan.monthly_order_cap,
+        fair_use_orders_cap=plan.fair_use_orders_cap,
+        overage_per_order_brl=plan.overage_per_order_brl,
+        billing_cycle_months=plan.billing_cycle_months,
+        current_period_end=period_end,
+        cancel_at_period_end=cancel_flag,
+        is_founder=is_founder,
+    )
 
 
 @router.post("/webhook")

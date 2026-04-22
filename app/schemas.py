@@ -372,6 +372,32 @@ class CheckoutRequest(BaseModel):
     bot_id: int
 
 
+class CancelSubscriptionRequest(BaseModel):
+    bot_id: int
+    reason: Optional[str] = Field(default=None, max_length=500)
+
+
+class CancelSubscriptionResponse(BaseModel):
+    status: str
+    active_until: datetime
+    plan_type: str
+    cancel_at_period_end: bool
+
+
+class CurrentPlanResponse(BaseModel):
+    plan_key: str
+    plan_tier: str
+    plan_title: str
+    price: float
+    monthly_order_cap: Optional[int]
+    fair_use_orders_cap: Optional[int]
+    overage_per_order_brl: Optional[float]
+    billing_cycle_months: int
+    current_period_end: Optional[datetime]
+    cancel_at_period_end: bool
+    is_founder: bool
+
+
 class CepResponse(BaseModel):
     address: str
     city: str
