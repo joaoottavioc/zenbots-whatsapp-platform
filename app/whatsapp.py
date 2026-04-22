@@ -71,7 +71,7 @@ from app.billing_cache import get_tier_by_phone_id
 import logging
 import time as _time
 
-FREE_TIER_FOOTER = "\n\n_Atendimento por ZenBots 🤖_"
+FREE_TIER_FOOTER = "\n\n_Atendimento por ZenBotZ®_"
 
 
 async def _apply_free_tier_branding(text: str, phone_id: str) -> str:

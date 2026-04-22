@@ -1,7 +1,7 @@
 """Redis-backed plan-tier lookup used by the send-message hot path.
 
 Every customer-facing WhatsApp reply needs to know the bot's current plan
-tier to decide whether to append the Free-tier "Atendimento por ZenBots"
+tier to decide whether to append the Free-tier "Atendimento por ZenBotZ®"
 footer. Querying Postgres on every send would double the hot-path latency,
 so tier is cached per phone_number_id with a 5 minute TTL and invalidated
 explicitly whenever a Subscription status changes.
