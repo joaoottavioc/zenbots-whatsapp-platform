@@ -362,7 +362,7 @@ class Subscription(SQLModel, table=True):
 
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
-    plan_type: str = Field(default="pro")
+    plan_type: str = Field(default="pro_monthly")
 
     plan_id: Optional[int] = Field(default=None, foreign_key="plan.id", index=True)
     is_founder: bool = Field(default=False)

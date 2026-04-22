@@ -443,7 +443,7 @@ class PlanUpdate(BaseModel):
 
 class AdminUpsertSubscription(BaseModel):
     status: str = Field(default="authorized", max_length=30)
-    plan_type: str = Field(default="pro", max_length=30)
+    plan_type: str = Field(default="pro_monthly", max_length=30)
 
 
 class AdminBotSummary(BaseModel):

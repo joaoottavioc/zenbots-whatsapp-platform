@@ -1446,7 +1446,7 @@ async def upsert_subscription(
     bot_id: int,
     mp_id: str,
     status: str,
-    plan_type: str = "pro",
+    plan_type: str = "pro_monthly",
     plan_frequency_months: int = 1,
 ):
     from sqlalchemy.dialects.postgresql import insert as pg_insert

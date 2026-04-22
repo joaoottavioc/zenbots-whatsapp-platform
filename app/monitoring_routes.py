@@ -1318,7 +1318,7 @@ async def admin_prospect_create_demo(
         current_period_end=datetime.now(timezone.utc) + timedelta(days=30),
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
-        plan_type="pro",
+        plan_type="pro_monthly",
     )
     session.add(sub)
     await session.commit()
