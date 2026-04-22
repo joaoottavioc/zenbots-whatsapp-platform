@@ -98,10 +98,12 @@ async def create_checkout(
         # cancelled/paused = re-subscribe → allowed
 
     # 4. Cria Preferência no Mercado Pago
+    # `billing_cycle_months` must drive MP's auto_recurring.frequency — otherwise
+    # an annual plan (R$1068/year) gets charged as R$1068/month.
     subscription_data = {
         "reason": f"{selected_plan.title} - {bot.restaurant_name}",
         "auto_recurring": {
-            "frequency": 1,
+            "frequency": selected_plan.billing_cycle_months,
             "frequency_type": "months",
             "transaction_amount": selected_plan.price,
             "currency_id": "BRL",
