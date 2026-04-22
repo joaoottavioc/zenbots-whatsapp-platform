@@ -326,14 +326,20 @@ async def _find_bot(
 async def _check_subscription(
     session: AsyncSession, bot: Bot, contact_number: str
 ) -> bool:
-    """Returns True if the bot's subscription is expired/invalid (caller should stop)."""
+    """Returns True if the bot's plan denies usage (caller should stop).
+
+    Bots without a paid Subscription row fall through to the Free plan,
+    which is seeded with a 15 orders/month cap and overage billing — the
+    monthly cap is enforced by the usage/billing layer, not this gate.
+    """
     sub = await crud.get_subscription_by_bot(session, bot.id)
 
     grace_period_days = 3
     is_blocked = False
 
     if not sub:
-        is_blocked = True
+        # No paid sub → Free plan baseline
+        is_blocked = not await crud.is_plan_active(session, "free")
     else:
         now = utcnow()
         expiration_limit = sub.current_period_end.replace(tzinfo=None) + timedelta(
@@ -348,7 +354,7 @@ async def _check_subscription(
 
     if is_blocked:
         logger.warning(
-            "Subscription expired: bot_id=%s user_id=%s", bot.id, bot.user_id
+            "Bot blocked by plan gate: bot_id=%s user_id=%s", bot.id, bot.user_id
         )
         maintenance_msg = (
             "Olá! Nosso atendimento automático está em manutenção no momento.\n\n"

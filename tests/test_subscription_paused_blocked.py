@@ -87,8 +87,8 @@ async def test_authorized_subscription_not_blocked():
 
 
 @pytest.mark.asyncio
-async def test_no_subscription_blocks():
-    """A bot with no subscription must be blocked."""
+async def test_no_subscription_falls_through_to_free_plan():
+    """A bot with no Subscription row must be allowed under the Free plan."""
     bot = _make_bot()
     session = AsyncMock()
 
@@ -97,6 +97,38 @@ async def test_no_subscription_blocks():
             "app.whatsapp.crud.get_subscription_by_bot",
             new_callable=AsyncMock,
             return_value=None,
+        ),
+        patch(
+            "app.whatsapp.crud.is_plan_active",
+            new_callable=AsyncMock,
+            return_value=True,
+        ),
+        patch(
+            "app.whatsapp.send_whatsapp_message", new_callable=AsyncMock
+        ) as mock_send,
+    ):
+        blocked = await _check_subscription(session, bot, "5511999990000")
+
+        assert blocked is False
+        mock_send.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_no_subscription_blocks_when_free_plan_missing():
+    """If the Free plan seed is missing/disabled, no-sub bots are blocked."""
+    bot = _make_bot()
+    session = AsyncMock()
+
+    with (
+        patch(
+            "app.whatsapp.crud.get_subscription_by_bot",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "app.whatsapp.crud.is_plan_active",
+            new_callable=AsyncMock,
+            return_value=False,
         ),
         patch(
             "app.whatsapp.send_whatsapp_message", new_callable=AsyncMock
