@@ -367,6 +367,19 @@ class Subscription(SQLModel, table=True):
     plan_id: Optional[int] = Field(default=None, foreign_key="plan.id", index=True)
     is_founder: bool = Field(default=False)
 
+    # Self-serve cancellation (1.6): user can cancel mid-period without losing
+    # what they paid for. When true, the bot stays on its paid plan until
+    # current_period_end, then falls through to Free (per _check_subscription).
+    cancel_at_period_end: bool = Field(default=False)
+    cancelled_at: Optional[datetime] = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    cancelled_reason: Optional[str] = Field(default=None)
+
+    # Founder lifetime price lock (2.2): snapshotted on first founder checkout,
+    # survives Plan.price edits and plan deactivation.
+    snapshotted_price_brl: Optional[float] = Field(default=None)
+
 
 class Plan(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

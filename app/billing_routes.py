@@ -14,7 +14,7 @@ from datetime import datetime, timezone  # <--- Adicione timezone aqui
 from app.database import get_session
 from app.auth import get_current_user
 from app.models import User, Plan, Bot
-from app import crud, schemas, billing_cache
+from app import crud, schemas, billing_cache, founder
 from app.webhook_security import require_mp_signature
 
 
@@ -37,6 +37,18 @@ def _get_sdk():
 async def list_plans(session: AsyncSession = Depends(get_session)):
     """Public endpoint — returns all available plans (no auth required)."""
     return await crud.list_plans(session)
+
+
+@router.get("/founder-remaining")
+async def founder_remaining():
+    """Public — Founder promo state for the landing-page counter banner."""
+    return {
+        "remaining": await founder.slots_remaining(),
+        "total_slots": founder.FOUNDER_LIMIT,
+        "sunset_at": founder.sunset_date().isoformat(),
+        "available": await founder.is_available(),
+        "price_brl": founder.FOUNDER_PRICE_BRL,
+    }
 
 
 @router.post("/checkout")
@@ -97,6 +109,23 @@ async def create_checkout(
         # authorized + different plan = upgrade attempt → allowed, new MP sub created
         # cancelled/paused = re-subscribe → allowed
 
+    # 3b. Founder plan: gate behind slot availability + sunset.
+    # Slot is reserved BEFORE creating the MP preapproval so paid promos
+    # can't race past 30. Released on MP failure below.
+    founder_slot_reserved = False
+    if req.plan_key == "founder":
+        if founder.sunset_passed():
+            raise HTTPException(
+                status_code=410,
+                detail="Oferta de Fundador encerrada.",
+            )
+        if not await founder.reserve_slot():
+            raise HTTPException(
+                status_code=409,
+                detail="As 30 vagas de Fundador foram esgotadas.",
+            )
+        founder_slot_reserved = True
+
     # 4. Cria Preferência no Mercado Pago
     # `billing_cycle_months` must drive MP's auto_recurring.frequency — otherwise
     # an annual plan (R$1068/year) gets charged as R$1068/month.
@@ -123,6 +152,8 @@ async def create_checkout(
                 "message", "Erro desconhecido"
             )
             logger.error("Mercado Pago preapproval creation failed: %s", error_detail)
+            if founder_slot_reserved:
+                await founder.release_slot()
             raise HTTPException(
                 status_code=400,
                 detail="Erro ao processar pagamento. Tente novamente.",
@@ -135,6 +166,8 @@ async def create_checkout(
         raise
     except Exception:
         logger.exception("Checkout creation failed")
+        if founder_slot_reserved:
+            await founder.release_slot()
         raise HTTPException(
             status_code=500,
             detail="Erro interno ao processar pagamento. Tente novamente mais tarde.",
@@ -233,7 +266,7 @@ async def billing_webhook(
                     else:
                         plan_frequency_months = 1
 
-                    await crud.upsert_subscription(
+                    sub = await crud.upsert_subscription(
                         session=session,
                         user_id=bot.user_id,
                         bot_id=bot.id,
@@ -242,6 +275,21 @@ async def billing_webhook(
                         plan_type=plan_key,
                         plan_frequency_months=plan_frequency_months,
                     )
+
+                    # Founder lifetime snapshot: stamp on first transition to
+                    # authorized so the R$59,90 lock survives Plan.price edits.
+                    if (
+                        sub is not None
+                        and plan_key == "founder"
+                        and status == "authorized"
+                        and not sub.is_founder
+                    ):
+                        plan_row = await crud.get_plan_by_key(session, "founder")
+                        if plan_row is not None:
+                            sub.is_founder = True
+                            sub.snapshotted_price_brl = plan_row.price
+                            session.add(sub)
+
                     await session.commit()
                     await billing_cache.invalidate_by_bot_id(bot.id)
                     logger.info(
