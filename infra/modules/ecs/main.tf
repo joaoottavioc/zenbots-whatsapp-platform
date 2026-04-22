@@ -18,9 +18,13 @@ resource "aws_ecs_cluster_capacity_providers" "this" {
 
   capacity_providers = var.capacity_providers
 
-  default_capacity_provider_strategy {
-    capacity_provider = var.capacity_providers[0]
-    weight            = 1
+  dynamic "default_capacity_provider_strategy" {
+    for_each = var.capacity_providers
+    content {
+      capacity_provider = default_capacity_provider_strategy.value
+      weight            = default_capacity_provider_strategy.key == 0 ? 4 : 1
+      base              = 0
+    }
   }
 }
 
@@ -247,10 +251,11 @@ resource "aws_ecs_service" "backend" {
   launch_type     = length(var.capacity_providers) > 0 ? null : "FARGATE"
 
   dynamic "capacity_provider_strategy" {
-    for_each = length(var.capacity_providers) > 0 ? [1] : []
+    for_each = var.capacity_providers
     content {
-      capacity_provider = var.capacity_providers[0]
-      weight            = 1
+      capacity_provider = capacity_provider_strategy.value
+      weight            = capacity_provider_strategy.key == 0 ? 4 : 1
+      base              = 0
     }
   }
 
@@ -306,10 +311,11 @@ resource "aws_ecs_service" "worker" {
   launch_type     = length(var.capacity_providers) > 0 ? null : "FARGATE"
 
   dynamic "capacity_provider_strategy" {
-    for_each = length(var.capacity_providers) > 0 ? [1] : []
+    for_each = var.capacity_providers
     content {
-      capacity_provider = var.capacity_providers[0]
-      weight            = 1
+      capacity_provider = capacity_provider_strategy.value
+      weight            = capacity_provider_strategy.key == 0 ? 4 : 1
+      base              = 0
     }
   }
 

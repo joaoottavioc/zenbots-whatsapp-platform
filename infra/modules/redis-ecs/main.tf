@@ -111,11 +111,15 @@ resource "aws_ecs_service" "redis" {
   desired_count   = var.desired_count
   launch_type     = length(var.capacity_providers) > 0 ? null : "FARGATE"
 
+  # When multiple providers are listed, the first gets higher weight (preferred
+  # provider) and the rest act as on-demand fallback for Spot capacity
+  # exhaustion — common for ARM64 Fargate in us-east-1.
   dynamic "capacity_provider_strategy" {
-    for_each = length(var.capacity_providers) > 0 ? [1] : []
+    for_each = var.capacity_providers
     content {
-      capacity_provider = var.capacity_providers[0]
-      weight            = 1
+      capacity_provider = capacity_provider_strategy.value
+      weight            = capacity_provider_strategy.key == 0 ? 4 : 1
+      base              = 0
     }
   }
 

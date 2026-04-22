@@ -61,7 +61,7 @@ module "redis_ecs" {
   ecs_security_group_id = module.vpc.ecs_security_group_id
 
   cluster_name       = module.ecs.cluster_name
-  capacity_providers = ["FARGATE_SPOT"]
+  capacity_providers = ["FARGATE_SPOT", "FARGATE"]
   execution_role_arn = module.ecs.execution_role_arn
   cpu_architecture   = "ARM64"
 
@@ -166,10 +166,10 @@ module "ecs" {
   enable_alb            = false
   service_discovery_arn = aws_service_discovery_service.backend.arn
 
-  capacity_providers  = ["FARGATE_SPOT"]
-  container_insights  = false
-  cpu_architecture    = "ARM64"
-  use_ssm_parameters  = true
+  capacity_providers = ["FARGATE_SPOT", "FARGATE"]
+  container_insights = false
+  cpu_architecture   = "ARM64"
+  use_ssm_parameters = true
 
   # Backend
   backend_image         = local.backend_image
@@ -266,15 +266,15 @@ module "ecs" {
 module "monitoring" {
   source = "../../modules/monitoring"
 
-  project              = var.project
-  environment          = var.environment
-  alert_email          = var.alert_email
-  ecs_cluster_name     = module.ecs.cluster_name
-  backend_service_name = module.ecs.backend_service_name
-  worker_service_name  = module.ecs.worker_service_name
-  alb_arn_suffix         = ""
-  target_group_arn_suffix = ""
-  rds_instance_id      = "${var.project}-${var.environment}"
+  project                          = var.project
+  environment                      = var.environment
+  alert_email                      = var.alert_email
+  ecs_cluster_name                 = module.ecs.cluster_name
+  backend_service_name             = module.ecs.backend_service_name
+  worker_service_name              = module.ecs.worker_service_name
+  alb_arn_suffix                   = ""
+  target_group_arn_suffix          = ""
+  rds_instance_id                  = "${var.project}-${var.environment}"
   elasticache_replication_group_id = "" # Dev uses Redis on ECS, no ElastiCache alarms
 }
 
@@ -283,14 +283,14 @@ module "monitoring" {
 module "scheduling" {
   source = "../../modules/scheduling"
 
-  project              = var.project
-  environment          = var.environment
-  region               = var.region
-  account_id           = var.account_id
-  enable_scheduling    = true
-  ecs_cluster_name     = module.ecs.cluster_name
-  backend_service_name = module.ecs.backend_service_name
-  worker_service_name  = module.ecs.worker_service_name
+  project               = var.project
+  environment           = var.environment
+  region                = var.region
+  account_id            = var.account_id
+  enable_scheduling     = true
+  ecs_cluster_name      = module.ecs.cluster_name
+  backend_service_name  = module.ecs.backend_service_name
+  worker_service_name   = module.ecs.worker_service_name
   backend_desired_count = 1
   worker_desired_count  = 1
 
