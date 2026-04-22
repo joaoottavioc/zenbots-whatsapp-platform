@@ -67,8 +67,29 @@ from app.distributed_lock import contact_lock
 from redis.exceptions import LockError
 from app.context import new_trace_id, current_bot_id, current_contact_id
 from app.monitoring import record_api_usage, record_business_event, record_error
+from app.billing_cache import get_tier_by_phone_id
 import logging
 import time as _time
+
+FREE_TIER_FOOTER = "\n\n_Atendimento por ZenBots 🤖_"
+
+
+async def _apply_free_tier_branding(text: str, phone_id: str) -> str:
+    """Append the Free-tier footer when the bot behind `phone_id` is on Free.
+
+    Fails open: on Redis/DB errors (get_tier_by_phone_id returns None) or
+    when the resolved tier is anything other than 'free', the original
+    text is returned unchanged.
+    """
+    if not text or not phone_id:
+        return text
+    if FREE_TIER_FOOTER.strip() in text:
+        return text
+    tier = await get_tier_by_phone_id(phone_id)
+    if tier == "free":
+        return text + FREE_TIER_FOOTER
+    return text
+
 
 logger = logging.getLogger(__name__)
 
@@ -3880,6 +3901,8 @@ async def send_whatsapp_message(
 ):
     url = f"https://graph.facebook.com/v20.0/{phone_id}/messages"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+    message = await _apply_free_tier_branding(message or "", phone_id)
 
     # Lógica para decidir se manda Texto Puro ou Mídia
     if media_url:

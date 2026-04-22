@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app import crud, schemas
+from app import billing_cache, crud, schemas
 from app.auth import require_admin
 from app.database import get_session
 from app.models import Bot, User
@@ -129,6 +129,7 @@ async def admin_upsert_subscription(
         plan_type=payload.plan_type,
     )
     await session.commit()
+    await billing_cache.invalidate_by_bot_id(bot.id)
 
     remaining = (sub.current_period_end - datetime.now(timezone.utc)).days
     return {

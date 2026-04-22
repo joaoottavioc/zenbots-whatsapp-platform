@@ -14,7 +14,7 @@ from datetime import datetime, timezone  # <--- Adicione timezone aqui
 from app.database import get_session
 from app.auth import get_current_user
 from app.models import User, Plan, Bot
-from app import crud, schemas
+from app import crud, schemas, billing_cache
 from app.webhook_security import require_mp_signature
 
 
@@ -241,6 +241,7 @@ async def billing_webhook(
                         plan_frequency_months=plan_frequency_months,
                     )
                     await session.commit()
+                    await billing_cache.invalidate_by_bot_id(bot.id)
                     logger.info(
                         "Subscription updated for bot_id=%s, status=%s, plan=%s",
                         bot_id,
