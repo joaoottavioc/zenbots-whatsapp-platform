@@ -149,6 +149,58 @@ class MessageContext:
     channel: str = "whatsapp"  # Channel enum value
     channel_metadata: dict = field(default_factory=dict)
 
+    @property
+    def contact_identity(self) -> str:
+        """Channel-neutral identity key. Alias of contact_number — same
+        value for WhatsApp (E.164) and web (`web:{session_id}` synthesis,
+        A1b in the plan). New code paths should reach for this name; the
+        legacy attribute stays for the existing 30+ call sites until the
+        Phase 1.2c migration replaces them."""
+        return self.contact_number
+
+    async def reply(
+        self,
+        text: str,
+        *,
+        media_url: str | None = None,
+        media_type: str = "image",
+    ) -> None:
+        """Channel-aware egress seam.
+
+        WhatsApp routes to `send_whatsapp_message` (the existing transport).
+        Web routes to `broadcast_web_reply` once Phase 2 wires it; for now
+        a web reply raises NotImplementedError because no production
+        caller constructs a web MessageContext yet (no `/chat` ingress).
+
+        This method intentionally does NOT replace direct
+        `send_whatsapp_message(...)` calls in this file yet — Phase 1.2c
+        will migrate the ~30 call sites under the protection of the full
+        simulation-suite regression gate. Until then, `ctx.reply()` is
+        the canonical entry point for any NEW egress added during the
+        web-channel rollout."""
+        if self.channel == "whatsapp":
+            await send_whatsapp_message(
+                to=self.contact_number,
+                message=text,
+                token=self.token,
+                phone_id=self.phone_id,
+                media_url=media_url,
+                media_type=media_type,
+            )
+            return
+
+        if self.channel == "web":
+            # Phase 2 lands the implementation. Until then any caller
+            # that constructs a web MessageContext is exercising an
+            # incomplete code path — fail loudly instead of silently
+            # dropping the message.
+            raise NotImplementedError(
+                "Web channel egress arrives with Phase 2 (broadcast_web_reply); "
+                "no production caller should construct channel='web' yet."
+            )
+
+        raise ValueError(f"Unknown channel: {self.channel!r}")
+
 
 # Extrai "QTD + NOME" da pergunta de confirmação (ex.: "1 Gnocchis de la Mémé Forte, 2 X, ...")
 _ITEM_FROM_Q_RE = re.compile(
