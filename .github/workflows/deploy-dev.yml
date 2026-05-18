@@ -255,7 +255,11 @@ jobs:
           aws ecs wait services-stable \
             --cluster "$ECS_CLUSTER" \
             --services "$ECS_SERVICE_BACKEND" "$ECS_SERVICE_WORKER"
-        timeout-minutes: 8
+        # 15 min, not 8: on Spot-exhausted days, ECS retries placement on
+        # FARGATE_SPOT for ~2-3 min before falling through to the FARGATE
+        # on-demand provider (1791895), and the new task still has to pull
+        # the embedding-model layer. 8 min was a false-failure factory.
+        timeout-minutes: 15
 
   # ── Smoke test ────────────────────────────────────────────────
   smoke-test:
