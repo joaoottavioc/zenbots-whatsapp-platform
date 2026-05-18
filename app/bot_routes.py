@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, status, Request, Query
 from sqlmodel.ext.asyncio.session import AsyncSession
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 # --- Importações Consolidadas ---
 from app import crud, schemas, data_extractor
@@ -24,6 +24,7 @@ from app.menu_extraction import (
     _resize_and_compress,
     _enrich_products,
 )
+from app.menu_extraction_policy import consume_extraction_quota, get_bot_policy
 from app.openai_client import extract_products_from_image
 from app.whatsapp import send_whatsapp_message
 from app.context import current_bot_id
@@ -37,6 +38,15 @@ WEBHOOK_VERIFY_TOKEN = os.getenv("META_VERIFY_TOKEN")
 
 MAX_UPLOAD_SIZE = 35 * 1024 * 1024  # 35 MB (hard ceiling)
 _IMAGE_COMPRESS_THRESHOLD = 10 * 1024 * 1024  # 10 MB — compress images above this
+
+# Global technical cap on images per Cadastro Mágico request, applied to
+# every tier before per-plan policy. Each page at detail=high is ~25.5K
+# tokens; the OpenAI Tier-1 TPM limit (200K/min) means the worker can
+# only run ~7 vision calls concurrently. Ten is the practical ceiling —
+# beyond it we start 429'ing and silently dropping pages. See the
+# comment block in menu_extraction.py near _MAX_IMAGE_DIM. Mirrors
+# MAX_UPLOAD_SIZE above: technical safety limit, not a pricing lever.
+MAX_IMAGES_PER_REQUEST = 10
 
 # --- Rotas para Gerenciamento de Bots ---
 
@@ -153,6 +163,13 @@ async def upload_catalog_from_text(
 
     # Set bot_id ContextVar so the LLM extraction call gets cost-attributed.
     current_bot_id.set(bot_id)
+
+    # Enforce per-tier extraction limits BEFORE spending any LLM tokens.
+    # Text payloads are neither PDF nor image — shape checks are trivially
+    # true; this call exists to consume one monthly quota slot atomically.
+    await consume_extraction_quota(
+        session, bot_id, has_pdf=False, image_count=0
+    )
 
     # 1. Extrai os produtos do texto usando o LLM (como antes)
     extracted_products = await data_extractor.extract_products_from_text(
@@ -419,9 +436,6 @@ async def bulk_delete_products_endpoint(
     return {"message": f"{deleted_count} produtos foram excluídos com sucesso."}
 
 
-MAX_IMAGE_FILES = 10  # Multi-image limit for Cadastro Mágico
-
-
 async def _read_upload_file(file: UploadFile) -> bytes:
     """Read an UploadFile with size limit enforcement."""
     chunks = []
@@ -519,20 +533,34 @@ async def upload_catalog_from_file_endpoint(
 
             file_entries.append((f, contents, is_pdf, is_image, detected_mime))
 
-        # 3. Enforce limits: images allow up to 10, PDF/doc must be single file
+        # 3. Technical constraints (pre-policy, universal for all tiers).
+        #    - PDF pipeline processes one file at a time.
+        #    - Global image cap: vision parallelism / TPM ceiling.
         has_document = any(is_pdf for _, _, is_pdf, _, _ in file_entries)
         all_images = all(is_image for _, _, _, is_image, _ in file_entries)
+        image_count = sum(1 for _, _, _, is_image, _ in file_entries if is_image)
 
         if has_document and len(file_entries) > 1:
             raise HTTPException(
                 status_code=400,
-                detail="PDFs devem ser enviados individualmente. Para múltiplas páginas, use imagens (até 10).",
+                detail="PDFs devem ser enviados individualmente. Para múltiplas páginas, use imagens.",
             )
-        if all_images and len(file_entries) > MAX_IMAGE_FILES:
+        if image_count > MAX_IMAGES_PER_REQUEST:
             raise HTTPException(
                 status_code=400,
-                detail=f"Máximo de {MAX_IMAGE_FILES} imagens por envio.",
+                detail=f"Máximo de {MAX_IMAGES_PER_REQUEST} imagens por envio.",
             )
+
+        # 3b. Enforce per-tier policy: PDF allowance, image cap, monthly
+        # quota. Runs BEFORE any S3 upload or ARQ enqueue so a rejected
+        # request doesn't leak storage or queue work. Raises 400/403 on
+        # violation; atomically increments the monthly counter on success.
+        await consume_extraction_quota(
+            session,
+            bot_id,
+            has_pdf=has_document,
+            image_count=image_count,
+        )
 
         logger.info(
             "Cadastro Mágico: %d file(s) received (%s)",
@@ -677,6 +705,59 @@ async def upload_catalog_from_url(
 
     return {
         "message": f"Sucesso! {count} produtos importados do iFood ({restaurant_name})."
+    }
+
+
+@router.get("/bots/{bot_id}/catalog/quota")
+async def get_catalog_quota(
+    bot_id: int,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Current Cadastro Mágico quota for this bot.
+
+    Read-only snapshot of the tier policy + this month's usage. Powers the
+    dashboard widget and the upload page's pre-validation (so the "upgrade"
+    CTA can show before the user picks files). `period_end` is the UTC
+    instant of the next BRT month rollover.
+    """
+    from datetime import datetime, timezone, timedelta
+
+    db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
+    if not db_bot or db_bot.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Acesso negado.")
+
+    policy = await get_bot_policy(session, bot_id)
+    usage = await crud.get_monthly_usage(session, bot_id)
+    used = usage.menu_extractions if usage is not None else 0
+
+    # Compute BRT-midnight start of next calendar month, expressed as UTC.
+    now_brt = datetime.now(timezone.utc) - timedelta(hours=3)
+    if now_brt.month == 12:
+        next_brt = now_brt.replace(
+            year=now_brt.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+        )
+    else:
+        next_brt = now_brt.replace(
+            month=now_brt.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0
+        )
+    period_end = (next_brt + timedelta(hours=3)).replace(tzinfo=timezone.utc)
+
+    remaining: Optional[int]
+    if policy.max_per_month is None:
+        remaining = None
+    else:
+        remaining = max(0, policy.max_per_month - used)
+
+    return {
+        "tier": policy.tier,
+        "plan_key": policy.plan_key,
+        "used": used,
+        "limit": policy.max_per_month,
+        "remaining": remaining,
+        "allows_pdf": policy.allows_pdf,
+        "max_images": policy.max_images,
+        "period_end": period_end.isoformat(),
     }
 
 

@@ -1221,6 +1221,43 @@ async def increment_monthly_orders(
     )
 
 
+async def increment_and_return_menu_extractions(
+    session: AsyncSession,
+    bot_id: int,
+    year_month: Optional[str] = None,
+) -> int:
+    """Atomically bump `menu_extractions` and return the post-increment count.
+
+    Participates in the caller's transaction — does not commit. Used by
+    consume_extraction_quota to reserve a Cadastro Mágico slot race-safely:
+    two concurrent uploads can't both observe `used < limit` and slip
+    through, because the single UPSERT-with-RETURNING is atomic. The
+    caller compares the returned count against the plan cap and rolls
+    back if the limit is exceeded.
+    """
+    if year_month is None:
+        year_month = current_brt_year_month()
+
+    result = await session.execute(
+        text(
+            """
+            INSERT INTO bot_monthly_usage
+                (bot_id, year_month, menu_extractions, created_at, updated_at)
+            VALUES
+                (:bot_id, :year_month, 1,
+                 (NOW() AT TIME ZONE 'UTC'),
+                 (NOW() AT TIME ZONE 'UTC'))
+            ON CONFLICT ON CONSTRAINT uq_bot_monthly_usage_bot_month DO UPDATE
+            SET menu_extractions = bot_monthly_usage.menu_extractions + 1,
+                updated_at = (NOW() AT TIME ZONE 'UTC')
+            RETURNING menu_extractions
+            """
+        ),
+        {"bot_id": bot_id, "year_month": year_month},
+    )
+    return int(result.scalar_one())
+
+
 async def get_monthly_usage(
     session: AsyncSession,
     bot_id: int,

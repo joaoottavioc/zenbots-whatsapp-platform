@@ -416,6 +416,14 @@ class Plan(SQLModel, table=True):
     max_bots: int = Field(default=1)
     allows_template_messages: bool = Field(default=False)
 
+    # Cadastro Mágico (menu extraction) limits — enforced per bot per BRT month
+    # via bot_monthly_usage.menu_extractions. See app/menu_extraction_policy.py.
+    # None on any field = unlimited. Free: 3/mês, images+text only, 3 images max.
+    # Pro/Founder: 5/mês, any file type, unlimited images.
+    max_menu_extractions_per_month: Optional[int] = Field(default=None)
+    allows_pdf_extraction: bool = Field(default=False)
+    max_images_per_extraction: Optional[int] = Field(default=None)
+
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -559,6 +567,11 @@ class BotMonthlyUsage(SQLModel, table=True):
     year_month: str  # "YYYY-MM" in BRT calendar
 
     completed_orders: int = Field(default=0)
+
+    # Cadastro Mágico (menu extraction) counter. Incremented at upload
+    # reception by consume_extraction_quota; failed extractions still
+    # count against quota. See app/menu_extraction_policy.py.
+    menu_extractions: int = Field(default=0)
 
     # Free-tier overage (populated by the monthly billing cron)
     overage_orders: int = Field(default=0)
