@@ -96,11 +96,57 @@ async def test_reply_whatsapp_passes_media():
 
 
 @pytest.mark.asyncio
-async def test_reply_web_raises_not_implemented_until_phase2():
-    """A web MessageContext is not constructible in production until
-    Phase 2 ingress lands; if someone wires it accidentally, fail loudly."""
+async def test_reply_web_routes_to_broadcast_web_reply():
+    """Phase 1.5: web channel egress dispatches to broadcast_web_reply
+    with the session_id pulled from channel_metadata."""
     ctx = _make_ctx(channel="web")
-    with pytest.raises(NotImplementedError, match="Phase 2"):
+    ctx.bot.id = 42
+    ctx.channel_metadata = {"session_id": "abc-123"}
+
+    with patch(
+        "app.web_channel.broadcast_web_reply", new=AsyncMock()
+    ) as mock_broadcast:
+        await ctx.reply("olá pelo navegador")
+
+    mock_broadcast.assert_awaited_once_with(
+        bot_id=42,
+        session_id="abc-123",
+        text="olá pelo navegador",
+        attachments=[],
+    )
+
+
+@pytest.mark.asyncio
+async def test_reply_web_passes_media_as_attachment():
+    """Media on web is sent as a structured attachment in the SSE payload,
+    not as a separate transport call (the widget renders it inline)."""
+    ctx = _make_ctx(channel="web")
+    ctx.bot.id = 42
+    ctx.channel_metadata = {"session_id": "abc-123"}
+
+    with patch(
+        "app.web_channel.broadcast_web_reply", new=AsyncMock()
+    ) as mock_broadcast:
+        await ctx.reply(
+            "veja o cardápio",
+            media_url="https://example.com/menu.pdf",
+            media_type="document",
+        )
+
+    kwargs = mock_broadcast.await_args.kwargs
+    assert kwargs["attachments"] == [
+        {"type": "document", "url": "https://example.com/menu.pdf"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_reply_web_without_session_id_raises():
+    """A web MessageContext without a session_id in channel_metadata is a
+    misconstruction — fail loudly rather than silently drop the message."""
+    ctx = _make_ctx(channel="web")
+    ctx.channel_metadata = {}  # missing session_id
+
+    with pytest.raises(ValueError, match="session_id"):
         await ctx.reply("ignored")
 
 

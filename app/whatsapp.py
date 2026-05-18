@@ -168,9 +168,9 @@ class MessageContext:
         """Channel-aware egress seam.
 
         WhatsApp routes to `send_whatsapp_message` (the existing transport).
-        Web routes to `broadcast_web_reply` once Phase 2 wires it; for now
-        a web reply raises NotImplementedError because no production
-        caller constructs a web MessageContext yet (no `/chat` ingress).
+        Web routes to `broadcast_web_reply` (Phase 1.5) — publishes an SSE
+        event on Redis PubSub channel `chat:{bot_id}:{session_id}`, which
+        the Phase 2 `GET /chat/stream` endpoint will forward to the widget.
 
         This method intentionally does NOT replace direct
         `send_whatsapp_message(...)` calls in this file yet — Phase 1.2c
@@ -190,14 +190,24 @@ class MessageContext:
             return
 
         if self.channel == "web":
-            # Phase 2 lands the implementation. Until then any caller
-            # that constructs a web MessageContext is exercising an
-            # incomplete code path — fail loudly instead of silently
-            # dropping the message.
-            raise NotImplementedError(
-                "Web channel egress arrives with Phase 2 (broadcast_web_reply); "
-                "no production caller should construct channel='web' yet."
+            from app.web_channel import broadcast_web_reply
+
+            session_id = self.channel_metadata.get("session_id")
+            if not session_id:
+                raise ValueError(
+                    "channel='web' MessageContext missing "
+                    "channel_metadata['session_id']"
+                )
+            attachments: list[dict] = []
+            if media_url:
+                attachments.append({"type": media_type, "url": media_url})
+            await broadcast_web_reply(
+                bot_id=self.bot.id,
+                session_id=session_id,
+                text=text,
+                attachments=attachments,
             )
+            return
 
         raise ValueError(f"Unknown channel: {self.channel!r}")
 
