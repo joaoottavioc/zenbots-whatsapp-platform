@@ -138,14 +138,17 @@ class TestShapeValidation:
     @pytest.mark.asyncio
     async def test_pdf_on_free_rejected_before_increment(self):
         session = _session_returning_sub("free")
-        with patch(
-            "app.menu_extraction_policy.crud.get_plan_by_key",
-            new_callable=AsyncMock,
-            return_value=FREE_PLAN,
-        ), patch(
-            "app.menu_extraction_policy.crud.increment_and_return_menu_extractions",
-            new_callable=AsyncMock,
-        ) as mock_inc:
+        with (
+            patch(
+                "app.menu_extraction_policy.crud.get_plan_by_key",
+                new_callable=AsyncMock,
+                return_value=FREE_PLAN,
+            ),
+            patch(
+                "app.menu_extraction_policy.crud.increment_and_return_menu_extractions",
+                new_callable=AsyncMock,
+            ) as mock_inc,
+        ):
             with pytest.raises(HTTPException) as exc:
                 await consume_extraction_quota(
                     session, bot_id=1, has_pdf=True, image_count=0
@@ -158,14 +161,17 @@ class TestShapeValidation:
     @pytest.mark.asyncio
     async def test_too_many_images_on_free_rejected_before_increment(self):
         session = _session_returning_sub("free")
-        with patch(
-            "app.menu_extraction_policy.crud.get_plan_by_key",
-            new_callable=AsyncMock,
-            return_value=FREE_PLAN,
-        ), patch(
-            "app.menu_extraction_policy.crud.increment_and_return_menu_extractions",
-            new_callable=AsyncMock,
-        ) as mock_inc:
+        with (
+            patch(
+                "app.menu_extraction_policy.crud.get_plan_by_key",
+                new_callable=AsyncMock,
+                return_value=FREE_PLAN,
+            ),
+            patch(
+                "app.menu_extraction_policy.crud.increment_and_return_menu_extractions",
+                new_callable=AsyncMock,
+            ) as mock_inc,
+        ):
             with pytest.raises(HTTPException) as exc:
                 await consume_extraction_quota(
                     session, bot_id=1, has_pdf=False, image_count=4
@@ -179,14 +185,17 @@ class TestShapeValidation:
     @pytest.mark.asyncio
     async def test_pdf_allowed_on_pro(self):
         session = _session_returning_sub("pro_monthly")
-        with patch(
-            "app.menu_extraction_policy.crud.get_plan_by_key",
-            new_callable=AsyncMock,
-            return_value=PRO_PLAN,
-        ), patch(
-            "app.menu_extraction_policy.crud.increment_and_return_menu_extractions",
-            new_callable=AsyncMock,
-            return_value=1,
+        with (
+            patch(
+                "app.menu_extraction_policy.crud.get_plan_by_key",
+                new_callable=AsyncMock,
+                return_value=PRO_PLAN,
+            ),
+            patch(
+                "app.menu_extraction_policy.crud.increment_and_return_menu_extractions",
+                new_callable=AsyncMock,
+                return_value=1,
+            ),
         ):
             policy = await consume_extraction_quota(
                 session, bot_id=1, has_pdf=True, image_count=0
@@ -197,14 +206,17 @@ class TestShapeValidation:
     async def test_many_images_allowed_on_pro(self):
         """Pro has max_images=None (unlimited) — 50 images must pass."""
         session = _session_returning_sub("pro_monthly")
-        with patch(
-            "app.menu_extraction_policy.crud.get_plan_by_key",
-            new_callable=AsyncMock,
-            return_value=PRO_PLAN,
-        ), patch(
-            "app.menu_extraction_policy.crud.increment_and_return_menu_extractions",
-            new_callable=AsyncMock,
-            return_value=1,
+        with (
+            patch(
+                "app.menu_extraction_policy.crud.get_plan_by_key",
+                new_callable=AsyncMock,
+                return_value=PRO_PLAN,
+            ),
+            patch(
+                "app.menu_extraction_policy.crud.increment_and_return_menu_extractions",
+                new_callable=AsyncMock,
+                return_value=1,
+            ),
         ):
             await consume_extraction_quota(
                 session, bot_id=1, has_pdf=False, image_count=50
@@ -218,14 +230,17 @@ class TestQuotaEnforcement:
     @pytest.mark.asyncio
     async def test_free_third_extraction_passes(self):
         session = _session_returning_sub("free")
-        with patch(
-            "app.menu_extraction_policy.crud.get_plan_by_key",
-            new_callable=AsyncMock,
-            return_value=FREE_PLAN,
-        ), patch(
-            "app.menu_extraction_policy.crud.increment_and_return_menu_extractions",
-            new_callable=AsyncMock,
-            return_value=3,  # post-increment = 3, equal to limit
+        with (
+            patch(
+                "app.menu_extraction_policy.crud.get_plan_by_key",
+                new_callable=AsyncMock,
+                return_value=FREE_PLAN,
+            ),
+            patch(
+                "app.menu_extraction_policy.crud.increment_and_return_menu_extractions",
+                new_callable=AsyncMock,
+                return_value=3,  # post-increment = 3, equal to limit
+            ),
         ):
             policy = await consume_extraction_quota(
                 session, bot_id=1, has_pdf=False, image_count=1
@@ -236,14 +251,17 @@ class TestQuotaEnforcement:
     @pytest.mark.asyncio
     async def test_free_fourth_extraction_rolls_back_and_rejects(self):
         session = _session_returning_sub("free")
-        with patch(
-            "app.menu_extraction_policy.crud.get_plan_by_key",
-            new_callable=AsyncMock,
-            return_value=FREE_PLAN,
-        ), patch(
-            "app.menu_extraction_policy.crud.increment_and_return_menu_extractions",
-            new_callable=AsyncMock,
-            return_value=4,  # post-increment = 4, over limit
+        with (
+            patch(
+                "app.menu_extraction_policy.crud.get_plan_by_key",
+                new_callable=AsyncMock,
+                return_value=FREE_PLAN,
+            ),
+            patch(
+                "app.menu_extraction_policy.crud.increment_and_return_menu_extractions",
+                new_callable=AsyncMock,
+                return_value=4,  # post-increment = 4, over limit
+            ),
         ):
             with pytest.raises(HTTPException) as exc:
                 await consume_extraction_quota(
@@ -258,14 +276,17 @@ class TestQuotaEnforcement:
     @pytest.mark.asyncio
     async def test_pro_sixth_extraction_rolls_back_and_rejects(self):
         session = _session_returning_sub("pro_monthly")
-        with patch(
-            "app.menu_extraction_policy.crud.get_plan_by_key",
-            new_callable=AsyncMock,
-            return_value=PRO_PLAN,
-        ), patch(
-            "app.menu_extraction_policy.crud.increment_and_return_menu_extractions",
-            new_callable=AsyncMock,
-            return_value=6,
+        with (
+            patch(
+                "app.menu_extraction_policy.crud.get_plan_by_key",
+                new_callable=AsyncMock,
+                return_value=PRO_PLAN,
+            ),
+            patch(
+                "app.menu_extraction_policy.crud.increment_and_return_menu_extractions",
+                new_callable=AsyncMock,
+                return_value=6,
+            ),
         ):
             with pytest.raises(HTTPException) as exc:
                 await consume_extraction_quota(
@@ -278,14 +299,17 @@ class TestQuotaEnforcement:
     @pytest.mark.asyncio
     async def test_enterprise_unlimited_never_raises_quota(self):
         session = _session_returning_sub("enterprise")
-        with patch(
-            "app.menu_extraction_policy.crud.get_plan_by_key",
-            new_callable=AsyncMock,
-            return_value=ENTERPRISE_PLAN,
-        ), patch(
-            "app.menu_extraction_policy.crud.increment_and_return_menu_extractions",
-            new_callable=AsyncMock,
-            return_value=9999,
+        with (
+            patch(
+                "app.menu_extraction_policy.crud.get_plan_by_key",
+                new_callable=AsyncMock,
+                return_value=ENTERPRISE_PLAN,
+            ),
+            patch(
+                "app.menu_extraction_policy.crud.increment_and_return_menu_extractions",
+                new_callable=AsyncMock,
+                return_value=9999,
+            ),
         ):
             policy = await consume_extraction_quota(
                 session, bot_id=1, has_pdf=True, image_count=100

@@ -90,9 +90,7 @@ def _free_fallback_policy() -> MenuExtractionPolicy:
     )
 
 
-async def get_bot_policy(
-    session: AsyncSession, bot_id: int
-) -> MenuExtractionPolicy:
+async def get_bot_policy(session: AsyncSession, bot_id: int) -> MenuExtractionPolicy:
     """Resolve the bot's current extraction policy.
 
     Mirrors the resolution used by billing_cache._resolve_tier_from_db:
@@ -146,9 +144,7 @@ def _raise_pdf_not_allowed(policy: MenuExtractionPolicy) -> None:
     )
 
 
-def _raise_too_many_images(
-    policy: MenuExtractionPolicy, submitted: int
-) -> None:
+def _raise_too_many_images(policy: MenuExtractionPolicy, submitted: int) -> None:
     assert policy.max_images is not None
     raise HTTPException(
         status_code=400,

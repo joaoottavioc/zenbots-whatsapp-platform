@@ -167,9 +167,7 @@ async def upload_catalog_from_text(
     # Enforce per-tier extraction limits BEFORE spending any LLM tokens.
     # Text payloads are neither PDF nor image — shape checks are trivially
     # true; this call exists to consume one monthly quota slot atomically.
-    await consume_extraction_quota(
-        session, bot_id, has_pdf=False, image_count=0
-    )
+    await consume_extraction_quota(session, bot_id, has_pdf=False, image_count=0)
 
     # 1. Extrai os produtos do texto usando o LLM (como antes)
     extracted_products = await data_extractor.extract_products_from_text(
@@ -735,7 +733,13 @@ async def get_catalog_quota(
     now_brt = datetime.now(timezone.utc) - timedelta(hours=3)
     if now_brt.month == 12:
         next_brt = now_brt.replace(
-            year=now_brt.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+            year=now_brt.year + 1,
+            month=1,
+            day=1,
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0,
         )
     else:
         next_brt = now_brt.replace(

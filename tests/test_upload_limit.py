@@ -25,6 +25,7 @@ def _make_request_with_arq():
 async def test_upload_within_limit_no_413():
     """An image upload within the size limit should NOT raise 413."""
     from app.bot_routes import upload_catalog_from_file_endpoint
+    from app.menu_extraction_policy import MenuExtractionPolicy
     from fastapi import Response
 
     small_content = b"x" * 1024
@@ -42,9 +43,21 @@ async def test_upload_within_limit_no_413():
     mock_bot.user_id = 1
     mock_bot.menu_url = None
 
+    pro_policy = MenuExtractionPolicy(
+        plan_key="pro_monthly",
+        tier="pro",
+        max_per_month=5,
+        allows_pdf=True,
+        max_images=None,
+    )
+
     with (
         patch(
             "app.bot_routes.crud.get_bot_by_id", new=AsyncMock(return_value=mock_bot)
+        ),
+        patch(
+            "app.bot_routes.consume_extraction_quota",
+            new=AsyncMock(return_value=pro_policy),
         ),
         patch(
             "app.bot_routes.asyncio.to_thread",
@@ -93,6 +106,7 @@ async def test_upload_within_limit_no_413():
 async def test_pdf_upload_enqueues_worker_and_returns_202():
     """A PDF upload should enqueue the worker job and return a 202 status."""
     from app.bot_routes import upload_catalog_from_file_endpoint
+    from app.menu_extraction_policy import MenuExtractionPolicy
     from fastapi import Response
 
     pdf_content = b"%PDF-1.4 fake"
@@ -113,9 +127,21 @@ async def test_pdf_upload_enqueues_worker_and_returns_202():
     mock_request = _make_request_with_arq()
     response = Response()
 
+    pro_policy = MenuExtractionPolicy(
+        plan_key="pro_monthly",
+        tier="pro",
+        max_per_month=5,
+        allows_pdf=True,
+        max_images=None,
+    )
+
     with (
         patch(
             "app.bot_routes.crud.get_bot_by_id", new=AsyncMock(return_value=mock_bot)
+        ),
+        patch(
+            "app.bot_routes.consume_extraction_quota",
+            new=AsyncMock(return_value=pro_policy),
         ),
         patch(
             "app.bot_routes.asyncio.to_thread",
