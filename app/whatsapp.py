@@ -125,6 +125,111 @@ def _presign_menu_url(raw_url: str | None) -> str | None:
 
 
 @dataclass
+class ParsedIngress:
+    """Channel-neutral parsed ingress payload (plan/in_browser_bots.md Phase 1.3).
+
+    The parsers (`_parse_whatsapp_payload`, `_parse_web_payload`) turn each
+    channel's raw payload into this normalized shape. Downstream gates and
+    handlers read from a ParsedIngress instead of a channel-specific envelope,
+    which lets the same pipeline serve both WhatsApp webhooks and the
+    Phase 2 `/chat` ingress without case analysis in the body.
+
+    Identity rule: `contact_identity` is the value that goes into
+    `Contact.phone_number` — for WhatsApp it's the real E.164, for web it's
+    the synthesized `web:{session_id}` per A1b. The channel adapter is
+    responsible for the synthesis; the pipeline treats it as opaque.
+
+    Channel-specific fields (e.g. incoming_phone_id, bot_display_phone for
+    WhatsApp; bot_id for web) live alongside the neutral fields so the
+    bot-lookup gate can consume the right one based on channel.
+    """
+
+    contact_identity: str
+    message_id: str
+    text_body: str
+    msg_type: str = "text"
+    audio_media_id: str | None = None
+    # WhatsApp-specific routing fields (used by _find_bot to look up the bot).
+    incoming_phone_id: str | None = None
+    bot_display_phone: str | None = None
+    # Web-specific routing field (URL param identifies the bot directly).
+    bot_id: int | None = None
+    # Channel adapter session id (only set for web). Mirrored into
+    # MessageContext.channel_metadata['session_id'] so ctx.reply() can route.
+    session_id: str | None = None
+
+
+def _parse_whatsapp_payload(data: dict) -> ParsedIngress | None:
+    """Extract a ParsedIngress from a Meta Cloud API webhook payload.
+
+    Returns None for non-message events (status updates, read receipts,
+    etc.) so the caller can early-return. The few log lines for status
+    updates stay here — they describe THIS payload, not the next step.
+    """
+    entry = data.get("entry", [])[0]
+    changes = entry.get("changes", [])[0]
+    value = changes.get("value", {})
+
+    if "messages" not in value:
+        # Status updates: log them for diagnostics, then signal "skip".
+        statuses = value.get("statuses", [])
+        if statuses:
+            for s in statuses:
+                logger.info(
+                    "WhatsApp status update: id=%s status=%s recipient=%s errors=%s",
+                    s.get("id"),
+                    s.get("status"),
+                    s.get("recipient_id"),
+                    s.get("errors"),
+                )
+        return None
+
+    message_data = value["messages"][0]
+    contact_number = message_data["from"]
+    message_id = message_data["id"]
+    msg_type = message_data.get("type", "text")
+
+    audio_media_id: str | None = None
+    if msg_type in ("audio", "voice"):
+        audio_media_id = message_data.get("audio", {}).get("id") or message_data.get(
+            "voice", {}
+        ).get("id")
+        text_body = ""  # Will be replaced by transcript downstream.
+    else:
+        text_body = message_data.get("text", {}).get("body", "")
+
+    return ParsedIngress(
+        contact_identity=contact_number,
+        message_id=message_id,
+        text_body=text_body,
+        msg_type=msg_type,
+        audio_media_id=audio_media_id,
+        incoming_phone_id=value["metadata"]["phone_number_id"],
+        bot_display_phone=value["metadata"]["display_phone_number"],
+    )
+
+
+def _parse_web_payload(data: dict) -> ParsedIngress:
+    """Phase 2 implements this. Until then any caller hitting it is
+    exercising an incomplete path — fail loudly rather than silently
+    constructing a half-valid ParsedIngress.
+
+    Expected payload shape (per plan/in_browser_bots.md §2.1):
+      {
+        "bot_id": int,
+        "session_id": str (UUID),
+        "message_id": str (client-generated UUID),
+        "text": str,
+      }
+
+    Web identity synthesis (A1b): contact_identity := f"web:{session_id}".
+    """
+    raise NotImplementedError(
+        "Web payload parsing arrives with Phase 2 (POST /chat/{bot_id}/message)."
+    )
+
+
+@dataclass
 class MessageContext:
     """Bundles the variables threaded through process_whatsapp_message handlers.
 
@@ -3626,48 +3731,36 @@ def _classify_error_message(exc: Exception) -> str:
 
 
 async def process_whatsapp_message(ctx, data: Dict[str, Any]):
+    """ARQ task entry for WhatsApp messages.
+
+    Phase 1.3 (plan/in_browser_bots.md): the WhatsApp-envelope parsing is
+    extracted into `_parse_whatsapp_payload`, which returns a channel-neutral
+    `ParsedIngress`. The rest of this function consumes that result. Phase 2
+    will add a sibling `process_chat_message` ARQ task that builds a
+    `ParsedIngress` from a `/chat` POST body and runs through the same
+    downstream pipeline.
+    """
     new_trace_id()
     contact_number: str | None = None
     current_token: str | None = None
     current_phone_id: str | None = None
     async with async_session() as session:
         try:
-            # 1. Extração segura dos dados
-            entry = data.get("entry", [])[0]
-            changes = entry.get("changes", [])[0]
-            value = changes.get("value", {})
-
-            if "messages" not in value:
-                # Debug: log status updates to diagnose delivery failures
-                statuses = value.get("statuses", [])
-                if statuses:
-                    for s in statuses:
-                        logger.info(
-                            "WhatsApp status update: id=%s status=%s recipient=%s errors=%s",
-                            s.get("id"),
-                            s.get("status"),
-                            s.get("recipient_id"),
-                            s.get("errors"),
-                        )
+            # 1. Parse the WhatsApp webhook envelope. Returns None for
+            #    non-message events (status updates) — we just drop those.
+            parsed = _parse_whatsapp_payload(data)
+            if parsed is None:
                 return
 
-            message_data = value["messages"][0]
-            contact_number = message_data["from"]
-            message_id = message_data["id"]
-            msg_type = message_data.get("type", "text")
-
-            # Extract text body (for text messages) or media_id (for audio)
-            _audio_media_id: str | None = None
-            if msg_type in ("audio", "voice"):
-                _audio_media_id = message_data.get("audio", {}).get(
-                    "id"
-                ) or message_data.get("voice", {}).get("id")
-                text_body = ""  # Will be replaced by transcript
-            else:
-                text_body = message_data.get("text", {}).get("body", "")
-
-            incoming_phone_id = value["metadata"]["phone_number_id"]
-            bot_display_phone = value["metadata"]["display_phone_number"]
+            # Unpack into the local variable names the rest of this body
+            # already uses, so the 250-line downstream block stays untouched.
+            contact_number = parsed.contact_identity
+            message_id = parsed.message_id
+            text_body = parsed.text_body
+            msg_type = parsed.msg_type
+            _audio_media_id = parsed.audio_media_id
+            incoming_phone_id = parsed.incoming_phone_id
+            bot_display_phone = parsed.bot_display_phone
 
             # Gate: Rate limiting (scoped by bot phone_id)
             if await _check_rate_limit(contact_number, phone_id=incoming_phone_id):
