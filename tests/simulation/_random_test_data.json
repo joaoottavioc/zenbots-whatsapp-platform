@@ -1,25 +1,25 @@
 {
   "rand0": {
-    "bot_id": 2233,
-    "phone_number_id": "rand-test-0-1776694811",
+    "bot_id": 2272,
+    "phone_number_id": "rand-test-0-1779116540",
     "name": "O Padeiro Padaria & Cafeteria",
     "category": "padaria",
     "scenarios": {
-      "add_single_msg": "quero 1 café expresso grande caprichada",
+      "add_single_msg": "quero 1 café com leite pequeno caprichada",
       "add_single_expected": [
         [
-          "Café Expresso Grande",
+          "Café com Leite Pequeno",
           1
         ]
       ],
-      "add_multi_msg": "tu manda 2 suco de abacaxi e to querendo um chocolate quente médio",
+      "add_multi_msg": "tu manda 2 suco de abacaxi e to querendo um chocolate quente grande",
       "add_multi_expected": [
         [
           "Suco de Abacaxi",
           2
         ],
         [
-          "Chocolate Quente Médio",
+          "Chocolate Quente Grande",
           1
         ]
       ],
@@ -30,44 +30,44 @@
       ],
       "remove_msg": "pode tirar o pão com linguiça",
       "suggestion_msg": "não sei o que pedir",
-      "checkout_product_msg": "vou de x-burger",
+      "checkout_product_msg": "vou de x-bacon",
       "checkout_product_expected": [
-        "X-Burger",
+        "X-Bacon",
         1
       ],
       "abbreviation_product": "Açaí na Tigela - 500 ml",
       "abbreviation_msg": "joga 1 açaí na tigela - no pedido",
-      "double_add_product": "Café Coado Médio",
-      "double_add_msg_1": "me vê um café coado médio",
-      "double_add_msg_2": "1 café coado médio por favor",
+      "double_add_product": "Café Coado Grande",
+      "double_add_msg_1": "me vê um café coado grande",
+      "double_add_msg_2": "1 café coado grande por favor",
       "question_product": "Sanduíche Tropical",
       "question_msg": "o sanduíche tropical vem com o quê?",
-      "add_remove_product": "Café Expresso Grande",
-      "add_remove_add_msg": "manda 1 café expresso grande",
-      "add_remove_remove_msg": "pode tirar o café expresso grande",
+      "add_remove_product": "Café com Leite Pequeno",
+      "add_remove_add_msg": "manda 1 café com leite pequeno",
+      "add_remove_remove_msg": "pode tirar o café com leite pequeno",
       "greeting_msg": "voltei",
-      "continuation_first_msg": "pode mandar um café expresso grande",
-      "continuation_first_product": "Café Expresso Grande",
-      "continuation_followup_msg": "e uma chocolate quente médio",
-      "continuation_followup_product": "Chocolate Quente Médio",
+      "continuation_first_msg": "pode mandar um café com leite pequeno",
+      "continuation_first_product": "Café com Leite Pequeno",
+      "continuation_followup_msg": "e uma chocolate quente grande",
+      "continuation_followup_product": "Chocolate Quente Grande",
       "trap_question_msg": "quanto custa o sanduíche tropical?",
       "trap_question_product": "Sanduíche Tropical",
-      "trap_unrelated_add_msg": "vou querer um chocolate quente médio",
-      "trap_unrelated_add_product": "Chocolate Quente Médio",
-      "subset_remove_msg": "deixa o chocolate quente médio pra la",
-      "subset_remove_target_product": "Chocolate Quente Médio",
+      "trap_unrelated_add_msg": "vou querer um chocolate quente grande",
+      "trap_unrelated_add_product": "Chocolate Quente Grande",
+      "subset_remove_msg": "deixa o chocolate quente grande pra la",
+      "subset_remove_target_product": "Chocolate Quente Grande",
       "subset_remove_keeper": [
         "Suco de Abacaxi",
         2
       ],
-      "multi_remove_setup_msg": "quero um suco de abacaxi, um chocolate quente médio e um pão com linguiça",
+      "multi_remove_setup_msg": "quero um suco de abacaxi, um chocolate quente grande e um pão com linguiça",
       "multi_remove_msg": "tira o suco de abacaxi e o pão com linguiça",
       "multi_remove_targets": [
         "Suco de Abacaxi",
         "Pão com Linguiça"
       ],
-      "multi_remove_keeper": "Chocolate Quente Médio",
-      "qty_reduce_setup_msg": "quero 3 suco de abacaxi e 2 chocolate quente médio",
+      "multi_remove_keeper": "Chocolate Quente Grande",
+      "qty_reduce_setup_msg": "quero 3 suco de abacaxi e 2 chocolate quente grande",
       "qty_reduce_msg": "deixa só 1 suco de abacaxi",
       "qty_reduce_expected": [
         [
@@ -75,20 +75,20 @@
           1
         ],
         [
-          "Chocolate Quente Médio",
+          "Chocolate Quente Grande",
           2
         ]
       ],
       "digit_in_name_product": null,
       "digit_in_name_msg": null,
-      "unavailable_msg": "me vê 1 açaí na tigela e me ve 1 pão com mortadela ceratti ai",
+      "unavailable_msg": "me vê 1 adicional de bacon e me ve 1 pão com mortadela ceratti ai",
       "unavailable_available": "Pão com Mortadela Ceratti",
-      "unavailable_name": "Açaí na Tigela"
+      "unavailable_name": "Adicional de bacon"
     }
   },
   "rand1": {
-    "bot_id": 2234,
-    "phone_number_id": "rand-test-1-1776694817",
+    "bot_id": 2273,
+    "phone_number_id": "rand-test-1-1779116548",
     "name": "Cafeteria Sujinho",
     "category": "cafeteria",
     "scenarios": {
@@ -174,8 +174,8 @@
     }
   },
   "rand2": {
-    "bot_id": 2235,
-    "phone_number_id": "rand-test-2-1776694820",
+    "bot_id": 2274,
+    "phone_number_id": "rand-test-2-1779116553",
     "name": "Design Cardápio Açaí / Açaiteria :: Behance",
     "category": "açaiteria",
     "scenarios": {
@@ -261,8 +261,8 @@
     }
   },
   "rand3": {
-    "bot_id": 2236,
-    "phone_number_id": "rand-test-3-1776694821",
+    "bot_id": 2275,
+    "phone_number_id": "rand-test-3-1779116555",
     "name": "Marmita e Marmitex Restaurante Rainha da Galinhada",
     "category": "marmitaria",
     "scenarios": {
@@ -348,8 +348,8 @@
     }
   },
   "rand4": {
-    "bot_id": 2237,
-    "phone_number_id": "rand-test-4-1776694823",
+    "bot_id": 2276,
+    "phone_number_id": "rand-test-4-1779116558",
     "name": "Pastelaria em São Paulo",
     "category": "pastelaria",
     "scenarios": {
@@ -435,8 +435,8 @@
     }
   },
   "rand5": {
-    "bot_id": 2238,
-    "phone_number_id": "rand-test-5-1776694827",
+    "bot_id": 2277,
+    "phone_number_id": "rand-test-5-1779116563",
     "name": "Belô",
     "category": "doceria",
     "scenarios": {
@@ -522,8 +522,8 @@
     }
   },
   "rand6": {
-    "bot_id": 2239,
-    "phone_number_id": "rand-test-6-1776694830",
+    "bot_id": 2278,
+    "phone_number_id": "rand-test-6-1779116567",
     "name": "Lanchonete Souza Lapa",
     "category": "lanchonete",
     "scenarios": {
@@ -609,8 +609,8 @@
     }
   },
   "rand7": {
-    "bot_id": 2240,
-    "phone_number_id": "rand-test-7-1776694831",
+    "bot_id": 2279,
+    "phone_number_id": "rand-test-7-1779116570",
     "name": "Burger Company",
     "category": "hamburgueria",
     "scenarios": {
@@ -696,8 +696,8 @@
     }
   },
   "rand8": {
-    "bot_id": 2241,
-    "phone_number_id": "rand-test-8-1776694835",
+    "bot_id": 2280,
+    "phone_number_id": "rand-test-8-1779116576",
     "name": "Pizzaria Buon Gusto",
     "category": "pizzaria",
     "scenarios": {
@@ -783,8 +783,8 @@
     }
   },
   "rand9": {
-    "bot_id": 2242,
-    "phone_number_id": "rand-test-9-1776694838",
+    "bot_id": 2281,
+    "phone_number_id": "rand-test-9-1779116580",
     "name": "Combinadões Entradinhas Usuzukuri / Carpaccios Sas",
     "category": "sushi",
     "scenarios": {
@@ -870,8 +870,8 @@
     }
   },
   "rand10": {
-    "bot_id": 2243,
-    "phone_number_id": "rand-test-10-1776694844",
+    "bot_id": 2282,
+    "phone_number_id": "rand-test-10-1779116594",
     "name": "Quintal Do Peter Espetaria",
     "category": "espetaria",
     "scenarios": {

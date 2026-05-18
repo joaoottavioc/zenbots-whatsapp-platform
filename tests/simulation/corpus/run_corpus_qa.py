@@ -769,7 +769,7 @@ async def _main_locked():
     # Subscriptions
     vals = ",".join(
         f"({b['bot_id']},1,'rand-sub-{b['bot_id']}','authorized',"
-        f"'2027-04-02',NOW(),NOW(),'pro')"
+        f"'2027-04-02',NOW(),NOW(),'pro_monthly')"
         for b in bots.values()
     )
     await run_sql(
