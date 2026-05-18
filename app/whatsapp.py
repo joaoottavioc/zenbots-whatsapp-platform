@@ -2,7 +2,7 @@
 import os
 import json
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List
 import httpx
 from dotenv import load_dotenv
@@ -126,7 +126,15 @@ def _presign_menu_url(raw_url: str | None) -> str | None:
 
 @dataclass
 class MessageContext:
-    """Bundles the variables threaded through process_whatsapp_message handlers."""
+    """Bundles the variables threaded through process_whatsapp_message handlers.
+
+    Channel fields below are additive groundwork for plan/in_browser_bots.md
+    (Phase 1.2). WhatsApp callers leave them at defaults; the web ingress
+    adapter (Phase 2) will set them when constructing a web MessageContext.
+    The existing `contact_number`, `token`, `phone_id` fields remain for
+    backward compatibility — Phase 1.3 will migrate call sites to use
+    `channel_metadata` and a unified `ctx.reply(...)` helper.
+    """
 
     session: AsyncSession
     bot: Bot
@@ -136,6 +144,10 @@ class MessageContext:
     text_body: str
     token: str
     phone_id: str
+    # New channel-aware fields (Phase 1.2). Default to WhatsApp so every
+    # existing construction site continues to work without changes.
+    channel: str = "whatsapp"  # Channel enum value
+    channel_metadata: dict = field(default_factory=dict)
 
 
 # Extrai "QTD + NOME" da pergunta de confirmação (ex.: "1 Gnocchis de la Mémé Forte, 2 X, ...")

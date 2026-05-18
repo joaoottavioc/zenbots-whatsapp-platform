@@ -26,6 +26,14 @@ class CartState(str, enum.Enum):
     AWAITING_PAYMENT_METHOD = "AWAITING_PAYMENT_METHOD"
 
 
+class Channel(str, enum.Enum):
+    """Bot deploy channels. WhatsApp is the historical default; web is the
+    embeddable widget added per plan/in_browser_bots.md."""
+
+    WHATSAPP = "whatsapp"
+    WEB = "web"
+
+
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     email: str = Field(unique=True, index=True)
@@ -125,10 +133,23 @@ class Bot(SQLModel, table=True):
 class Contact(SQLModel, table=True):
     __table_args__ = (
         UniqueConstraint("bot_id", "phone_number", name="uq_contact_bot_phone"),
+        Index("ix_contact_bot_id_channel", "bot_id", "channel"),
     )
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    # Identity key. For WhatsApp: real E.164. For web: synthesized
+    # "web:{session_id}" (A1b in plan/in_browser_bots.md). Stays NOT NULL
+    # and unique per bot — no code path treats this as a real phone.
     phone_number: str = Field(index=True)
+
+    # Deploy channel this contact entered through. Drives KDS display,
+    # cost attribution, and the channel-specific egress path.
+    channel: str = Field(default=Channel.WHATSAPP.value, max_length=16)
+
+    # The human phone the customer actually uses. WhatsApp contacts have
+    # this populated from phone_number on creation; web contacts are NULL
+    # until the customer provides it at checkout.
+    contact_phone: Optional[str] = Field(default=None, max_length=32)
 
     name: Optional[str] = Field(default=None)
 
