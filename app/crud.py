@@ -650,6 +650,63 @@ async def get_user_by_id(session: AsyncSession, user_id: int) -> Optional[User]:
     return result.scalars().first()
 
 
+def _slugify_name(name: str) -> str:
+    """Strip accents, lowercase, replace non-alphanumeric with hyphens.
+
+    Used to derive the auto slug for a new bot. Mirrors the inline
+    helper in migration b3c4d5e6f7a8 — keep these two in sync if you
+    change the rules (the migration backfills existing rows, this
+    runs on new bots).
+    """
+    import unicodedata
+
+    if not name:
+        return "bot"
+    nfkd = unicodedata.normalize("NFKD", name)
+    ascii_only = "".join(c for c in nfkd if not unicodedata.combining(c))
+    lowered = ascii_only.lower()
+    hyphenated = re.sub(r"[^a-z0-9]+", "-", lowered).strip("-")
+    return hyphenated or "bot"
+
+
+async def generate_unique_slug(
+    session: AsyncSession,
+    restaurant_name: Optional[str],
+    *,
+    exclude_bot_id: Optional[int] = None,
+) -> str:
+    """Compute a unique `bot.slug` for the given restaurant name.
+
+    Format: `<kebab-name>-zenbot`, with `-2`, `-3`, ... suffixes appended
+    on collision. `exclude_bot_id` lets the caller exclude one row from
+    the collision check (used when an owner edits their own bot's name
+    or slug — their existing slug shouldn't block them).
+
+    Idempotent across concurrent calls only with an external lock or
+    INSERT race-loss handling. For now we rely on the DB's UNIQUE
+    constraint to catch concurrent creations and let the caller retry.
+    """
+    base = _slugify_name(restaurant_name or "bot") + "-zenbot"
+    candidate = base
+    counter = 2
+    while True:
+        query = select(Bot.id).where(Bot.slug == candidate)
+        if exclude_bot_id is not None:
+            query = query.where(Bot.id != exclude_bot_id)
+        existing = (await session.execute(query)).first()
+        if existing is None:
+            return candidate
+        candidate = f"{base}-{counter}"
+        counter += 1
+
+
+async def get_bot_by_slug(session: AsyncSession, slug: str) -> Optional[Bot]:
+    """Resolve a customer-facing slug to a Bot row. Returns None on miss
+    so the caller can surface a 404."""
+    result = await session.execute(select(Bot).where(Bot.slug == slug))
+    return result.scalars().first()
+
+
 async def create_bot(
     session: AsyncSession,
     user_id: int,
@@ -674,6 +731,11 @@ async def create_bot(
         data.get("closing_message") or "Olá! No momento estamos fechados."
     )
     data["schedule"] = data.get("schedule") or {}
+
+    # Auto-generate the customer-facing widget slug. Owner can override
+    # later via PATCH /bots/{id}.
+    if not data.get("slug"):
+        data["slug"] = await generate_unique_slug(session, data.get("restaurant_name"))
 
     new_bot = Bot(user_id=user_id, **data)
 
@@ -711,6 +773,18 @@ async def list_user_bots(session: AsyncSession, user_id: int) -> List[Bot]:
     return result.unique().scalars().all()
 
 
+class SlugTakenError(Exception):
+    """Raised when the requested slug is already used by another bot.
+
+    Caught by the route layer and translated to a 409 with a clear
+    detail so the dashboard can show "este URL já está em uso" to
+    the owner."""
+
+    def __init__(self, slug: str):
+        super().__init__(f"slug already taken: {slug}")
+        self.slug = slug
+
+
 async def update_bot(
     session: AsyncSession, bot_id: int, update_data: BotUpdate
 ) -> Optional[Bot]:
@@ -720,6 +794,18 @@ async def update_bot(
         return None
 
     update_data_dict = update_data.model_dump(exclude_unset=True)
+
+    # If the owner is changing the slug, pre-flight the uniqueness check
+    # so we can return a clean 409 instead of letting the DB unique
+    # constraint raise an IntegrityError mid-flush.
+    new_slug = update_data_dict.get("slug")
+    if new_slug is not None and new_slug != db_bot.slug:
+        collision = await session.execute(
+            select(Bot.id).where(Bot.slug == new_slug, Bot.id != bot_id)
+        )
+        if collision.first() is not None:
+            raise SlugTakenError(new_slug)
+
     for key, value in update_data_dict.items():
         if key == "whatsapp_token":
             value = encrypt_value(value) if value else ""

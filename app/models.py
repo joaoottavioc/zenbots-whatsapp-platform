@@ -119,6 +119,20 @@ class Bot(SQLModel, table=True):
     # Restaurant cover image
     restaurant_image_url: Optional[str] = Field(default=None)
 
+    # Customer-facing slug for the widget URL (e.g. /sabor-da-serra-zenbot).
+    # Production path: crud.create_bot generates a slugified-name slug
+    # via generate_unique_slug, overriding the random default below.
+    # The default_factory is for direct Bot(...) construction in tests
+    # and admin scripts — every row needs SOME slug because the DB
+    # column is NOT NULL (migration b3c4d5e6f7a8). The owner can rename
+    # it via the dashboard after creation.
+    slug: str = Field(
+        max_length=80,
+        index=True,
+        unique=True,
+        default_factory=lambda: f"bot-{secrets.token_urlsafe(8).lower().replace('_', '-')}",
+    )
+
     # ── Channel matrix (plan/in_browser_bots.md Phase 2.5) ──────────────
     # Every existing bot was WhatsApp-only, so whatsapp_enabled defaults
     # true to preserve current behavior. web_widget_enabled defaults false

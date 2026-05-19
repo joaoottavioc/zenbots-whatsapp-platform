@@ -104,11 +104,24 @@ async def update_user_bot(
 
     # ▼▼▼ CORREÇÃO APLICADA AQUI ▼▼▼
     # 3. Chama a função do CRUD passando 'bot_id' em vez de 'db_bot'
-    updated_bot = await crud.update_bot(
-        session=session,
-        bot_id=bot_id,  # Passa o ID que a função espera
-        update_data=bot_update_data,
-    )
+    try:
+        updated_bot = await crud.update_bot(
+            session=session,
+            bot_id=bot_id,  # Passa o ID que a função espera
+            update_data=bot_update_data,
+        )
+    except crud.SlugTakenError as e:
+        # Owner picked a slug another bot already uses. Surface a
+        # machine-readable 409 so the dashboard form can highlight the
+        # slug field instead of showing a generic error.
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "slug_taken",
+                "slug": e.slug,
+                "message": "Este URL já está sendo usado por outro restaurante.",
+            },
+        )
     # ▲▲▲ FIM DA CORREÇÃO ▲▲▲
 
     return updated_bot

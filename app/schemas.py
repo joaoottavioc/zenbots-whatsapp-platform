@@ -135,10 +135,39 @@ class BotUpdate(BaseModel):
     # F-17: Cancellation window
     cancellation_window_minutes: Optional[int] = Field(default=None, ge=0, le=30)
 
+    # Customer-facing widget slug (plan/in_browser_bots.md). Owner can
+    # override the auto-generated value. Validator enforces kebab-case
+    # so the URL stays clean and predictable.
+    slug: Optional[str] = Field(default=None, min_length=3, max_length=80)
+
+    # Channel toggles + widget config — editable from the bot card UI
+    # (plan/in_browser_bots.md Phase 4). web_widget_enabled flips the
+    # ingress gate; allowed_origins is the CORS allowlist.
+    whatsapp_enabled: Optional[bool] = None
+    web_widget_enabled: Optional[bool] = None
+    web_widget_allowed_origins: Optional[List[str]] = None
+    web_widget_theme: Optional[Dict[str, Any]] = None
+    web_widget_offline_message: Optional[str] = Field(default=None, max_length=500)
+
     @validator("timezone")
     def validate_timezone(cls, v):
         if v is not None and v not in pytz.all_timezones:
             raise ValueError(f"Timezone inválido: {v}")
+        return v
+
+    @validator("slug")
+    def validate_slug(cls, v):
+        if v is None:
+            return v
+        import re
+
+        # Lowercase letters, digits, hyphens. No leading/trailing hyphen.
+        # No consecutive hyphens (keeps URLs readable).
+        if not re.match(r"^[a-z0-9]+(-[a-z0-9]+)*$", v):
+            raise ValueError(
+                "slug deve conter apenas letras minúsculas, dígitos e hífens "
+                "(sem hífens no início, fim, ou em sequência)"
+            )
         return v
 
 
@@ -178,6 +207,15 @@ class BotResponse(BaseModel):
 
     # Restaurant cover image
     restaurant_image_url: Optional[str] = None
+
+    # Customer-facing widget URL slug + channel toggles + widget config.
+    # The dashboard renders these on the bot card to manage Web Atendimento.
+    slug: Optional[str] = None
+    whatsapp_enabled: bool = True
+    web_widget_enabled: bool = False
+    web_widget_allowed_origins: List[str] = []
+    web_widget_theme: Dict[str, Any] = {}
+    web_widget_offline_message: Optional[str] = None
 
     # O bot agora retorna a lista de produtos e de histórico associados a ele
     products: List[ProductResponse] = []
@@ -507,6 +545,18 @@ class ChatSessionResponse(BaseModel):
     # Mirrors the Plan tier (free/pro/founder) so the widget can decide
     # whether to render the "Powered by ZenBotZ®" footer.
     plan_tier: str
+
+
+class ChatSlugResolution(BaseModel):
+    """Returned by GET /chat/by-slug/{slug}. The frontend dynamic route
+    `/<slug>` calls this to resolve a customer-facing slug into the
+    bot_id it should pass to ZenBotsWidget. Tiny response shape — just
+    what the widget bootstrap needs."""
+
+    bot_id: int
+    slug: str
+    restaurant_name: Optional[str] = None
+    web_widget_enabled: bool
 
 
 # --- SSE event envelopes (server → widget) ───────────────────────────

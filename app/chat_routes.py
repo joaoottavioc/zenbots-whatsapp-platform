@@ -327,6 +327,40 @@ async def get_chat_stream(
     )
 
 
+@router.get(
+    "/by-slug/{slug}",
+    response_model=schemas.ChatSlugResolution,
+    summary="Resolve a customer-facing slug to a bot_id",
+)
+async def resolve_chat_slug(
+    request: Request,
+    slug: str = Path(..., min_length=3, max_length=80),
+):
+    """Customer-facing endpoint that converts a slug like
+    'sabor-da-serra-zenbot' to the bot_id the widget needs.
+
+    Two-step bootstrap (slug → bot_id, then bot_id → /session) keeps
+    slug resolution cheap (single index lookup) and lets the existing
+    /session contract stay unchanged. web_widget_enabled is surfaced
+    here so the frontend `/{slug}` page can show a "this restaurant
+    doesn't accept web orders" inline message without a 403 round-trip.
+    """
+    _ensure_web_channel_enabled()
+    async with async_session() as session:
+        bot = await crud.get_bot_by_slug(session, slug)
+    if not bot:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "slug_not_found", "slug": slug},
+        )
+    return schemas.ChatSlugResolution(
+        bot_id=bot.id,
+        slug=bot.slug,
+        restaurant_name=bot.restaurant_name,
+        web_widget_enabled=bot.web_widget_enabled,
+    )
+
+
 @router.post(
     "/{bot_id}/session",
     response_model=schemas.ChatSessionResponse,
