@@ -505,9 +505,42 @@ async def _check_rate_limit(contact_number: str, phone_id: str = "") -> bool:
 
 
 async def _find_bot(
-    session: AsyncSession, incoming_phone_id: str, bot_display_phone: str
+    session: AsyncSession,
+    incoming_phone_id: str | None = None,
+    bot_display_phone: str | None = None,
+    *,
+    channel: str = "whatsapp",
+    bot_id: int | None = None,
 ) -> Bot | None:
-    """Finds the Bot by phone_number_id with fallback to display number."""
+    """Look up the Bot for an incoming message (plan/in_browser_bots.md Phase 1.4).
+
+    WhatsApp path (channel='whatsapp', default): look up by
+    `phone_number_id` from the webhook metadata, fall back to
+    `display_phone_number` if the index miss happens (occasional Meta
+    drift between the two values). Unchanged from pre-Phase 1.4 behavior;
+    existing positional callers continue to work because the new
+    `channel`/`bot_id` parameters are kwargs with defaults.
+
+    Web path (channel='web'): the URL `POST /chat/{bot_id}/message`
+    identifies the bot directly, so we look up by primary key. A
+    web-only bot has empty `phone_number_id`, so the WhatsApp path
+    would never find it — channel branching is the seam.
+
+    Returns None when no bot matches OR when the call shape is wrong
+    (channel='web' without bot_id, etc.). The caller drops the message
+    on None — same contract for both channels.
+    """
+    if channel == "web":
+        if bot_id is None:
+            logger.error("_find_bot called with channel='web' but no bot_id")
+            return None
+        result = await session.execute(select(Bot).where(Bot.id == bot_id))
+        bot = result.scalars().first()
+        if not bot:
+            logger.error("Bot not found for web message, bot_id=%s", bot_id)
+        return bot
+
+    # WhatsApp path — unchanged behavior.
     result = await session.execute(
         select(Bot).where(Bot.phone_number_id == incoming_phone_id)
     )
