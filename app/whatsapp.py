@@ -1122,7 +1122,12 @@ async def _handle_address_confirmation(
 
 
 async def _handle_customer_name(mctx: MessageContext) -> str | None:
-    """Handles AWAITING_CUSTOMER_NAME state. Returns response string or None."""
+    """Handles AWAITING_CUSTOMER_NAME state. Returns response string or None.
+
+    Web channel branches into AWAITING_CONTACT_PHONE next (we don't yet
+    have the customer's real phone, only a synthesized session id).
+    WhatsApp keeps the existing one-step transition to AWAITING_PAYMENT_METHOD
+    — their Contact.phone_number IS the real phone."""
     cart, session, bot = mctx.cart, mctx.session, mctx.bot
     if cart.state != CartState.AWAITING_CUSTOMER_NAME:
         return None
@@ -1130,6 +1135,24 @@ async def _handle_customer_name(mctx: MessageContext) -> str | None:
     customer_name = mctx.text_body.strip()[:100]
     await crud.save_customer_name_to_contact(session, cart.contact_id, customer_name)
 
+    if mctx.channel == "web":
+        # Web checkout: ask for the callback phone before payment.
+        cart.state = CartState.AWAITING_CONTACT_PHONE
+        response = (
+            f"Obrigado, {customer_name.split(' ')[0]}! 😊\n\n"
+            "Para finalizar, me informe seu *telefone* com DDD "
+            "(ex: 11 91234-5678). Usaremos apenas para confirmar o pedido."
+        )
+        cart.last_activity_at = utcnow()
+        session.add(cart)
+        await mctx.reply(response)
+        await crud.add_interaction_to_history(
+            session, bot.id, mctx.contact_number, mctx.text_body, response
+        )
+        await session.flush()
+        return response
+
+    # WhatsApp path — unchanged: straight to payment prompt.
     await _load_cart_items_with_products(cart, session)
     cart.state = CartState.AWAITING_PAYMENT_METHOD
     final_summary = _build_cart_summary_message(cart, bot, "📦")
@@ -1143,6 +1166,76 @@ async def _handle_customer_name(mctx: MessageContext) -> str | None:
         f"{payment_prompt}"
     )
 
+    cart.last_activity_at = utcnow()
+    session.add(cart)
+    await mctx.reply(response)
+    await crud.add_interaction_to_history(
+        session, bot.id, mctx.contact_number, mctx.text_body, response
+    )
+    await session.flush()
+    return response
+
+
+# Regex that pulls the digits out of free-form phone input. Matches
+# patterns the widget accepts: "11 91234-5678", "(11) 91234-5678",
+# "+55 11 91234-5678", bare "11912345678". 10-13 digits is the Brazilian
+# range (8-digit landline + 2-digit DDD up through 13-digit with +55).
+_PHONE_DIGITS_RE = re.compile(r"\d")
+
+
+def _normalize_contact_phone(raw: str) -> str | None:
+    """Strip non-digits from a phone input and validate the digit count.
+
+    Brazilian phones: 10 digits (landline, "XX YYYY-YYYY"), 11 digits
+    (mobile, "XX 9YYYY-YYYY"), or 12-13 with country code (+55). Anything
+    outside that range is rejected — likely a typo or wrong field.
+    """
+    digits = "".join(_PHONE_DIGITS_RE.findall(raw or ""))
+    if len(digits) < 10 or len(digits) > 13:
+        return None
+    # Strip the country code if present so storage is canonical "DDD+number".
+    if len(digits) == 13 and digits.startswith("55"):
+        digits = digits[2:]
+    elif len(digits) == 12 and digits.startswith("55"):
+        digits = digits[2:]
+    return digits
+
+
+async def _handle_contact_phone(mctx: MessageContext) -> str | None:
+    """Web-only checkout step (plan/in_browser_bots.md Phase 2.4).
+
+    Captures the customer's real phone so the restaurant has a callback
+    when an order needs follow-up (delayed delivery, missing item, etc.).
+    Stored in Contact.contact_phone — separate from Contact.phone_number
+    which is the synthesized identity key 'web:{session_id}' (A1b)."""
+    cart, session, bot = mctx.cart, mctx.session, mctx.bot
+    if cart.state != CartState.AWAITING_CONTACT_PHONE:
+        return None
+
+    normalized = _normalize_contact_phone(mctx.text_body)
+    if not normalized:
+        response = (
+            "Não reconheci esse telefone. Pode enviar com DDD?\nEx: *11 91234-5678*"
+        )
+        cart.last_activity_at = utcnow()
+        session.add(cart)
+        await mctx.reply(response)
+        await crud.add_interaction_to_history(
+            session, bot.id, mctx.contact_number, mctx.text_body, response
+        )
+        await session.flush()
+        return response
+
+    await crud.save_contact_phone_to_contact(session, cart.contact_id, normalized)
+
+    await _load_cart_items_with_products(cart, session)
+    cart.state = CartState.AWAITING_PAYMENT_METHOD
+    final_summary = _build_cart_summary_message(cart, bot, "📦")
+
+    has_pix = await _bot_has_pix(bot, session)
+    payment_prompt = _payment_prompt(has_pix)
+
+    response = f"Telefone salvo! ✅\n\n{final_summary}\n\n{payment_prompt}"
     cart.last_activity_at = utcnow()
     session.add(cart)
     await mctx.reply(response)
@@ -3683,6 +3776,9 @@ async def _process_contact_message_inner(
     if checkout_result is not None:
         return
     checkout_result = await _handle_customer_name(mctx)
+    if checkout_result is not None:
+        return
+    checkout_result = await _handle_contact_phone(mctx)
     if checkout_result is not None:
         return
     checkout_result = await _handle_payment_method(mctx)

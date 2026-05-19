@@ -1150,6 +1150,30 @@ async def save_customer_name_to_contact(
     return contact
 
 
+async def save_contact_phone_to_contact(
+    session: AsyncSession, contact_id: int, phone: str
+) -> Optional[Contact]:
+    """Persist the human phone for a web Contact at checkout.
+
+    Plan/in_browser_bots.md A1: Contact.phone_number stays as the
+    synthesized identity key (`web:{session_id}`); the real phone the
+    customer types at checkout lands in Contact.contact_phone — separate
+    column so the identity key stays stable. For WhatsApp contacts this
+    function is a no-op equivalent: their phone_number is already the
+    real E.164 and contact_phone got backfilled by migration
+    y0z1a2b3c4d5_web_channel_contact.
+    """
+    contact = await session.get(Contact, contact_id)
+    if not contact:
+        return None
+
+    contact.contact_phone = phone
+    session.add(contact)
+    await session.flush()
+    await session.refresh(contact)
+    return contact
+
+
 async def set_human_takeover_by_phone(
     session: AsyncSession, bot_id: int, phone_number: str, active: bool
 ) -> bool:

@@ -23,6 +23,13 @@ class CartState(str, enum.Enum):
     AWAITING_NUMBER_COMPLEMENT = "AWAITING_NUMBER_COMPLEMENT"
     AWAITING_ADDRESS_CONFIRMATION = "AWAITING_ADDRESS_CONFIRMATION"
     AWAITING_CUSTOMER_NAME = "AWAITING_CUSTOMER_NAME"
+    # Web-only checkout step. The widget contacted us with a synthesized
+    # identity (web:{session_id}) — we don't yet have the customer's real
+    # phone. Insert this state between AWAITING_CUSTOMER_NAME and
+    # AWAITING_PAYMENT_METHOD on the web channel so the restaurant has a
+    # callback number for the order. WhatsApp customers skip this state
+    # because Contact.phone_number is already their real E.164.
+    AWAITING_CONTACT_PHONE = "AWAITING_CONTACT_PHONE"
     AWAITING_PAYMENT_METHOD = "AWAITING_PAYMENT_METHOD"
 
 
