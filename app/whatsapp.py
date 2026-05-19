@@ -210,11 +210,11 @@ def _parse_whatsapp_payload(data: dict) -> ParsedIngress | None:
 
 
 def _parse_web_payload(data: dict) -> ParsedIngress:
-    """Phase 2 implements this. Until then any caller hitting it is
-    exercising an incomplete path — fail loudly rather than silently
-    constructing a half-valid ParsedIngress.
+    """Parse a /chat/{bot_id}/message payload into a ParsedIngress
+    (plan/in_browser_bots.md Phase 2.2).
 
-    Expected payload shape (per plan/in_browser_bots.md §2.1):
+    Expected payload shape (matches schemas.ChatMessageRequest plus the
+    bot_id which the ARQ task gets from the URL):
       {
         "bot_id": int,
         "session_id": str (UUID),
@@ -222,10 +222,40 @@ def _parse_web_payload(data: dict) -> ParsedIngress:
         "text": str,
       }
 
-    Web identity synthesis (A1b): contact_identity := f"web:{session_id}".
+    Web identity synthesis (A1b): `contact_identity = f"web:{session_id}"`.
+    The downstream pipeline writes this verbatim into Contact.phone_number,
+    so a WhatsApp E.164 number and a web session_id never collide.
+
+    Phase 2.1 already validated the inbound payload via the Pydantic
+    schema at the HTTP boundary; this parser just maps the validated
+    fields onto ParsedIngress. We re-check required keys defensively
+    because ARQ jobs can be enqueued from contexts that bypass the
+    HTTP validator (e.g. admin reproductions, tests).
     """
-    raise NotImplementedError(
-        "Web payload parsing arrives with Phase 2 (POST /chat/{bot_id}/message)."
+    bot_id = data.get("bot_id")
+    session_id = data.get("session_id")
+    message_id = data.get("message_id")
+    text = data.get("text", "")
+
+    if not isinstance(bot_id, int) or bot_id < 1:
+        raise ValueError(f"_parse_web_payload: invalid bot_id={bot_id!r}")
+    if not session_id or not isinstance(session_id, str):
+        raise ValueError(
+            f"_parse_web_payload: missing or invalid session_id={session_id!r}"
+        )
+    if not message_id or not isinstance(message_id, str):
+        raise ValueError(
+            f"_parse_web_payload: missing or invalid message_id={message_id!r}"
+        )
+
+    return ParsedIngress(
+        contact_identity=f"web:{session_id}",
+        message_id=message_id,
+        text_body=text,
+        msg_type="text",
+        audio_media_id=None,
+        bot_id=bot_id,
+        session_id=session_id,
     )
 
 
@@ -694,9 +724,22 @@ _LONG_TIMEOUT = timedelta(hours=12)
 
 
 async def _send_welcome_with_menu(
-    session, bot, cart, contact_number, text_body, contact=None
+    session,
+    bot,
+    cart,
+    contact_number,
+    text_body,
+    contact=None,
+    *,
+    channel: str = "whatsapp",
+    session_id: str | None = None,
 ):
-    """Sends the welcome greeting with menu image/PDF — reused for first contact and session resets."""
+    """Sends the welcome greeting with menu image/PDF — reused for first contact and session resets.
+
+    Phase 2.2 (plan/in_browser_bots.md): channel='web' routes through
+    broadcast_web_reply with the menu URL packaged as an attachment so
+    the widget renders it inline; channel='whatsapp' keeps the existing
+    Meta media API path. The greeting text is identical across channels."""
     all_products = await crud.get_products_by_bot_id(session, bot.id)
     sample_products = [p for p in all_products if p.is_available]
     if sample_products and len(sample_products) >= 2:
@@ -736,14 +779,27 @@ async def _send_welcome_with_menu(
     if menu_url:
         media_type = "document" if bot.menu_url.lower().endswith(".pdf") else "image"
 
-    await send_whatsapp_message(
-        to=contact_number,
-        message=response_to_user,
-        token=decrypt_value(bot.whatsapp_token),
-        phone_id=bot.phone_number_id,
-        media_url=menu_url,
-        media_type=media_type,
-    )
+    if channel == "web":
+        from app.web_channel import broadcast_web_reply
+
+        attachments: list[dict] = []
+        if menu_url:
+            attachments.append({"type": media_type or "image", "url": menu_url})
+        await broadcast_web_reply(
+            bot_id=bot.id,
+            session_id=session_id or "",
+            text=response_to_user,
+            attachments=attachments,
+        )
+    else:
+        await send_whatsapp_message(
+            to=contact_number,
+            message=response_to_user,
+            token=decrypt_value(bot.whatsapp_token),
+            phone_id=bot.phone_number_id,
+            media_url=menu_url,
+            media_type=media_type,
+        )
     await crud.add_interaction_to_history(
         session, bot.id, contact_number, text_body, "Enviou Cardápio (Imagem)"
     )
@@ -776,7 +832,14 @@ async def _handle_session_expiry(mctx: MessageContext) -> bool:
         cart.state = CartState.GREETING
         cart.delivery_method = None
         await _send_welcome_with_menu(
-            session, bot, cart, contact_number, text_body, contact=mctx.contact
+            session,
+            bot,
+            cart,
+            contact_number,
+            text_body,
+            contact=mctx.contact,
+            channel=mctx.channel,
+            session_id=mctx.channel_metadata.get("session_id"),
         )
         return True
 
@@ -2828,8 +2891,18 @@ async def _process_contact_message(
     text_body,
     current_token,
     current_phone_id,
+    *,
+    channel: str = "whatsapp",
+    channel_metadata: dict | None = None,
 ):
-    """Cart operations executed while holding the per-contact Redis lock."""
+    """Cart operations executed while holding the per-contact Redis lock.
+
+    Phase 2.2 adds `channel` + `channel_metadata` kwargs. WhatsApp callers
+    rely on the defaults; the web ARQ task (`process_chat_message`) passes
+    channel='web' and channel_metadata={'session_id': ...}. The values
+    propagate into the MessageContext constructed inside the inner
+    function, so `mctx.reply()` dispatches correctly during handler
+    execution."""
     _rolled_back = False
     try:
         await _process_contact_message_inner(
@@ -2840,6 +2913,8 @@ async def _process_contact_message(
             text_body,
             current_token,
             current_phone_id,
+            channel=channel,
+            channel_metadata=channel_metadata or {},
         )
     except Exception:
         _rolled_back = True
@@ -3259,7 +3334,16 @@ async def _handle_order_repeat(mctx: MessageContext) -> str:
 
 
 async def _process_contact_message_inner(
-    session, bot, contact, contact_number, text_body, current_token, current_phone_id
+    session,
+    bot,
+    contact,
+    contact_number,
+    text_body,
+    current_token,
+    current_phone_id,
+    *,
+    channel: str = "whatsapp",
+    channel_metadata: dict | None = None,
 ):
     """Inner handler logic — all DB changes use flush(), commit happens in the caller."""
     cart = await crud.get_or_create_cart(session, contact.id)
@@ -3282,6 +3366,8 @@ async def _process_contact_message_inner(
         text_body=text_body,
         token=current_token,
         phone_id=current_phone_id,
+        channel=channel,
+        channel_metadata=channel_metadata or {},
     )
     if await _handle_session_expiry(mctx):
         return
@@ -3315,7 +3401,14 @@ async def _process_contact_message_inner(
     # INTERCEPTADOR DE BOAS-VINDAS COM IMAGEM
     if intent == "GREETING_OR_QUESTION" and cart.state == CartState.GREETING:
         await _send_welcome_with_menu(
-            session, bot, cart, contact_number, text_body, contact=contact
+            session,
+            bot,
+            cart,
+            contact_number,
+            text_body,
+            contact=contact,
+            channel=channel,
+            session_id=(channel_metadata or {}).get("session_id"),
         )
         logger.info("[GREETING] Cart %s state updated to SHOPPING", cart.id)
         return
@@ -3876,6 +3969,200 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
                     )
                 except Exception as send_err:
                     logger.error("Failed to send error message to user: %s", send_err)
+
+
+async def process_chat_message(
+    ctx,
+    bot_id: int,
+    session_id: str,
+    message_id: str,
+    text: str,
+):
+    """ARQ task entry for web-widget messages (plan/in_browser_bots.md Phase 2.2).
+
+    Sibling of `process_whatsapp_message`. Same downstream pipeline once
+    we reach `_process_contact_message` — `mctx.channel = "web"` makes
+    every `mctx.reply(...)` route to Redis PubSub `chat:{bot_id}:{session_id}`
+    instead of Meta's HTTP API.
+
+    Diverges from the WhatsApp path on the EARLY gates that need to send
+    block messages: subscription, store-closed, no-products. Those gates'
+    existing implementations (`_check_subscription`, etc.) hard-code
+    `send_whatsapp_message` for the maintenance/closing reply — refactoring
+    them to be channel-aware is Phase 2.2b. For Phase 2.2a we inline the
+    gate checks here and publish web replies directly via
+    `broadcast_web_reply`. Some code duplication; manageable because the
+    gates are simple conditional checks.
+    """
+    new_trace_id()
+    from app.web_channel import broadcast_web_reply
+
+    _maintenance_msg = (
+        "Olá! Nosso atendimento automático está em manutenção no momento.\n\n"
+        "Um atendente retornará em breve. Obrigado pela compreensão! 🙏"
+    )
+
+    async def _emit(text_payload: str) -> None:
+        """Best-effort web reply — swallows transport errors so a Redis
+        hiccup doesn't crash the worker task."""
+        try:
+            await broadcast_web_reply(
+                bot_id=bot_id, session_id=session_id, text=text_payload
+            )
+        except Exception as send_err:
+            logger.error("process_chat_message: emit failed: %s", send_err)
+
+    async with async_session() as session:
+        try:
+            # 1. Parse payload (channel-neutral shape).
+            parsed = _parse_web_payload(
+                {
+                    "bot_id": bot_id,
+                    "session_id": session_id,
+                    "message_id": message_id,
+                    "text": text,
+                }
+            )
+            contact_identity = parsed.contact_identity  # "web:{session_id}"
+
+            logger.info(
+                "Web message received: bot_id=%s session=%s len=%d",
+                bot_id,
+                session_id,
+                len(text or ""),
+            )
+
+            # 2. Gate: Find bot via PK (web URL identifies the bot directly).
+            bot = await _find_bot(session, channel="web", bot_id=bot_id)
+            if not bot:
+                return
+            current_bot_id.set(bot.id)
+
+            # 3. Gate: web widget enabled for this bot.
+            if not bot.web_widget_enabled:
+                logger.warning(
+                    "Bot %s rejecting web message: web_widget_enabled=false", bot_id
+                )
+                await _emit(_maintenance_msg)
+                return
+
+            # 4. Gate: Subscription (inline — same conditions as
+            #    `_check_subscription`, but with web egress).
+            sub = await crud.get_subscription_by_bot(session, bot.id)
+            is_blocked = False
+            if not sub:
+                is_blocked = not await crud.is_plan_active(session, "free")
+            elif sub.cancel_at_period_end:
+                now = utcnow()
+                period_end = sub.current_period_end.replace(tzinfo=None)
+                if now <= period_end:
+                    is_blocked = not await crud.is_plan_active(session, sub.plan_type)
+                else:
+                    is_blocked = not await crud.is_plan_active(session, "free")
+            else:
+                now = utcnow()
+                expiration_limit = sub.current_period_end.replace(
+                    tzinfo=None
+                ) + timedelta(days=3)
+                if sub.status in ("cancelled", "paused"):
+                    is_blocked = True
+                elif sub.status != "authorized" and now > expiration_limit:
+                    is_blocked = True
+                elif not await crud.is_plan_active(session, sub.plan_type):
+                    is_blocked = True
+
+            if is_blocked:
+                logger.warning(
+                    "Bot blocked by plan gate (web): bot_id=%s user_id=%s",
+                    bot.id,
+                    bot.user_id,
+                )
+                await _emit(_maintenance_msg)
+                return
+
+            # 5. Gate: Deduplication. Web message_id is a client-generated
+            #    UUID — disjoint from WhatsApp's `wamid.xxx` namespace, no
+            #    collision with the shared ProcessedMessage table.
+            if await crud.is_message_processed(session, message_id):
+                logger.info("Duplicate web message %s, skipping", message_id)
+                return
+            try:
+                await crud.add_processed_message(session, message_id)
+            except IntegrityError:
+                logger.info("Concurrent duplicate web message %s, skipping", message_id)
+                await session.rollback()
+                return
+
+            # 6. Gate: Store closed. Web uses `bot.web_widget_offline_message`
+            #    if set, falling back to `bot.closing_message` (which is the
+            #    rich WhatsApp text). Same `is_store_open` logic.
+            if not is_store_open(bot):
+                base_msg = (
+                    bot.web_widget_offline_message
+                    or bot.closing_message
+                    or "No momento não estamos atendendo. 🌙"
+                )
+                next_opening = get_next_opening_text(bot)
+                closing_msg = f"{base_msg}\n\n⏰ *Voltamos {next_opening}*"
+                await _emit(closing_msg)
+                # Persist the interaction so the conversation view shows it.
+                contact = await crud.get_or_create_contact(
+                    session, bot.id, contact_identity, channel="web"
+                )
+                await crud.add_interaction_to_history(
+                    session, bot.id, contact_identity, text, closing_msg
+                )
+                await session.commit()
+                return
+
+            # 7. Gate: Bot has products configured.
+            products = await crud.get_products_by_bot_id(session, bot.id)
+            if not products:
+                logger.warning(
+                    "No products configured for web message: bot_id=%s", bot.id
+                )
+                await _emit(_maintenance_msg)
+                return
+
+            # 8. Get or create the web contact (A1b synth lives in the
+            #    contact_identity already). Then run the shared pipeline.
+            contact = await crud.get_or_create_contact(
+                session, bot.id, contact_identity, channel="web"
+            )
+            current_contact_id.set(contact.id)
+
+            async with contact_lock(contact.id):
+                await _process_contact_message(
+                    session=session,
+                    bot=bot,
+                    contact=contact,
+                    contact_number=contact_identity,
+                    text_body=text or "",
+                    # WhatsApp-only fields — unused on the web path because
+                    # ctx.reply() dispatches by channel. Pass empty strings
+                    # so the handlers still satisfy positional kwargs.
+                    current_token="",
+                    current_phone_id="",
+                    channel="web",
+                    channel_metadata={"session_id": session_id},
+                )
+
+        except Exception as e:
+            logger.error(
+                "Critical error processing web message: bot_id=%s session=%s err=%s",
+                bot_id,
+                session_id,
+                e,
+                exc_info=True,
+            )
+            await record_business_event("message_failed")
+            await record_error("web", type(e).__name__)
+            if session.is_active:
+                try:
+                    await session.rollback()
+                except Exception:
+                    pass
+            await _emit(_classify_error_message(e))
 
 
 def _programmatic_cart_reduce(

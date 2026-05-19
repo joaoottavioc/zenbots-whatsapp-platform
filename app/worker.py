@@ -7,7 +7,7 @@ from app.logging_config import setup_logging
 from app.monitoring import start_flush_task, stop_flush_task, run_aggregate_daily_costs
 
 # Importamos a função pesada que já existe
-from app.whatsapp import process_whatsapp_message
+from app.whatsapp import process_whatsapp_message, process_chat_message
 from app.menu_extraction import process_menu_extraction
 from app.database import async_session
 from app.crud import cancel_expired_pix_orders, cleanup_old_conversation_history
@@ -64,7 +64,11 @@ class WorkerSettings:
     )
 
     # Funções que este worker sabe executar
-    functions = [process_whatsapp_message, process_menu_extraction]
+    functions = [
+        process_whatsapp_message,
+        process_chat_message,
+        process_menu_extraction,
+    ]
 
     # Cron jobs — cancel expired PIX orders every 5 minutes + daily cost aggregation at 3 AM UTC
     cron_jobs = [

@@ -135,13 +135,59 @@ def test_text_message_with_missing_text_body_returns_empty_string():
     assert parsed.text_body == ""
 
 
-def test_web_payload_raises_until_phase2():
-    with pytest.raises(NotImplementedError, match="Phase 2"):
+def test_web_payload_parses_into_synthesized_identity():
+    """Phase 2.2: web payload now parses into a ParsedIngress. The
+    contact_identity field gets the A1b synthesis (web:{session_id})
+    so downstream code can write it verbatim into Contact.phone_number
+    without colliding with WhatsApp E.164 numbers."""
+    parsed = _parse_web_payload(
+        {
+            "bot_id": 42,
+            "session_id": "sess-uuid-abc",
+            "message_id": "msg-uuid-1",
+            "text": "quero uma coca",
+        }
+    )
+    assert parsed.contact_identity == "web:sess-uuid-abc"
+    assert parsed.bot_id == 42
+    assert parsed.session_id == "sess-uuid-abc"
+    assert parsed.message_id == "msg-uuid-1"
+    assert parsed.text_body == "quero uma coca"
+    assert parsed.msg_type == "text"
+    # WhatsApp-specific fields stay None on a web parse.
+    assert parsed.incoming_phone_id is None
+    assert parsed.bot_display_phone is None
+    assert parsed.audio_media_id is None
+
+
+def test_web_payload_rejects_missing_bot_id():
+    with pytest.raises(ValueError, match="bot_id"):
+        _parse_web_payload({"session_id": "s", "message_id": "m", "text": "x"})
+
+
+def test_web_payload_rejects_non_int_bot_id():
+    with pytest.raises(ValueError, match="bot_id"):
         _parse_web_payload(
-            {
-                "bot_id": 1,
-                "session_id": "abc",
-                "message_id": "msg-1",
-                "text": "ignored",
-            }
+            {"bot_id": "42", "session_id": "s", "message_id": "m", "text": "x"}
         )
+
+
+def test_web_payload_rejects_missing_session_id():
+    with pytest.raises(ValueError, match="session_id"):
+        _parse_web_payload({"bot_id": 1, "message_id": "m", "text": "x"})
+
+
+def test_web_payload_rejects_missing_message_id():
+    with pytest.raises(ValueError, match="message_id"):
+        _parse_web_payload({"bot_id": 1, "session_id": "s", "text": "x"})
+
+
+def test_web_payload_allows_empty_text_for_defensive_callers():
+    """The HTTP schema rejects empty text (Pydantic min_length=1), but
+    the parser itself is permissive — defensive for non-HTTP callers
+    (admin reproductions, tests). Empty text just produces a no-op
+    pipeline run that the LLM handles gracefully."""
+    parsed = _parse_web_payload(
+        {"bot_id": 1, "session_id": "s", "message_id": "m", "text": ""}
+    )
+    assert parsed.text_body == ""

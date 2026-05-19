@@ -66,12 +66,28 @@ async def add_processed_message(session: AsyncSession, message_id: str):
 
 
 async def get_or_create_contact(
-    session: AsyncSession, bot_id: int, contact_number: str
+    session: AsyncSession,
+    bot_id: int,
+    contact_number: str,
+    *,
+    channel: str = "whatsapp",
 ) -> Contact:
-    """Busca um contato pelo número ou o cria, sem commitar a sessão."""
-    contact_number = normalize_phone(contact_number) or re.sub(
-        r"[^\d]", "", contact_number
-    )
+    """Busca um contato pelo número ou o cria, sem commitar a sessão.
+
+    For channel='whatsapp' (default), `contact_number` is normalized to
+    a digits-only string (existing behavior preserved).
+
+    For channel='web' (plan/in_browser_bots.md A1b), `contact_number` is
+    the synthesized identity `web:{session_id}` produced by
+    `_parse_web_payload`. Normalization is SKIPPED because the identity
+    is not a phone number — the colon and "web" prefix are load-bearing.
+    """
+    if channel == "whatsapp":
+        contact_number = normalize_phone(contact_number) or re.sub(
+            r"[^\d]", "", contact_number
+        )
+    # else: channel='web' — use the synthesized identity verbatim.
+
     result = await session.execute(
         select(Contact).where(
             Contact.phone_number == contact_number, Contact.bot_id == bot_id
@@ -80,7 +96,11 @@ async def get_or_create_contact(
     contact = result.scalar_one_or_none()
 
     if not contact:
-        contact = Contact(phone_number=contact_number, bot_id=bot_id)
+        contact = Contact(
+            phone_number=contact_number,
+            bot_id=bot_id,
+            channel=channel,
+        )
         session.add(contact)
         try:
             await session.flush()
