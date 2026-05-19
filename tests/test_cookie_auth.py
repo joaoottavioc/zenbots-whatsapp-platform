@@ -78,6 +78,12 @@ def test_login_sets_cookies(client, user, mock_session):
             "app.auth.crud.get_user_by_email", new_callable=AsyncMock, return_value=user
         ),
         patch("app.auth.verify_password", return_value=True),
+        # Patch the rate-limit Redis check — the login flow hits is_rate_limited
+        # which holds an async Redis connection. TestClient's per-test event
+        # loop sometimes closes mid-flight, producing "Event loop is closed"
+        # in CI. Skipping the rate-limit is fine here; rate-limit logic itself
+        # is covered in tests/test_auth_rate_limit.py.
+        patch("app.auth.is_rate_limited", new_callable=AsyncMock, return_value=False),
     ):
         resp = client.post(
             "/auth/token",

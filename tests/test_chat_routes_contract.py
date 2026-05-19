@@ -133,6 +133,16 @@ def test_post_message_dev_allows_empty_allowlist(client):
         # and some pytest collection orderings leak that state here.
         patch.dict(os.environ, {"ENVIRONMENT": "development"}, clear=False),
         patch("app.chat_routes.is_channel_enabled", return_value=True),
+        # Mock the rate limit + plan tier lookup so the request goes all
+        # the way through. CI test DB has no "subscription" table.
+        patch(
+            "app.chat_routes.is_rate_limited",
+            new=AsyncMock(return_value=False),
+        ),
+        patch(
+            "app.chat_routes.crud.get_subscription_by_bot",
+            new=AsyncMock(return_value=None),
+        ),
     ):
         response = client.post(
             "/chat/1/message",
@@ -177,6 +187,13 @@ def test_post_message_allows_listed_origin(client):
             patch(
                 "app.chat_routes.is_rate_limited",
                 new=AsyncMock(return_value=False),
+            ),
+            # Phase 5.2 added a subscription lookup for the per-session
+            # Free-tier daily cap. The "subscription" table doesn't exist
+            # in the CI test DB (no alembic), so mock the helper directly.
+            patch(
+                "app.chat_routes.crud.get_subscription_by_bot",
+                new=AsyncMock(return_value=None),
             ),
         ):
             response = client.post(
@@ -231,6 +248,11 @@ def test_post_message_enqueues_process_chat_message(client):
             patch(
                 "app.chat_routes.is_rate_limited",
                 new=AsyncMock(return_value=False),
+            ),
+            # Phase 5.2 daily-cap lookup — CI test DB has no schema.
+            patch(
+                "app.chat_routes.crud.get_subscription_by_bot",
+                new=AsyncMock(return_value=None),
             ),
         ):
             response = client.post(
