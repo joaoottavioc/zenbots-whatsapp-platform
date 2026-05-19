@@ -453,3 +453,105 @@ class AdminBotSummary(BaseModel):
     created_at: datetime
     is_open: bool
     model_config = ConfigDict(from_attributes=True)
+
+
+# --- Web widget channel (plan/in_browser_bots.md Phase 2.1) ──────────
+# Contract for POST /chat/{bot_id}/message and POST /chat/{bot_id}/session.
+# Defined before the endpoint bodies land so the frontend widget can
+# build against the schemas in parallel with Phase 2.2-2.4 backend work.
+
+# Hard upper bound on inbound web message text. Keeps a misbehaving
+# widget (or a curl loop) from flooding the worker with megabyte payloads.
+# WhatsApp's own limit is 4096 chars; matching it here.
+_WEB_MESSAGE_MAX_LENGTH = 4096
+
+
+class ChatMessageRequest(BaseModel):
+    """Inbound message from the widget.
+
+    The widget generates `session_id` once per browser localStorage entry
+    and `message_id` per send (both UUIDs). The server uses message_id
+    for deduplication via the existing ProcessedMessage table — same row
+    shape as WhatsApp's wamid.
+    """
+
+    session_id: str = Field(min_length=1, max_length=64)
+    message_id: str = Field(min_length=1, max_length=64)
+    text: str = Field(min_length=1, max_length=_WEB_MESSAGE_MAX_LENGTH)
+
+
+class ChatMessageAccepted(BaseModel):
+    """Returned on 202 from POST /chat/{bot_id}/message.
+
+    The reply itself arrives on the SSE stream — the POST just enqueues
+    the ARQ job and returns. The widget should already have an open SSE
+    connection when it sends a message; the message_id echo lets the
+    widget correlate (so the bot's typing/message events can be matched
+    to which user message they're answering)."""
+
+    accepted: bool = True
+    message_id: str
+
+
+class ChatSessionResponse(BaseModel):
+    """Optional handshake. The widget can call POST /chat/{bot_id}/session
+    on first load to fetch the bot's display name, welcome message, theme,
+    and a fresh server-issued session_id (if the widget doesn't already
+    have one in localStorage).
+    """
+
+    session_id: str
+    bot_display_name: str
+    welcome_message: str
+    theme: Dict[str, Any] = Field(default_factory=dict)
+    # Mirrors the Plan tier (free/pro/founder) so the widget can decide
+    # whether to render the "Powered by ZenBotZ®" footer.
+    plan_tier: str
+
+
+# --- SSE event envelopes (server → widget) ───────────────────────────
+# Events published by app/web_channel.py on `chat:{bot_id}:{session_id}`
+# and forwarded by the GET /chat/{bot_id}/stream endpoint as
+# `data: <json>\n\n`. Each event is wrapped in
+# `{"type": "...", "payload": {...}}` per broadcast.py's convention.
+
+
+class ChatSSETyping(BaseModel):
+    """Typing indicator. Emit `on=True` before the LLM call kicks off,
+    `on=False` when the reply is in flight (the `message` event implicitly
+    ends typing, but explicit off covers error paths with no follow-up)."""
+
+    on: bool
+
+
+class ChatSSEMessage(BaseModel):
+    """Text reply from the bot. Attachments carry inline media (PIX QR,
+    menu image) the widget renders alongside the text bubble."""
+
+    text: str
+    attachments: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class ChatSSEPaymentQR(BaseModel):
+    """PIX QR delivered as a data: URL so the widget can render
+    <img src="...">. payment_url is the Mercado Pago hosted checkout
+    page — used as the "Abrir Mercado Pago" fallback button."""
+
+    qr_data_url: str
+    payment_url: str
+    expires_at: datetime
+
+
+class ChatSSEOrderStatus(BaseModel):
+    """Order state transition (pending → paid, paid → preparing, etc.).
+    The widget renders a success/in-progress chip when these arrive."""
+
+    order_id: int
+    status: str  # OrderStatus enum value
+
+
+class ChatSSEPing(BaseModel):
+    """Heartbeat. Server emits one every 10s so proxies (Caddy, ALB)
+    keep the SSE connection open. Payload is empty — the widget ignores."""
+
+    pass

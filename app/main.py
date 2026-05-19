@@ -29,6 +29,7 @@ from app import admin_routes
 from app import menu_router
 from app import health_routes
 from app import monitoring_routes
+from app import chat_routes
 from app.monitoring import start_flush_task, stop_flush_task
 from app.email_service import validate_email_config
 
@@ -170,6 +171,7 @@ app.include_router(menu_router.router)
 app.include_router(utils.router)
 app.include_router(health_routes.router)
 app.include_router(monitoring_routes.router)
+app.include_router(chat_routes.router)
 
 
 # Rota de verificação de saúde (Health Check)
