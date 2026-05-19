@@ -14,6 +14,11 @@ current_bot_id: ContextVar[int | None] = ContextVar("current_bot_id", default=No
 current_contact_id: ContextVar[int | None] = ContextVar(
     "current_contact_id", default=None
 )
+# Plan/in_browser_bots.md Phase 5.4 — which channel is processing the
+# current message. Set at the top of process_whatsapp_message /
+# process_chat_message; read by monitoring.py when recording UsageEvent
+# rows so cost can be attributed per channel.
+current_channel: ContextVar[str | None] = ContextVar("current_channel", default=None)
 
 
 def new_trace_id() -> str:

@@ -20,7 +20,12 @@ from typing import Optional
 
 import redis.asyncio as redis
 
-from app.context import trace_id_var, current_bot_id, current_contact_id
+from app.context import (
+    trace_id_var,
+    current_bot_id,
+    current_contact_id,
+    current_channel,
+)
 from app.models import UsageEvent
 from app.time import utcnow
 
@@ -165,6 +170,7 @@ async def record_llm_usage(
         success=success,
         contact_id=contact_id,
         trace_id=trace_id_var.get(""),
+        channel=current_channel.get(None),
         created_at=utcnow(),
     )
     await _buffer_append(event)
@@ -206,6 +212,7 @@ async def record_api_usage(
         success=success,
         contact_id=contact_id,
         trace_id=trace_id_var.get(""),
+        channel=current_channel.get(None),
         created_at=utcnow(),
     )
     await _buffer_append(event)

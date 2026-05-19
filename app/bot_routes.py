@@ -1558,6 +1558,18 @@ async def receive_whatsapp_message(request: Request):
     """
     Recebe o evento da Meta e joga para o Worker processar em background.
     """
+    # Phase 5.6 — kill switch. When WHATSAPP_CHANNEL_ENABLED=false we
+    # accept the request and return 200 OK so Meta does NOT retry-storm
+    # us during the outage window. The message is intentionally dropped.
+    # The GET /webhook (verify) endpoint stays live regardless — if we
+    # 503 verify, Meta deregisters the webhook and we'd need to re-verify
+    # after the kill switch flips back.
+    from app.channel_toggle import is_channel_enabled
+
+    if not is_channel_enabled("whatsapp"):
+        logger.warning("WHATSAPP_CHANNEL_ENABLED=false — dropping inbound webhook")
+        return {"status": "channel_disabled"}
+
     try:
         # Read raw body first (needed for signature verification)
         raw_body = await request.body()

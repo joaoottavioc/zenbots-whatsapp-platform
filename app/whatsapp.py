@@ -65,7 +65,12 @@ from app.sanitize import sanitize_llm_output
 from app.encryption import decrypt_value
 from app.distributed_lock import contact_lock
 from redis.exceptions import LockError
-from app.context import new_trace_id, current_bot_id, current_contact_id
+from app.context import (
+    new_trace_id,
+    current_bot_id,
+    current_contact_id,
+    current_channel,
+)
 from app.monitoring import record_api_usage, record_business_event, record_error
 from app.billing_cache import get_tier_by_phone_id
 import logging
@@ -3926,7 +3931,17 @@ async def process_whatsapp_message(ctx, data: Dict[str, Any]):
     `ParsedIngress` from a `/chat` POST body and runs through the same
     downstream pipeline.
     """
+    # Phase 5.6 — kill switch. The webhook handler should also short-circuit
+    # before enqueueing, but a job already on the queue when ops flipped
+    # the switch must drop gracefully here.
+    from app.channel_toggle import is_channel_enabled
+
+    if not is_channel_enabled("whatsapp"):
+        logger.warning("WHATSAPP_CHANNEL_ENABLED=false — dropping queued message")
+        return
+
     new_trace_id()
+    current_channel.set("whatsapp")
     contact_number: str | None = None
     current_token: str | None = None
     current_phone_id: str | None = None
@@ -4090,7 +4105,22 @@ async def process_chat_message(
     `broadcast_web_reply`. Some code duplication; manageable because the
     gates are simple conditional checks.
     """
+    # Phase 5.6 — kill switch. The HTTP endpoint should also 503 before
+    # enqueueing, but a job already on the queue when ops flipped the
+    # switch must drop gracefully here.
+    from app.channel_toggle import is_channel_enabled
+
+    if not is_channel_enabled("web"):
+        logger.warning(
+            "WEB_CHANNEL_ENABLED=false — dropping queued chat message "
+            "(bot_id=%s session=%s)",
+            bot_id,
+            session_id,
+        )
+        return
+
     new_trace_id()
+    current_channel.set("web")
     from app.web_channel import broadcast_web_reply
 
     _maintenance_msg = (

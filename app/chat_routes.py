@@ -30,6 +30,7 @@ import logging
 import os
 import time
 import uuid
+from datetime import datetime, timezone
 
 import redis.asyncio as redis
 from arq.connections import ArqRedis
@@ -38,8 +39,10 @@ from fastapi.responses import StreamingResponse
 
 from app import crud
 from app import schemas
+from app.channel_toggle import is_channel_enabled
 from app.database import async_session
 from app.rate_limiter import is_rate_limited
+from app.web_channel import broadcast_web_reply
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +54,16 @@ router = APIRouter(prefix="/chat", tags=["Web Widget"])
 # from hammering ARQ.
 _PER_IP_MESSAGE_LIMIT = 20
 _PER_IP_MESSAGE_WINDOW_SECONDS = 60
+
+# Per-session daily cap on Free tier (plan/in_browser_bots.md §5.2).
+# Anonymous web sessions are free to create, so without this cap a bored
+# user could chat indefinitely and the bot would burn LLM tokens with no
+# revenue. 30 messages/day is generous for a real order flow (avg ~10
+# messages from greet through checkout) but tight enough to discourage
+# casual abuse. Pro/Founder bots bypass this — those plans pay the
+# marginal LLM cost via the subscription.
+_FREE_DAILY_MESSAGE_CAP = 30
+_DAY_IN_SECONDS = 86400
 
 # SSE keep-alive cadence. Same number main.py uses for the dashboard
 # stream so Caddy/CloudFront see traffic on the connection.
@@ -69,6 +82,22 @@ def _client_ip(request: Request) -> str:
         # First hop is the original client.
         return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
+
+
+def _ensure_web_channel_enabled() -> None:
+    """Phase 5.6 kill switch — return 503 when ops disabled the channel.
+
+    Called by every /chat endpoint before any work. The channel toggle
+    is a global lever, separate from the per-bot web_widget_enabled
+    flag which an owner controls via dashboard."""
+    if not is_channel_enabled("web"):
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "web_channel_disabled",
+                "message": "O canal web está temporariamente indisponível.",
+            },
+        )
 
 
 async def _load_widget_bot(bot_id: int):
@@ -135,6 +164,7 @@ async def post_chat_message(
     Returns 202 immediately; the bot's reply arrives asynchronously on
     the SSE stream the widget should already have open.
     """
+    _ensure_web_channel_enabled()
     bot = await _load_widget_bot(bot_id)
     _check_origin(request, bot)
 
@@ -159,6 +189,36 @@ async def post_chat_message(
             detail={"error": "rate_limited"},
             headers={"Retry-After": str(_PER_IP_MESSAGE_WINDOW_SECONDS)},
         )
+
+    # Per-session daily cap on Free tier (plan §5.2). Pro/Founder skip it.
+    # Soft refusal: emit the limit message on the SSE stream and return
+    # 202 to the widget — a 429 here would look like a transport error
+    # and trigger client retry loops, while the user just sees nothing.
+    async with async_session() as session:
+        sub = await crud.get_subscription_by_bot(session, bot.id)
+    plan_tier = (sub.plan_type if sub else "free") or "free"
+    if plan_tier == "free":
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        cap_key = f"chat:session_day:{payload.session_id}:{today}"
+        if await is_rate_limited(cap_key, _FREE_DAILY_MESSAGE_CAP, _DAY_IN_SECONDS):
+            logger.warning(
+                "chat free-cap exceeded: session=%s bot_id=%s cap=%d",
+                payload.session_id,
+                bot_id,
+                _FREE_DAILY_MESSAGE_CAP,
+            )
+            await broadcast_web_reply(
+                bot_id=bot.id,
+                session_id=payload.session_id,
+                text=(
+                    "Você atingiu o limite gratuito de mensagens deste dia. 🙏\n\n"
+                    "Volte amanhã para continuar conversando ou peça ao "
+                    "restaurante para atualizar o plano."
+                ),
+            )
+            return schemas.ChatMessageAccepted(
+                accepted=True, message_id=payload.message_id
+            )
 
     redis_queue: ArqRedis = request.app.state.arq_redis
     await redis_queue.enqueue_job(
@@ -187,6 +247,7 @@ async def get_chat_stream(
     heartbeat every 10s so proxies don't close the connection for idle.
     The subscription is per (bot, session) — never cross-leaked.
     """
+    _ensure_web_channel_enabled()
     bot = await _load_widget_bot(bot_id)
     _check_origin(request, bot)
 
@@ -283,6 +344,7 @@ async def post_chat_session(
     and plan tier (the widget renders 'Powered by ZenBotZ®' iff
     plan_tier == 'free').
     """
+    _ensure_web_channel_enabled()
     bot = await _load_widget_bot(bot_id)
     _check_origin(request, bot)
 

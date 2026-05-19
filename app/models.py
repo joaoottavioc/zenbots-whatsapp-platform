@@ -537,6 +537,11 @@ class UsageEvent(SQLModel, table=True):
     # Context
     contact_id: Optional[int] = Field(default=None)
     trace_id: Optional[str] = Field(default=None)
+    # Plan/in_browser_bots.md Phase 5.4 — channel attribution. Lets the
+    # cost dashboard split per-bot spend by WhatsApp vs web so we can see
+    # which channel is more expensive at the LLM level. Nullable for
+    # backfill compatibility; new rows always set it.
+    channel: Optional[str] = Field(default=None, max_length=16)
     created_at: datetime = Field(
         default_factory=utcnow, sa_column=Column(DateTime, index=True, default=utcnow)
     )

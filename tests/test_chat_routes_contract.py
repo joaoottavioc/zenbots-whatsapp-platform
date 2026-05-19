@@ -126,7 +126,13 @@ def test_post_message_dev_allows_empty_allowlist(client):
 
     with (
         patch("app.chat_routes.crud.get_bot_by_id", new=AsyncMock(return_value=bot)),
+        # Defensive: pin both pieces of env state this test depends on.
+        # ENVIRONMENT controls the CORS dev-convenience escape hatch;
+        # is_channel_enabled is patched directly because the kill-switch
+        # tests at the end of this file flip WEB_CHANNEL_ENABLED in env,
+        # and some pytest collection orderings leak that state here.
         patch.dict(os.environ, {"ENVIRONMENT": "development"}, clear=False),
+        patch("app.chat_routes.is_channel_enabled", return_value=True),
     ):
         response = client.post(
             "/chat/1/message",
@@ -144,6 +150,7 @@ def test_post_message_prod_rejects_unlisted_origin(client):
     with (
         patch("app.chat_routes.crud.get_bot_by_id", new=AsyncMock(return_value=bot)),
         patch.dict(os.environ, {"ENVIRONMENT": "production"}, clear=False),
+        patch("app.chat_routes.is_channel_enabled", return_value=True),
     ):
         response = client.post(
             "/chat/1/message",
@@ -304,3 +311,132 @@ def test_post_session_returns_404_for_unknown_bot(client):
     with patch("app.chat_routes.crud.get_bot_by_id", new=AsyncMock(return_value=None)):
         response = client.post("/chat/999/session")
     assert response.status_code == 404
+
+
+# ── Phase 5.2 — per-session daily cap on Free tier ──────────────────
+
+
+def test_free_tier_session_at_cap_gets_soft_refusal_not_429(client):
+    """Free tier + per-session daily cap reached → 202 with no enqueue,
+    soft refusal emitted via SSE. A 429 would look like a transport
+    error to the widget and trigger client retry loops; the user must
+    see the limit message, not a stale UI."""
+    bot = _fake_bot()
+    fake_redis = MagicMock()
+    fake_redis.enqueue_job = AsyncMock()
+
+    sub = MagicMock()
+    sub.plan_type = "free"
+
+    captured_broadcasts = []
+
+    async def capture_broadcast(**kwargs):
+        captured_broadcasts.append(kwargs)
+
+    original_redis = client.app.state.arq_redis
+    client.app.state.arq_redis = fake_redis
+    try:
+        with (
+            patch(
+                "app.chat_routes.crud.get_bot_by_id",
+                new=AsyncMock(return_value=bot),
+            ),
+            patch(
+                "app.chat_routes.crud.get_subscription_by_bot",
+                new=AsyncMock(return_value=sub),
+            ),
+            # First call (per-IP) passes; second call (per-session cap) hits.
+            patch(
+                "app.chat_routes.is_rate_limited",
+                new=AsyncMock(side_effect=[False, True]),
+            ),
+            patch("app.chat_routes.broadcast_web_reply", new=capture_broadcast),
+        ):
+            response = client.post(
+                "/chat/1/message",
+                json={
+                    "session_id": "free-sess-1",
+                    "message_id": "m1",
+                    "text": "oi",
+                },
+            )
+
+        assert response.status_code == 202, response.text
+        assert response.json()["accepted"] is True
+        # ARQ task NOT enqueued — the limit message ate the cost slot.
+        fake_redis.enqueue_job.assert_not_awaited()
+        # Soft refusal emitted via SSE channel.
+        assert len(captured_broadcasts) == 1
+        text = captured_broadcasts[0]["text"]
+        assert "limite" in text.lower()
+        assert "gratuito" in text.lower() or "grátis" in text.lower()
+    finally:
+        client.app.state.arq_redis = original_redis
+
+
+def test_pro_tier_bypasses_daily_cap(client):
+    """Pro/Founder plans should not be subject to the Free-tier daily
+    cap — they pay marginal cost via the subscription."""
+    bot = _fake_bot()
+    fake_redis = MagicMock()
+    fake_redis.enqueue_job = AsyncMock()
+
+    sub = MagicMock()
+    sub.plan_type = "pro_monthly"
+
+    original_redis = client.app.state.arq_redis
+    client.app.state.arq_redis = fake_redis
+    try:
+        with (
+            patch(
+                "app.chat_routes.crud.get_bot_by_id",
+                new=AsyncMock(return_value=bot),
+            ),
+            patch(
+                "app.chat_routes.crud.get_subscription_by_bot",
+                new=AsyncMock(return_value=sub),
+            ),
+            # Only the per-IP call should happen; the per-session call
+            # must be skipped entirely for Pro.
+            patch(
+                "app.chat_routes.is_rate_limited",
+                new=AsyncMock(return_value=False),
+            ) as mock_rl,
+        ):
+            response = client.post(
+                "/chat/1/message",
+                json={
+                    "session_id": "pro-sess-1",
+                    "message_id": "m1",
+                    "text": "oi",
+                },
+            )
+
+        assert response.status_code == 202
+        # Exactly ONE is_rate_limited call (per-IP). Not two (per-IP + cap).
+        assert mock_rl.await_count == 1
+        fake_redis.enqueue_job.assert_awaited_once()
+    finally:
+        client.app.state.arq_redis = original_redis
+
+
+# ── Phase 5.6 — web channel kill switch ─────────────────────────────
+
+
+def test_post_message_returns_503_when_web_channel_disabled(client):
+    """WEB_CHANNEL_ENABLED=false → every /chat endpoint 503s. Ops lever
+    for incident response; doesn't touch the per-bot enable flag."""
+    with patch.dict(os.environ, {"WEB_CHANNEL_ENABLED": "false"}, clear=False):
+        response = client.post(
+            "/chat/1/message",
+            json={"session_id": "s", "message_id": "m1", "text": "hi"},
+        )
+    assert response.status_code == 503
+    assert response.json()["detail"]["error"] == "web_channel_disabled"
+
+
+def test_post_session_returns_503_when_web_channel_disabled(client):
+    with patch.dict(os.environ, {"WEB_CHANNEL_ENABLED": "false"}, clear=False):
+        response = client.post("/chat/1/session")
+    assert response.status_code == 503
+    assert response.json()["detail"]["error"] == "web_channel_disabled"
