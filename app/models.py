@@ -112,6 +112,32 @@ class Bot(SQLModel, table=True):
     # Restaurant cover image
     restaurant_image_url: Optional[str] = Field(default=None)
 
+    # ── Channel matrix (plan/in_browser_bots.md Phase 2.5) ──────────────
+    # Every existing bot was WhatsApp-only, so whatsapp_enabled defaults
+    # true to preserve current behavior. web_widget_enabled defaults false
+    # — bots stay WhatsApp-only until the owner opts in via dashboard.
+    # Both true = customer can order via either channel, separate Contact
+    # rows per channel (A1b synthesis keeps the carts isolated).
+    whatsapp_enabled: bool = Field(default=True)
+    web_widget_enabled: bool = Field(default=False)
+
+    # Per-bot CORS allowlist for the widget. Empty list = block all
+    # browser embeds. Phase 2 ingress checks Origin against this list.
+    web_widget_allowed_origins: List[str] = Field(
+        default_factory=list, sa_column=Column(SA_JSON)
+    )
+
+    # Widget UI customization (primary_color, position, welcome_message,
+    # etc.). Free-form dict to avoid migration churn on theme additions.
+    web_widget_theme: Dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(SA_JSON)
+    )
+
+    # Replaces the "store closed" text on the web channel. WhatsApp keeps
+    # its richer multi-line closing_message with menu image — that's the
+    # established UX customers expect on WA.
+    web_widget_offline_message: Optional[str] = Field(default=None, max_length=500)
+
     # MUDANÇA 2: O Bot ganha a Assinatura (1-pra-1 com o Bot)
     subscription: Optional["Subscription"] = Relationship(
         back_populates="bot", sa_relationship_kwargs={"cascade": "all, delete-orphan"}
