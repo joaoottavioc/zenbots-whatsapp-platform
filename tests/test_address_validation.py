@@ -26,6 +26,11 @@ class TestAddressValidation:
         mctx.contact_number = "5511999999999"
         mctx.token = "token"
         mctx.phone_id = "phone_id"
+        # mctx.reply is async (Phase 1.2c migrated _handle_cep and
+        # _handle_number_complement to use mctx.reply instead of bare
+        # send_whatsapp_message). MagicMock by default returns a non-
+        # awaitable, so we override explicitly.
+        mctx.reply = AsyncMock()
         mctx.bot = MagicMock()
         mctx.bot.id = 1
         return mctx

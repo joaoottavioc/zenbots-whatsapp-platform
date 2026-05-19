@@ -827,9 +827,7 @@ async def _handle_delivery_method(mctx: MessageContext) -> str | None:
 
     cart.last_activity_at = utcnow()
     session.add(cart)
-    await send_whatsapp_message(
-        mctx.contact_number, response, token=mctx.token, phone_id=mctx.phone_id
-    )
+    await mctx.reply(response)
     await crud.add_interaction_to_history(
         session, bot.id, mctx.contact_number, mctx.text_body, response
     )
@@ -854,9 +852,7 @@ async def _handle_cep(mctx: MessageContext) -> str | None:
         cart.last_activity_at = utcnow()
         session.add(cart)
         await session.flush()
-        await send_whatsapp_message(
-            mctx.contact_number, response, token=mctx.token, phone_id=mctx.phone_id
-        )
+        await mctx.reply(response)
         return response
 
     # 2. Switch to pickup
@@ -885,9 +881,7 @@ async def _handle_cep(mctx: MessageContext) -> str | None:
         cart.last_activity_at = utcnow()
         session.add(cart)
         await session.flush()
-        await send_whatsapp_message(
-            mctx.contact_number, response, token=mctx.token, phone_id=mctx.phone_id
-        )
+        await mctx.reply(response)
         return response
 
     # 3. CEP / Location logic
@@ -950,9 +944,7 @@ async def _handle_cep(mctx: MessageContext) -> str | None:
     cart.last_activity_at = utcnow()
     session.add(cart)
     await session.flush()
-    await send_whatsapp_message(
-        mctx.contact_number, response, token=mctx.token, phone_id=mctx.phone_id
-    )
+    await mctx.reply(response)
     return response
 
 
@@ -988,9 +980,7 @@ async def _handle_number_complement(mctx: MessageContext) -> str | None:
 
     cart.last_activity_at = utcnow()
     session.add(cart)
-    await send_whatsapp_message(
-        mctx.contact_number, response, token=mctx.token, phone_id=mctx.phone_id
-    )
+    await mctx.reply(response)
     await crud.add_interaction_to_history(
         session, mctx.bot.id, mctx.contact_number, mctx.text_body, response
     )
@@ -1060,9 +1050,7 @@ async def _handle_address_confirmation(
 
     cart.last_activity_at = utcnow()
     session.add(cart)
-    await send_whatsapp_message(
-        mctx.contact_number, response, token=mctx.token, phone_id=mctx.phone_id
-    )
+    await mctx.reply(response)
     await crud.add_interaction_to_history(
         session, mctx.bot.id, mctx.contact_number, mctx.text_body, response
     )
@@ -1094,9 +1082,7 @@ async def _handle_customer_name(mctx: MessageContext) -> str | None:
 
     cart.last_activity_at = utcnow()
     session.add(cart)
-    await send_whatsapp_message(
-        mctx.contact_number, response, token=mctx.token, phone_id=mctx.phone_id
-    )
+    await mctx.reply(response)
     await crud.add_interaction_to_history(
         session, bot.id, mctx.contact_number, mctx.text_body, response
     )
@@ -1126,17 +1112,13 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
     # Reject PIX if the bot doesn't support it
     if detected_method == "pix" and not has_pix:
         response = "O pagamento via PIX não está disponível no momento.\nEscolha: *Cartão* ou *Dinheiro*."
-        await send_whatsapp_message(
-            mctx.contact_number, response, token=mctx.token, phone_id=mctx.phone_id
-        )
+        await mctx.reply(response)
         return response
 
     if not detected_method:
         prompt = _payment_prompt(has_pix)
         response = f"Não entendi a forma de pagamento.\n{prompt}"
-        await send_whatsapp_message(
-            mctx.contact_number, response, token=mctx.token, phone_id=mctx.phone_id
-        )
+        await mctx.reply(response)
         return response
 
     # Capture scalar values before any session.rollback() can expire them
@@ -1324,21 +1306,12 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
                 except Exception as e:
                     logger.warning("Failed to send owner notification: %s", e)
 
-            await send_whatsapp_message(
-                mctx.contact_number, response, token=mctx.token, phone_id=mctx.phone_id
-            )
+            await mctx.reply(response)
             if pix_code_to_send:
-                await send_whatsapp_message(
-                    mctx.contact_number,
-                    pix_code_to_send,
-                    token=mctx.token,
-                    phone_id=mctx.phone_id,
-                )
+                await mctx.reply(pix_code_to_send)
             return response
         else:
-            await send_whatsapp_message(
-                mctx.contact_number, response, token=mctx.token, phone_id=mctx.phone_id
-            )
+            await mctx.reply(response)
             await crud.add_interaction_to_history(
                 session, _bot_id, mctx.contact_number, mctx.text_body, response
             )
@@ -1349,9 +1322,7 @@ async def _handle_payment_method(mctx: MessageContext) -> str | None:
         logger.exception("Error in AWAITING_PAYMENT handler: %s", e)
         await session.rollback()
         response = "Ops, algo deu errado. Tente novamente em instantes."
-        await send_whatsapp_message(
-            mctx.contact_number, response, token=mctx.token, phone_id=mctx.phone_id
-        )
+        await mctx.reply(response)
         return response
 
 
@@ -1408,9 +1379,7 @@ async def _handle_confirm_negate(
 
     cart.last_activity_at = utcnow()
     session.add(cart)
-    await send_whatsapp_message(
-        mctx.contact_number, response, token=mctx.token, phone_id=mctx.phone_id
-    )
+    await mctx.reply(response)
     await crud.add_interaction_to_history(
         session, bot.id, mctx.contact_number, mctx.text_body, response
     )
@@ -2577,12 +2546,7 @@ async def _handle_shopping_intent(
                         response_to_user = "Não encontrei itens válidos para essa ação. 😔 Pode me dizer novamente o que deseja pedir?"
 
                     # propose_and_confirm does its own send+commit — signal caller with None
-                    await send_whatsapp_message(
-                        contact_number,
-                        response_to_user,
-                        token=mctx.token,
-                        phone_id=mctx.phone_id,
-                    )
+                    await mctx.reply(response_to_user)
                     await crud.add_interaction_to_history(
                         session, bot.id, contact_number, text_body, response_to_user
                     )
