@@ -689,15 +689,26 @@ async def generate_unique_slug(
     base = _slugify_name(restaurant_name or "bot") + "-zenbot"
     candidate = base
     counter = 2
-    while True:
+    # Safety cap — if collision resolution somehow can't terminate (e.g.
+    # mocked session that always returns a row), don't lock the worker
+    # in an infinite loop. 1000 is well above any plausible real
+    # collision count.
+    for _ in range(1000):
         query = select(Bot.id).where(Bot.slug == candidate)
         if exclude_bot_id is not None:
             query = query.where(Bot.id != exclude_bot_id)
-        existing = (await session.execute(query)).first()
+        # `.scalars().first()` matches the rest of the codebase's
+        # pattern and the existing test session mocks
+        # (result.scalars.return_value.first.return_value = None).
+        existing = (await session.execute(query)).scalars().first()
         if existing is None:
             return candidate
         candidate = f"{base}-{counter}"
         counter += 1
+    raise RuntimeError(
+        f"generate_unique_slug: gave up after 1000 attempts (base={base!r}). "
+        "This usually means a mocked session is returning matches forever."
+    )
 
 
 async def get_bot_by_slug(session: AsyncSession, slug: str) -> Optional[Bot]:
