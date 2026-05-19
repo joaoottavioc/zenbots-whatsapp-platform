@@ -130,7 +130,9 @@ class Bot(SQLModel, table=True):
         max_length=80,
         index=True,
         unique=True,
-        default_factory=lambda: f"bot-{secrets.token_urlsafe(8).lower().replace('_', '-')}",
+        default_factory=lambda: (
+            f"bot-{secrets.token_urlsafe(8).lower().replace('_', '-')}"
+        ),
     )
 
     # ── Channel matrix (plan/in_browser_bots.md Phase 2.5) ──────────────
