@@ -222,9 +222,75 @@ jobs:
 
           echo "Migration completed successfully"
 
+  # ── Seed the public demo restaurant ───────────────────────────
+  # Idempotent. Creates /pizzaria-do-ze so the landing CTA deep-links
+  # into a working widget without any owner signup. Runs after migrate
+  # (so the schema is current) and before deploy (so the demo is live
+  # the moment the new task definition takes traffic). See
+  # plan/portfolio_pivot.md §P3.
+  seed-demo:
+    needs: migrate
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEV_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Run demo seed via ECS RunTask
+        run: |
+          # Use the backend task definition (has the embedding model
+          # pre-cached) and override the command to invoke the seed
+          # script. The container name "backend" must match the
+          # `name=` in the task definition's container list.
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "$ECS_CLUSTER" \
+            --task-definition zenbots-dev-backend \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ secrets.DEV_PRIVATE_SUBNETS }}],securityGroups=[${{ secrets.DEV_ECS_SECURITY_GROUP }}],assignPublicIp=DISABLED}" \
+            --overrides '{
+              "containerOverrides": [{
+                "name": "backend",
+                "command": ["python", "-m", "scripts.seed_demo_restaurant"]
+              }]
+            }' \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          echo "Seed task: $TASK_ARN"
+          aws ecs wait tasks-stopped \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "$TASK_ARN"
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "$TASK_ARN" \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "::warning::Demo seed exited with code $EXIT_CODE"
+            TASK_ID=$(echo "$TASK_ARN" | awk -F'/' '{print $NF}')
+            aws logs get-log-events \
+              --log-group-name "/ecs/zenbots-dev/backend" \
+              --log-stream-name "backend/backend/$TASK_ID" \
+              --query 'events[*].message' \
+              --output text || echo "Could not retrieve seed logs"
+            # Soft-fail: don't block deploy if the demo seed fails.
+            # The dashboard still works; only the public demo URL is
+            # affected, and a manual `docker exec` re-run is trivial.
+            exit 0
+          fi
+
+          echo "Demo seeded successfully"
+
   # ── Deploy ECS services ───────────────────────────────────────
   deploy:
-    needs: migrate
+    needs: [migrate, seed-demo]
     runs-on: ubuntu-latest
     environment: dev
     permissions:

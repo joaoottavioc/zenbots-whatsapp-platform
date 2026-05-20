@@ -86,6 +86,16 @@ _FREE_DAILY_AUDIO_CAP = 10
 # Backend gate; the widget enforces a 90s duration cap before upload.
 _MAX_AUDIO_BYTES = 2 * 1024 * 1024
 
+# Public demo restaurant (plan/portfolio_pivot.md §P3). The seed script
+# (scripts/seed_demo_restaurant.py) creates a bot with this slug so the
+# landing CTA → /pizzaria-do-ze deep-links into a working widget any
+# recruiter can chat with. To keep public exposure cost-bounded, the
+# demo bot gets a tighter per-IP daily session cap on top of the
+# regular Free-tier per-session caps. Worst case at 5 sessions × 30
+# messages × ~\$0.0007 = ~\$0.10/IP/day even under sustained abuse.
+DEMO_BOT_SLUG = "pizzaria-do-ze"
+_DEMO_PER_IP_DAILY_SESSION_CAP = 5
+
 # SSE keep-alive cadence. Same number main.py uses for the dashboard
 # stream so Caddy/CloudFront see traffic on the connection.
 _SSE_PING_INTERVAL = 10
@@ -550,6 +560,37 @@ async def post_chat_session(
     _ensure_web_channel_enabled()
     bot = await _load_widget_bot(bot_id)
     _check_origin(request, bot)
+
+    # Demo abuse cap. The public demo restaurant is reachable without
+    # signup, so without a per-IP daily ceiling on *fresh sessions*
+    # someone could spin up unlimited sessions and hit each one's
+    # per-session text cap independently. Cap covers only session
+    # creation; existing sessions continue to chat normally up to
+    # their own per-session daily quota.
+    if bot.slug == DEMO_BOT_SLUG:
+        client_ip = _client_ip(request)
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        demo_key = f"chat:demo_session_day:{client_ip}:{today}"
+        if await is_rate_limited(
+            demo_key, _DEMO_PER_IP_DAILY_SESSION_CAP, _DAY_IN_SECONDS
+        ):
+            logger.warning(
+                "demo session cap hit: ip=%s slug=%s cap=%d",
+                client_ip,
+                DEMO_BOT_SLUG,
+                _DEMO_PER_IP_DAILY_SESSION_CAP,
+            )
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "error": "demo_daily_cap",
+                    "message": (
+                        "Você atingiu o limite diário de sessões no demo. "
+                        "Volte amanhã para continuar testando!"
+                    ),
+                },
+                headers={"Retry-After": str(_DAY_IN_SECONDS)},
+            )
 
     theme = dict(bot.web_widget_theme or {})
     welcome = theme.get("welcome_message") or (
