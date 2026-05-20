@@ -150,5 +150,5 @@ MIT.
 
 ## Reach me
 
-João — `joaoottavioc@gmail.com`. Open to AI engineer roles. See
+João Ribeiro — `joaoottavioc@gmail.com`. Open to AI engineer roles. See
 [`PORTFOLIO.md`](PORTFOLIO.md) for the engineering case study.

@@ -11,7 +11,7 @@ shaped each call.
 
 ## Who & what
 
-**João Ottávio** — building AI systems in production, looking for AI
+**João Ribeiro** — building AI systems in production, looking for AI
 engineer roles. `joaoottavioc@gmail.com`.
 
 **ZenBotZ** — a multi-tenant chatbot platform for restaurants. Customer
