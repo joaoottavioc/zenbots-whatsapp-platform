@@ -3634,12 +3634,7 @@ async def _process_contact_message_inner(
             cart.last_activity_at = utcnow()
             session.add(cart)
             await session.flush()
-            await send_whatsapp_message(
-                contact_number,
-                sug_result,
-                token=current_token,
-                phone_id=current_phone_id,
-            )
+            await mctx.reply(sug_result)
             await crud.add_interaction_to_history(
                 session, bot.id, contact_number, text_body, sug_result
             )
@@ -3713,12 +3708,7 @@ async def _process_contact_message_inner(
                 cart.last_activity_at = utcnow()
                 session.add(cart)
                 await session.flush()
-                await send_whatsapp_message(
-                    contact_number,
-                    _reshow_msg,
-                    token=current_token,
-                    phone_id=current_phone_id,
-                )
+                await mctx.reply(_reshow_msg)
                 await crud.add_interaction_to_history(
                     session, bot.id, contact_number, text_body, _reshow_msg
                 )
@@ -3804,12 +3794,7 @@ async def _process_contact_message_inner(
         cart.last_activity_at = utcnow()
         session.add(cart)
         await session.flush()
-        await send_whatsapp_message(
-            mctx.contact_number,
-            response_to_user,
-            token=mctx.token,
-            phone_id=mctx.phone_id,
-        )
+        await mctx.reply(response_to_user)
         await crud.add_interaction_to_history(
             session, bot.id, mctx.contact_number, text_body, response_to_user
         )
@@ -3822,12 +3807,7 @@ async def _process_contact_message_inner(
         cart.last_activity_at = utcnow()
         session.add(cart)
         await session.flush()
-        await send_whatsapp_message(
-            mctx.contact_number,
-            response_to_user,
-            token=mctx.token,
-            phone_id=mctx.phone_id,
-        )
+        await mctx.reply(response_to_user)
         await crud.add_interaction_to_history(
             session, bot.id, mctx.contact_number, text_body, response_to_user
         )
@@ -3890,12 +3870,7 @@ async def _process_contact_message_inner(
     cart.last_activity_at = utcnow()
     session.add(cart)
 
-    await send_whatsapp_message(
-        contact_number,
-        response_to_user,
-        token=decrypt_value(bot.whatsapp_token),
-        phone_id=bot.phone_number_id,
-    )
+    await mctx.reply(response_to_user)
     await crud.add_interaction_to_history(
         session, bot.id, contact_number, text_body, response_to_user
     )
