@@ -338,11 +338,25 @@ class MessageContext:
                     "channel='web' MessageContext missing "
                     "channel_metadata['session_id']"
                 )
+            # Read bot_id from channel_metadata, NOT self.bot.id directly.
+            # `_handle_payment_method` calls session.commit() after creating
+            # the order, which expires every ORM attribute on `self.bot` —
+            # accessing `self.bot.id` after that point triggers a lazy
+            # reload and dies with "greenlet_spawn has not been called".
+            # The bot_id snapshot in channel_metadata is set at MessageContext
+            # construction time (before any commit) and never expires.
+            bot_id = self.channel_metadata.get("bot_id")
+            if bot_id is None:
+                # Fallback for paths that didn't pre-populate (only legacy
+                # WhatsApp construction sites, which won't ever take the
+                # web branch). Still safer than crashing — try the ORM read
+                # but defensively.
+                bot_id = self.bot.id
             attachments: list[dict] = []
             if media_url:
                 attachments.append({"type": media_type, "url": media_url})
             await broadcast_web_reply(
-                bot_id=self.bot.id,
+                bot_id=bot_id,
                 session_id=session_id,
                 text=text,
                 attachments=attachments,
@@ -3455,6 +3469,12 @@ async def _process_contact_message_inner(
         return
 
     # Gate: Session expiry
+    # Snapshot bot.id into channel_metadata so ctx.reply() doesn't have
+    # to read the ORM attribute after a commit (which expires it and
+    # triggers a greenlet_spawn-incompatible lazy load — burned us in
+    # _handle_payment_method on the web checkout path).
+    _channel_metadata = dict(channel_metadata or {})
+    _channel_metadata.setdefault("bot_id", bot.id)
     mctx = MessageContext(
         session=session,
         bot=bot,
@@ -3465,7 +3485,7 @@ async def _process_contact_message_inner(
         token=current_token,
         phone_id=current_phone_id,
         channel=channel,
-        channel_metadata=channel_metadata or {},
+        channel_metadata=_channel_metadata,
     )
     if await _handle_session_expiry(mctx):
         return
