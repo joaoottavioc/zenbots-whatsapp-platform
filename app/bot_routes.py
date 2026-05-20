@@ -1322,7 +1322,32 @@ async def complete_onboarding(
     Onboarding Definitivo (Enterprise-Grade):
     - Aceita dados do evento (Happy Path)
     - Aceita apenas Token (Fallback) e faz Discovery completo
+
+    Gated behind `whatsapp_public_signup_enabled` — defaults closed
+    pending Meta App Review. Already-connected restaurants keep working
+    because the message-handling pipeline is gated separately via
+    `channel_toggle.is_channel_enabled("whatsapp")`. See
+    `plan/portfolio_pivot.md` §P2.
     """
+    from app.feature_flags import whatsapp_public_signup_enabled
+
+    if not whatsapp_public_signup_enabled():
+        logger.info(
+            "[Onboarding] Rejecting signup — feature flag closed (user=%s bot=%s)",
+            current_user.id,
+            data.bot_id,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "whatsapp_signup_coming_soon",
+                "message": (
+                    "A conexão com WhatsApp está em revisão pela Meta. "
+                    "Use o Atendimento Web por enquanto."
+                ),
+            },
+        )
+
     logger.info("[Onboarding] Processing bot #%s", data.bot_id)
 
     app_id = os.getenv("FB_APP_ID")
