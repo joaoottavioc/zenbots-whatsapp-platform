@@ -531,6 +531,22 @@ class ChatMessageAccepted(BaseModel):
     message_id: str
 
 
+class ChatAudioAccepted(BaseModel):
+    """Returned on 202 from POST /chat/{bot_id}/audio.
+
+    Symmetric with ChatMessageAccepted but also echoes the transcript so
+    the widget can replace its optimistic "🎤 transcribing…" bubble with
+    the actual text — same text the worker will then process through the
+    LLM pipeline. The audio itself is not stored in v1; only the
+    transcript is persisted in ConversationHistory by the downstream
+    worker, exactly like a typed message.
+    """
+
+    accepted: bool = True
+    message_id: str
+    transcript: str
+
+
 class ChatSessionResponse(BaseModel):
     """Optional handshake. The widget can call POST /chat/{bot_id}/session
     on first load to fetch the bot's display name, welcome message, theme,

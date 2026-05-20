@@ -34,7 +34,16 @@ from datetime import datetime, timezone
 
 import redis.asyncio as redis
 from arq.connections import ArqRedis
-from fastapi import APIRouter, HTTPException, Path, Query, Request
+from fastapi import (
+    APIRouter,
+    File,
+    Form,
+    HTTPException,
+    Path,
+    Query,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import StreamingResponse
 
 from app import crud
@@ -64,6 +73,18 @@ _PER_IP_MESSAGE_WINDOW_SECONDS = 60
 # marginal LLM cost via the subscription.
 _FREE_DAILY_MESSAGE_CAP = 30
 _DAY_IN_SECONDS = 86400
+
+# Audio (WW-3 / plan/widget_polish.md). Tighter rate-limit than text
+# because each call hits Whisper plus the downstream LLM pipeline, and
+# the per-audio cost (~$0.0007 Groq, ~$0.006 OpenAI fallback) is non-zero
+# even though small. The per-session daily cap is separate from the text
+# cap so a chatty user can still send text after exhausting voice notes.
+_PER_IP_AUDIO_LIMIT = 4
+_PER_IP_AUDIO_WINDOW_SECONDS = 60
+_FREE_DAILY_AUDIO_CAP = 10
+# Audio body ceiling: ~60-90s at opus 32kbps fits comfortably under 2 MB.
+# Backend gate; the widget enforces a 90s duration cap before upload.
+_MAX_AUDIO_BYTES = 2 * 1024 * 1024
 
 # SSE keep-alive cadence. Same number main.py uses for the dashboard
 # stream so Caddy/CloudFront see traffic on the connection.
@@ -229,6 +250,154 @@ async def post_chat_message(
         payload.text,
     )
     return schemas.ChatMessageAccepted(accepted=True, message_id=payload.message_id)
+
+
+@router.post(
+    "/{bot_id}/audio",
+    status_code=202,
+    response_model=schemas.ChatAudioAccepted,
+    summary="Send a customer voice note to a bot's web widget",
+)
+async def post_chat_audio(
+    request: Request,
+    bot_id: int = Path(..., ge=1),
+    session_id: str = Form(..., min_length=1, max_length=64),
+    message_id: str = Form(..., min_length=1, max_length=64),
+    audio: UploadFile = File(...),
+):
+    """Transcribe a voice note and enqueue it as a normal chat message.
+
+    Flow:
+      1. Gates (kill switch, widget enabled, origin, rate limits) —
+         identical posture to POST /message, just with stricter audio caps.
+      2. Read the audio body (max 2 MB) into memory.
+      3. Build the Whisper conditioning prompt from the bot's products
+         (reuses `_build_whisper_prompt` shared with the WhatsApp path).
+      4. Call `transcribe_audio` (Groq Whisper primary, OpenAI fallback).
+      5. Enqueue `process_chat_message` with the transcript — the rest
+         of the pipeline doesn't know or care that it came from audio.
+
+    The audio bytes are discarded after transcription in v1 (no S3
+    persistence). Only the transcript lands in ConversationHistory.
+    """
+    _ensure_web_channel_enabled()
+    bot = await _load_widget_bot(bot_id)
+    _check_origin(request, bot)
+
+    # Per-IP rate limit — tighter than text because each call costs
+    # transcription + LLM, not just LLM.
+    client_ip = _client_ip(request)
+    rl_key = f"chat:audio:ip:{client_ip}:bot:{bot_id}"
+    if await is_rate_limited(
+        rl_key,
+        _PER_IP_AUDIO_LIMIT,
+        _PER_IP_AUDIO_WINDOW_SECONDS,
+    ):
+        logger.warning(
+            "chat audio rate-limit: ip=%s bot_id=%s limit=%d window=%ds",
+            client_ip,
+            bot_id,
+            _PER_IP_AUDIO_LIMIT,
+            _PER_IP_AUDIO_WINDOW_SECONDS,
+        )
+        raise HTTPException(
+            status_code=429,
+            detail={"error": "rate_limited"},
+            headers={"Retry-After": str(_PER_IP_AUDIO_WINDOW_SECONDS)},
+        )
+
+    # Per-session daily cap on Free tier. Disjoint key from the text cap
+    # so an audio doesn't eat the text budget (and vice versa).
+    async with async_session() as session:
+        sub = await crud.get_subscription_by_bot(session, bot.id)
+    plan_tier = (sub.plan_type if sub else "free") or "free"
+    if plan_tier == "free":
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        cap_key = f"chat:audio_session_day:{session_id}:{today}"
+        if await is_rate_limited(cap_key, _FREE_DAILY_AUDIO_CAP, _DAY_IN_SECONDS):
+            logger.warning(
+                "chat audio free-cap exceeded: session=%s bot_id=%s cap=%d",
+                session_id,
+                bot_id,
+                _FREE_DAILY_AUDIO_CAP,
+            )
+            await broadcast_web_reply(
+                bot_id=bot.id,
+                session_id=session_id,
+                text=(
+                    "Você atingiu o limite gratuito de áudios para hoje. 🙏\n\n"
+                    "Pode continuar conversando por texto!"
+                ),
+            )
+            # Return 202 with empty transcript so the widget can patch
+            # its optimistic bubble without showing a transport error.
+            return schemas.ChatAudioAccepted(
+                accepted=True, message_id=message_id, transcript=""
+            )
+
+    # Read with a hard size ceiling. UploadFile streams, so we cap as we
+    # read rather than trusting Content-Length.
+    audio_bytes = await audio.read()
+    if not audio_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "empty_audio", "message": "Áudio vazio."},
+        )
+    if len(audio_bytes) > _MAX_AUDIO_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail={
+                "error": "audio_too_large",
+                "message": "Áudio muito longo. Tente uma gravação mais curta.",
+            },
+        )
+
+    # Build the Whisper prompt off the bot's product catalog so accuracy
+    # on product names is good. Falls back to empty string if anything
+    # blows up — Whisper still works without a prompt.
+    prompt = ""
+    try:
+        from app.whatsapp import _build_whisper_prompt
+
+        async with async_session() as session:
+            prompt = await _build_whisper_prompt(session, bot)
+    except Exception as e:
+        logger.warning("Whisper prompt build failed (using empty): %s", e)
+
+    # Transcribe. The helper records cost via record_llm_usage.
+    from app.openai_client import transcribe_audio
+    from app.context import current_channel
+
+    current_channel.set("web")
+    transcript = await transcribe_audio(audio_bytes, prompt=prompt, bot_id=bot.id)
+    if not transcript:
+        logger.warning(
+            "Audio transcription returned empty: bot_id=%s session=%s bytes=%d",
+            bot_id,
+            session_id,
+            len(audio_bytes),
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "audio_unintelligible",
+                "message": "Não consegui entender o áudio. Pode digitar?",
+            },
+        )
+
+    # Enqueue exactly like a typed message — the ARQ task can't tell the
+    # difference from this point onward.
+    redis_queue: ArqRedis = request.app.state.arq_redis
+    await redis_queue.enqueue_job(
+        "process_chat_message",
+        bot_id,
+        session_id,
+        message_id,
+        transcript,
+    )
+    return schemas.ChatAudioAccepted(
+        accepted=True, message_id=message_id, transcript=transcript
+    )
 
 
 @router.get(

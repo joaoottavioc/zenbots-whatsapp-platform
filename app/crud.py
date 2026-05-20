@@ -1742,11 +1742,16 @@ async def cancel_expired_pix_orders(session: AsyncSession):
     for order in expired_orders:
         order.status = OrderStatus.CANCELED
         session.add(order)
-        # Capture info before commit expires objects
+        # Capture info before commit expires objects. Includes channel +
+        # bot_id so the cron caller can dispatch the "PIX expired" notice
+        # to the right transport — WhatsApp send to a web "web:{sid}"
+        # phone fails with 131026 Message undeliverable.
         if order.contact and order.contact.bot:
             canceled_info.append(
                 {
                     "order_id": order.id,
+                    "channel": order.contact.channel,
+                    "bot_id": order.contact.bot.id,
                     "contact_phone": order.contact.phone_number,
                     "bot_token": order.contact.bot.whatsapp_token,
                     "bot_phone_id": order.contact.bot.phone_number_id,

@@ -119,3 +119,31 @@ async def broadcast_typing_indicator(
     no message follows).
     """
     await broadcast_web_event(bot_id, session_id, "typing", {"on": on})
+
+
+async def broadcast_web_receipt(
+    bot_id: int,
+    session_id: str,
+    message_id: str,
+    status: str,
+) -> None:
+    """Publish a 'receipt' event so the widget can render delivery ticks.
+
+    Mirrors WhatsApp's sent/delivered/read indicators on the user's own
+    bubble. The frontend consumes (message_id, status) pairs:
+
+      - 'delivered' — emitted as soon as the worker dequeues the ARQ job
+      - 'read'      — emitted right before the LLM round-trip begins
+
+    'sent' is implicit from the HTTP 200 the widget sees on
+    POST /chat/{bot_id}/message, so we don't publish it server-side.
+
+    Best-effort. Failures here are swallowed by `broadcast_web_event` and
+    must not propagate — a missing tick is purely cosmetic.
+    """
+    await broadcast_web_event(
+        bot_id,
+        session_id,
+        "receipt",
+        {"message_id": message_id, "status": status},
+    )

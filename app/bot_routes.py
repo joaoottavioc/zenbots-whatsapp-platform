@@ -26,7 +26,7 @@ from app.menu_extraction import (
 )
 from app.menu_extraction_policy import consume_extraction_quota, get_bot_policy
 from app.openai_client import extract_products_from_image
-from app.whatsapp import send_whatsapp_message
+from app.whatsapp import send_customer_notification
 from app.context import current_bot_id
 from app.encryption import encrypt_value, decrypt_value
 from app.webhook_security import verify_whatsapp_signature, FB_APP_SECRET
@@ -963,23 +963,29 @@ async def update_order_status(
             await session.refresh(updated_order, attribute_names=["contact", "bot"])
             contact = updated_order.contact
             bot = updated_order.bot
-            if contact and bot and bot.whatsapp_token and bot.phone_number_id:
-                phone = contact.phone_number
-                if not phone.startswith("55"):
-                    phone = "55" + phone
-                await send_whatsapp_message(
-                    to=phone,
+            if contact and bot:
+                # Dispatch by Contact.channel so a web customer receives the
+                # status update over the chat widget instead of WhatsApp
+                # (which would 131026-fail because phone_number = "web:{sid}").
+                wa_token = (
+                    decrypt_value(bot.whatsapp_token) if bot.whatsapp_token else None
+                )
+                await send_customer_notification(
+                    channel=contact.channel,
+                    bot_id=bot.id,
+                    contact_phone=contact.phone_number,
                     message=notify_msg,
-                    token=decrypt_value(bot.whatsapp_token),
-                    phone_id=bot.phone_number_id,
+                    whatsapp_token=wa_token,
+                    whatsapp_phone_id=bot.phone_number_id,
                 )
                 logger.info(
-                    "WhatsApp notification sent to %s: %s",
+                    "Customer notification sent: channel=%s contact=%s status=%s",
+                    contact.channel,
                     contact.phone_number,
                     incoming_status,
                 )
         except Exception as e:
-            logger.warning("Failed to send WhatsApp notification: %s", e)
+            logger.warning("Failed to send customer notification: %s", e)
 
     # 4. Preparação da Resposta
     order_dict = updated_order.model_dump()

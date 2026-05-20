@@ -3,7 +3,7 @@ import os
 import json
 import random
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 import httpx
 from dotenv import load_dotenv
 from fastapi import APIRouter, Request
@@ -22,6 +22,7 @@ from app.models import (
     OrderStatus,
     CartState,
     Contact,
+    Channel,
 )
 from app.openai_client import (
     get_ai_decision,
@@ -4116,7 +4117,26 @@ async def process_chat_message(
 
     new_trace_id()
     current_channel.set("web")
-    from app.web_channel import broadcast_web_reply
+    from app.web_channel import broadcast_web_reply, broadcast_web_receipt
+
+    async def _emit_receipt(status: str) -> None:
+        """Publish a receipt tick — never raises. The widget renders these
+        as one/two checkmarks on the user's bubble; missing one is purely
+        cosmetic, so swallow Redis hiccups silently."""
+        try:
+            await broadcast_web_receipt(
+                bot_id=bot_id,
+                session_id=session_id,
+                message_id=message_id,
+                status=status,
+            )
+        except Exception as e:
+            logger.warning("receipt broadcast failed status=%s err=%s", status, e)
+
+    # "Delivered" — the job is past the kill switch and about to enter the
+    # gate pipeline. Even if it later bounces off subscription/closed/no-
+    # products, the user has confirmation the message reached the system.
+    await _emit_receipt("delivered")
 
     _maintenance_msg = (
         "Olá! Nosso atendimento automático está em manutenção no momento.\n\n"
@@ -4251,6 +4271,11 @@ async def process_chat_message(
                 session, bot.id, contact_identity, channel="web"
             )
             current_contact_id.set(contact.id)
+
+            # "Read" — the bot is about to start processing (LLM round-trip
+            # imminent). Mirrors WhatsApp's blue ✓✓ at the moment the
+            # recipient opens the chat.
+            await _emit_receipt("read")
 
             async with contact_lock(contact.id):
                 await _process_contact_message(
@@ -4550,6 +4575,70 @@ async def send_whatsapp_message(
                 e.response.status_code,
                 e.response.text,
             )
+
+
+async def send_customer_notification(
+    *,
+    channel: Optional[str],
+    bot_id: Optional[int],
+    contact_phone: str,
+    message: str,
+    whatsapp_token: Optional[str] = None,
+    whatsapp_phone_id: Optional[str] = None,
+) -> None:
+    """Send a one-off notification to a customer over their original channel.
+
+    Used by code paths that don't have a MessageContext: KDS order-status
+    changes, PIX-expiry cron, etc. Dispatches by Contact.channel so a web
+    customer doesn't receive a WhatsApp call (which would fail with
+    "Message undeliverable" 131026 because contact_phone is "web:{session_id}").
+
+    For WhatsApp: prepends "55" country code if missing (legacy parity with
+    the previous inline logic). For Web: strips the "web:" prefix from the
+    synthesized phone_number to recover the session_id, then publishes a
+    'message' event to the chat PubSub channel the widget subscribes to.
+
+    Silently no-ops on unknown channels or missing transport creds — the
+    callers already wrap this in try/except, but the helper itself should
+    never raise (these are best-effort customer notifications, not core
+    flow).
+    """
+    if not message:
+        return
+
+    ch = (channel or Channel.WHATSAPP.value).lower()
+
+    if ch == Channel.WEB.value:
+        if not bot_id or not contact_phone.startswith("web:"):
+            logger.warning(
+                "send_customer_notification: web channel missing bot_id "
+                "or malformed contact_phone=%s",
+                contact_phone,
+            )
+            return
+        session_id = contact_phone[len("web:") :]
+        from app.web_channel import broadcast_web_reply
+
+        await broadcast_web_reply(bot_id=bot_id, session_id=session_id, text=message)
+        return
+
+    # Default: WhatsApp transport.
+    if not whatsapp_token or not whatsapp_phone_id:
+        logger.warning(
+            "send_customer_notification: whatsapp channel missing creds "
+            "(token/phone_id) for contact_phone=%s",
+            contact_phone,
+        )
+        return
+    phone = contact_phone
+    if not phone.startswith("55"):
+        phone = "55" + phone
+    await send_whatsapp_message(
+        to=phone,
+        message=message,
+        token=whatsapp_token,
+        phone_id=whatsapp_phone_id,
+    )
 
 
 async def mark_message_as_read(message_id: str, token: str, phone_id: str):

@@ -20,19 +20,26 @@ async def run_cancel_expired_pix_orders(ctx):
         canceled = await cancel_expired_pix_orders(session)
         if canceled:
             logger.info("Cron: canceled %d expired PIX orders", len(canceled))
-            from app.whatsapp import send_whatsapp_message
+            from app.whatsapp import send_customer_notification
             from app.encryption import decrypt_value
 
             for info in canceled:
                 try:
-                    await send_whatsapp_message(
-                        to=info["contact_phone"],
+                    wa_token = (
+                        decrypt_value(info["bot_token"])
+                        if info.get("bot_token")
+                        else None
+                    )
+                    await send_customer_notification(
+                        channel=info.get("channel"),
+                        bot_id=info.get("bot_id"),
+                        contact_phone=info["contact_phone"],
                         message=(
                             "Seu código PIX expirou. 😕 "
                             "Se ainda quiser pedir, é só mandar uma mensagem!"
                         ),
-                        token=decrypt_value(info["bot_token"]),
-                        phone_id=info["bot_phone_id"],
+                        whatsapp_token=wa_token,
+                        whatsapp_phone_id=info.get("bot_phone_id"),
                     )
                 except Exception as e:
                     logger.warning(
