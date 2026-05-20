@@ -1,0 +1,29 @@
+{
+  "comprehension": {
+    "failed": 190,
+    "pass_rate_pct": 79.3,
+    "passed": 730,
+    "total": 920
+  },
+  "consistency": {
+    "cross_restaurant_spread_pp": null,
+    "worst_restaurant_pct": null
+  },
+  "generated_at": "2026-05-20T20:32:53.918532+00:00",
+  "headline": {
+    "failed": 190,
+    "pass_rate_pct": 79.3,
+    "passed": 730,
+    "skipped": 0,
+    "total_tests": 920
+  },
+  "methodology": {
+    "corpus_size": 184,
+    "description": "Ground-truth conversation scenarios per restaurant: add/remove/modify items, multi-item orders, suggestions, checkout flow, ambiguity handling. Comprehension is scored as 'the bot understood the user's intent and produced the correct cart state' — not just 'no crash'.",
+    "harness": "tests/simulation/corpus/run_corpus_qa.py",
+    "repo_link": "https://github.com/joaoottavioc/zenbots-whatsapp-platform/tree/main/tests/simulation/corpus",
+    "samples_per_restaurant": 5
+  },
+  "scenarios": [],
+  "schema_version": "1"
+}
