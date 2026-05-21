@@ -15,6 +15,7 @@ from app.database import get_session
 from app.auth import get_current_user
 from app.models import User, Plan, Bot
 from app import crud, schemas, billing_cache, founder
+from app.rate_limiter import is_rate_limited
 from app.time import utcnow
 from app.webhook_security import require_mp_signature
 
@@ -37,8 +38,16 @@ def _get_sdk():
 
 
 @router.get("/plans", response_model=list[schemas.PlanResponse])
-async def list_plans(session: AsyncSession = Depends(get_session)):
+async def list_plans(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
     """Public endpoint — returns all available plans (no auth required)."""
+    client_ip = request.client.host if request.client else "unknown"
+    if await is_rate_limited(
+        f"rl:public:plans:{client_ip}", limit=30, window_seconds=60
+    ):
+        raise HTTPException(status_code=429, detail="Too many requests.")
     return await crud.list_plans(session)
 
 

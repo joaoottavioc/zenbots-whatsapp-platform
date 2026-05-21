@@ -6,7 +6,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.admin_routes import router as admin_router
+from app.admin_routes import _admin_rate_limit, router as admin_router
 from app.billing_routes import router as billing_router
 from app.auth import get_current_user, require_admin
 from app.database import get_session
@@ -55,6 +55,7 @@ def admin_client():
 
     app.dependency_overrides[get_current_user] = lambda: admin_user
     app.dependency_overrides[require_admin] = lambda: admin_user
+    app.dependency_overrides[_admin_rate_limit] = lambda: admin_user
     app.dependency_overrides[get_session] = lambda: mock_session
 
     client = TestClient(app)
@@ -80,16 +81,30 @@ def non_admin_client():
 
 @pytest.fixture
 def public_client():
-    """TestClient for public billing endpoints (no auth)."""
+    """TestClient for public billing endpoints (no auth).
+
+    Rate-limiter Redis is mocked so the /billing/plans guard doesn't trip
+    when Redis is unavailable in the test env (is_rate_limited fails closed).
+    """
     app = FastAPI()
     app.include_router(billing_router)
 
     mock_session = AsyncMock()
     app.dependency_overrides[get_session] = lambda: mock_session
 
-    client = TestClient(app)
-    client._mock_session = mock_session
-    return client
+    # Mock Redis so is_rate_limited returns False (under limit) deterministically.
+    mock_pipe = MagicMock()
+    mock_pipe.incr = MagicMock()
+    mock_pipe.ttl = MagicMock()
+    mock_pipe.execute = AsyncMock(return_value=[1, 60])
+    mock_redis = MagicMock()
+    mock_redis.pipeline.return_value = mock_pipe
+    mock_redis.expire = AsyncMock()
+
+    with patch("app.rate_limiter._get_client", return_value=mock_redis):
+        client = TestClient(app)
+        client._mock_session = mock_session
+        yield client
 
 
 # ---------------------------------------------------------------------------
@@ -249,8 +264,13 @@ class TestAdminUpsertSubscription:
                 "app.crud.get_plan_by_key", new_callable=AsyncMock, return_value=plan
             ),
             patch(
-                "app.crud.upsert_subscription", new_callable=AsyncMock, return_value=sub
+                "app.crud.get_subscription_by_bot",
+                new_callable=AsyncMock,
+                return_value=None,
             ),
+            patch(
+                "app.crud.upsert_subscription", new_callable=AsyncMock, return_value=sub
+            ) as mock_upsert,
         ):
             resp = admin_client.put(
                 "/admin/subscriptions/1",
@@ -260,6 +280,12 @@ class TestAdminUpsertSubscription:
         data = resp.json()
         assert data["status"] == "authorized"
         assert data["is_active"] is True
+        # Fresh upsert mints a uuid-based mp_id, not the predictable bot_id form.
+        mp_id_used = mock_upsert.call_args.kwargs["mp_id"]
+        assert mp_id_used.startswith("admin_grant_")
+        assert mp_id_used != "admin_grant_1"
+        # Hex uuid is 32 chars; prefix is 13 → total 45.
+        assert len(mp_id_used) == len("admin_grant_") + 32
 
     def test_invalid_plan_returns_400(self, admin_client):
         bot = _make_bot()
@@ -291,3 +317,46 @@ class TestAdminUpsertSubscription:
                 json={"status": "authorized", "plan_type": "pro"},
             )
         assert resp.status_code == 404
+
+    def test_reuse_existing_admin_grant_mp_id(self, admin_client):
+        """Repeated upserts on the same bot keep the existing admin_grant_*
+        uuid — unique constraint stays stable, no orphan rows."""
+        bot = _make_bot()
+        plan = _make_plan(key="pro")
+        sub = _make_subscription()
+        existing = MagicMock()
+        existing.mp_subscription_id = "admin_grant_abc123"
+
+        with (
+            patch.object(
+                admin_client._mock_session,
+                "get",
+                new_callable=AsyncMock,
+                return_value=bot,
+            ),
+            patch(
+                "app.crud.get_plan_by_key", new_callable=AsyncMock, return_value=plan
+            ),
+            patch(
+                "app.crud.get_subscription_by_bot",
+                new_callable=AsyncMock,
+                return_value=existing,
+            ),
+            patch(
+                "app.crud.upsert_subscription", new_callable=AsyncMock, return_value=sub
+            ) as mock_upsert,
+        ):
+            resp = admin_client.put(
+                "/admin/subscriptions/1",
+                json={"status": "authorized", "plan_type": "pro"},
+            )
+        assert resp.status_code == 200
+        assert mock_upsert.call_args.kwargs["mp_id"] == "admin_grant_abc123"
+
+    def test_invalid_status_rejected(self, admin_client):
+        """AdminUpsertSubscription.status is constrained to a 4-value Literal."""
+        resp = admin_client.put(
+            "/admin/subscriptions/1",
+            json={"status": "garbage", "plan_type": "pro"},
+        )
+        assert resp.status_code == 422

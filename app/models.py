@@ -396,9 +396,9 @@ class PaymentConfig(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
     provider: str = Field(default="mercadopago")
-    access_token: Optional[str] = Field(default=None)
-    public_key: Optional[str] = Field(default=None)
-    refresh_token: Optional[str] = Field(default=None)
+    access_token: Optional[str] = Field(default=None, max_length=2000)
+    public_key: Optional[str] = Field(default=None, max_length=2000)
+    refresh_token: Optional[str] = Field(default=None, max_length=2000)
     token_expires_at: Optional[datetime] = Field(default=None)
 
     is_active: bool = Field(default=False)

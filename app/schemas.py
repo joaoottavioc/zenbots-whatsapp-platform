@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator, validator
 from datetime import datetime
-from typing import List, Optional, Any, Dict
+from typing import List, Literal, Optional, Any, Dict
 import pytz
 
 # --- Schemas de Produto ---
@@ -406,7 +406,9 @@ class UsageSummary(BaseModel):
 
 
 class CheckoutRequest(BaseModel):
-    plan_key: str = "pro"
+    plan_key: str = Field(
+        default="pro", min_length=1, max_length=50, pattern=r"^[a-z0-9_-]+$"
+    )
     bot_id: int
 
 
@@ -480,7 +482,7 @@ class PlanUpdate(BaseModel):
 
 
 class AdminUpsertSubscription(BaseModel):
-    status: str = Field(default="authorized", max_length=30)
+    status: Literal["authorized", "pending", "cancelled", "paused"] = "authorized"
     plan_type: str = Field(default="pro_monthly", max_length=30)
 
 
