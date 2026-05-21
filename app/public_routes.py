@@ -33,7 +33,7 @@ from sqlalchemy import select, func
 
 from app import crud
 from app.database import async_session
-from app.models import Contact, ConversationHistory, UsageEvent
+from app.models import Contact, ConversationHistory, Product, UsageEvent
 
 logger = logging.getLogger(__name__)
 
@@ -346,5 +346,186 @@ async def get_demo_conversation_trace(
 
     return JSONResponse(
         content=trace,
+        headers={"Cache-Control": _DEMO_TRACE_CACHE_CONTROL},
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Demo restaurant menu — public read of seeded products
+#
+# Surfaced on /eval so recruiters can see what's available to order
+# before they open the widget. Closes the "what should I type?"
+# friction loop without forcing them to wander the widget UI.
+# ─────────────────────────────────────────────────────────────────────
+
+# Canonical category ordering — matches scripts/seed_demo_restaurant.py
+# so the rendered menu reads like a real restaurant card (mains first,
+# then sides, drinks, desserts). New categories not in this list fall
+# to the end in alphabetical order.
+_DEMO_CATEGORY_ORDER = [
+    "Pizzas",
+    "Esfihas",
+    "Acompanhamentos",
+    "Bebidas",
+    "Sobremesas",
+]
+
+
+@router.get(
+    "/demo/menu",
+    summary="Demo restaurant menu — products grouped by category",
+)
+async def get_demo_menu() -> JSONResponse:
+    """Public, read-only view of the demo restaurant's menu.
+
+    Returns categories in the canonical order defined above, with
+    products sorted by price desc within each (cheap-first reads
+    weirdly for a menu). Only available products are returned.
+    """
+    async with async_session() as session:
+        bot = await crud.get_bot_by_slug(session, DEMO_BOT_SLUG)
+        if not bot:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "demo_bot_unavailable"},
+            )
+
+        products_q = (
+            select(Product)
+            .where(
+                Product.bot_id == bot.id,
+                Product.is_available.is_(True),
+            )
+            .order_by(Product.category.asc(), Product.price.desc())
+        )
+        rows = (await session.execute(products_q)).scalars().all()
+
+    # Group preserving insertion order so the response shape is
+    # deterministic for the frontend.
+    by_category: dict[str, list[dict]] = {}
+    for p in rows:
+        # Skip soft-deleted products defensively (the model has
+        # is_deleted; the query above doesn't exclude it because some
+        # rows predate that column).
+        if getattr(p, "is_deleted", False):
+            continue
+        by_category.setdefault(p.category, []).append(
+            {
+                "name": p.name,
+                "price": round(p.price, 2),
+                "description": p.description or "",
+            }
+        )
+
+    # Order categories: canonical first, then anything else alphabetically.
+    def _cat_sort_key(name: str) -> tuple[int, str]:
+        try:
+            return (_DEMO_CATEGORY_ORDER.index(name), "")
+        except ValueError:
+            return (len(_DEMO_CATEGORY_ORDER), name.lower())
+
+    categories = [
+        {"name": name, "products": by_category[name]}
+        for name in sorted(by_category.keys(), key=_cat_sort_key)
+    ]
+
+    return JSONResponse(
+        content={
+            "bot_slug": DEMO_BOT_SLUG,
+            "restaurant_name": bot.restaurant_name,
+            "categories": categories,
+            "total_products": len(rows),
+        },
+        headers={"Cache-Control": _DEMO_TRACE_CACHE_CONTROL},
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Router-vs-LLM split — the cost-engineering punchline
+#
+# Recruiters get "the bot uses an LLM" but rarely encounter the deeper
+# story: most production messages don't need one. This endpoint surfaces
+# the actual ratio so the /eval page can render a 4th headline metric
+# like "Router sem LLM: 68%".
+# ─────────────────────────────────────────────────────────────────────
+
+# Window for the ratio. Long enough to smooth out single conversations,
+# short enough that recent corpus-tuning improvements show up.
+_ROUTER_WINDOW_DAYS = 30
+
+
+@router.get(
+    "/eval/router-savings",
+    summary="Router-handled vs LLM-handled message ratio (demo bot, 30d)",
+)
+async def get_router_savings() -> JSONResponse:
+    """Compute the share of messages handled by the semantic router
+    *without* invoking an LLM, over the last N days on the demo bot.
+
+    Definitions:
+      - "Router decisions" = UsageEvent rows with service="semantic_router"
+      - "LLM decisions"    = UsageEvent rows with service="openai" and
+                              operation in (get_ai_decision, get_chat_response_gpt,
+                              extract_potential_items) — i.e., real per-message
+                              decision calls, not menu extraction.
+      - "Router-only ratio" = traces with router events but NO LLM events.
+
+    Returns the absolute counts plus the percentage. Cached 60s.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    async with async_session() as session:
+        bot = await crud.get_bot_by_slug(session, DEMO_BOT_SLUG)
+        if not bot:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "demo_bot_unavailable"},
+            )
+
+        since = datetime.now(timezone.utc) - timedelta(days=_ROUTER_WINDOW_DAYS)
+        # naive datetime to match the table's column type (no tz on
+        # usage_events.created_at)
+        since_naive = since.replace(tzinfo=None)
+
+        # Per-trace operation flags: did the router fire, did an LLM fire?
+        # Aggregating in SQL would be neater; with the current row volume
+        # the Python loop is fine and easier to read.
+        events_q = select(
+            UsageEvent.trace_id, UsageEvent.service, UsageEvent.operation
+        ).where(
+            UsageEvent.bot_id == bot.id,
+            UsageEvent.trace_id.isnot(None),
+            UsageEvent.created_at >= since_naive,
+        )
+        per_trace: dict[str, dict[str, bool]] = {}
+        per_message_llm_ops = {
+            "get_ai_decision",
+            "get_chat_response_gpt",
+            "extract_potential_items",
+        }
+        for row in (await session.execute(events_q)).all():
+            tid = row.trace_id
+            entry = per_trace.setdefault(tid, {"router": False, "llm": False})
+            if row.service == "semantic_router":
+                entry["router"] = True
+            elif row.service == "openai" and row.operation in per_message_llm_ops:
+                entry["llm"] = True
+
+        total_traces = len(per_trace)
+        router_only = sum(1 for v in per_trace.values() if v["router"] and not v["llm"])
+        with_llm = sum(1 for v in per_trace.values() if v["llm"])
+
+        router_only_pct = (
+            round((router_only / total_traces) * 100, 1) if total_traces else 0.0
+        )
+
+    return JSONResponse(
+        content={
+            "window_days": _ROUTER_WINDOW_DAYS,
+            "total_messages": total_traces,
+            "router_only_messages": router_only,
+            "with_llm_messages": with_llm,
+            "router_only_pct": router_only_pct,
+        },
         headers={"Cache-Control": _DEMO_TRACE_CACHE_CONTROL},
     )
