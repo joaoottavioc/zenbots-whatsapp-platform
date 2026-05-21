@@ -235,8 +235,34 @@ async def semantic_intent(text: str) -> Tuple[str, float, str]:
     intent so the LLM tool-calling path can still process the message.
     Without this fallback, the entire shopping pipeline would crash with
     "algo deu errado" whenever HF Hub returns 429.
+
+    Instrumentation: each classification writes a zero-cost UsageEvent
+    so the /trace dashboard can surface the "67% of messages handled
+    without an LLM" story. The intent + confidence land in the
+    `model` field for display.
     """
+    import time as _time
+
     from app.embedding_service import EmbeddingsUnavailable
+    from app.monitoring import record_api_usage
+
+    _start = _time.perf_counter_ns()
+
+    async def _record(intent: str, score: float, success: bool = True) -> None:
+        """Best-effort telemetry — never crashes the router on failure."""
+        try:
+            elapsed_ms = (_time.perf_counter_ns() - _start) // 1_000_000
+            await record_api_usage(
+                bot_id=None,  # falls back to current_bot_id ContextVar
+                service="semantic_router",
+                operation="classify_intent",
+                cost_usd=0.0,
+                duration_ms=int(elapsed_ms),
+                success=success,
+                model=f"{intent} c={score:.2f}",
+            )
+        except Exception as e:
+            logger.debug("router telemetry failed: %s", e)
 
     try:
         await _ensure_proto_embeddings()
@@ -246,6 +272,7 @@ async def semantic_intent(text: str) -> Tuple[str, float, str]:
             "[ROUTER] embeddings unavailable — falling back to default intent. "
             "Pre-router guards still apply; LLM tool-calling will handle the message."
         )
+        await _record("GREETING_OR_QUESTION", 0.0, success=False)
         # Score below ALL thresholds → resolve_intent treats it as low
         # confidence and defaults to GREETING_OR_QUESTION (which then routes
         # to the LLM tool-calling path that can still handle ADD/REMOVE/etc).
@@ -263,6 +290,7 @@ async def semantic_intent(text: str) -> Tuple[str, float, str]:
         best_score,
         best_phrase,
     )
+    await _record(best_intent, best_score)
     return best_intent, best_score, best_phrase
 
 

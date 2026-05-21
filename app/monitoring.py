@@ -185,11 +185,18 @@ async def record_api_usage(
     duration_ms: int = 0,
     success: bool = True,
     contact_id: int | None = None,
+    model: str | None = None,
 ) -> None:
     """Record a non-LLM external API call.
 
     bot_id=None events are recorded as "system / untracked" rather than
     dropped — see record_llm_usage docstring for rationale.
+
+    `model` is optional free-text for context the dashboard renders next
+    to service/operation. Used by the semantic_router instrumentation
+    to surface the classified intent + confidence (e.g., "ADD c=0.87")
+    so the /trace view shows real AI engineering even on messages that
+    don't hit an LLM.
     """
     if bot_id is None:
         bot_id = current_bot_id.get(None)
@@ -205,7 +212,7 @@ async def record_api_usage(
         bot_id=bot_id,
         service=service,
         operation=operation,
-        model=None,
+        model=model,
         cost_usd=round(cost_usd, 8) if success else 0.0,
         quantity=quantity,
         duration_ms=duration_ms,
