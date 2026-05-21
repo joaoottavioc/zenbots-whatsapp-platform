@@ -66,9 +66,7 @@ def _patch_session(history_rows: list, event_rows: list) -> MagicMock:
     # The real query is `ORDER BY created_at DESC`; crud reverses the
     # list to get chronological order. Pre-sort the mock rows DESC so
     # the round-trip matches what production sees.
-    history_rows_desc = sorted(
-        history_rows, key=lambda r: r.created_at, reverse=True
-    )
+    history_rows_desc = sorted(history_rows, key=lambda r: r.created_at, reverse=True)
     history_result = MagicMock()
     history_scalars = MagicMock()
     history_scalars.all.return_value = history_rows_desc
