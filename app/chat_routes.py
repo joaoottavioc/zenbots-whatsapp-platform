@@ -87,14 +87,53 @@ _FREE_DAILY_AUDIO_CAP = 10
 _MAX_AUDIO_BYTES = 2 * 1024 * 1024
 
 # Public demo restaurant (plan/portfolio_pivot.md §P3). The seed script
-# (scripts/seed_demo_restaurant.py) creates a bot with this slug so the
-# landing CTA → /pizzaria-do-ze deep-links into a working widget any
-# recruiter can chat with. To keep public exposure cost-bounded, the
-# demo bot gets a tighter per-IP daily session cap on top of the
-# regular Free-tier per-session caps. Worst case at 5 sessions × 30
-# messages × ~\$0.0007 = ~\$0.10/IP/day even under sustained abuse.
+# (scripts/seed_demo_restaurant.py) creates a bot owned by the demo
+# user. We identify the demo bot by *owner email* rather than slug so a
+# dashboard rename keeps the abuse cap applying. The slug constant
+# stays around for back-compat as a fallback identifier.
+#
+# Worst case at 5 sessions × 30 messages × ~\$0.0007 = ~\$0.10/IP/day
+# even under sustained abuse.
 DEMO_BOT_SLUG = "pizzaria-do-ze"
 _DEMO_PER_IP_DAILY_SESSION_CAP = 5
+
+# Demo bot user_id cache. Populated on first hit so we don't run a
+# user-lookup on every /session request. Set to -1 (sentinel) when
+# the demo user can't be resolved at all — avoids retrying forever.
+_DEMO_USER_ID_CACHE: int | None = None
+
+
+async def _is_demo_bot(bot) -> bool:
+    """Return True iff `bot` is the seeded demo bot.
+
+    Identifies by owner email (DEMO_USER_EMAIL from the seed script) so
+    a rename / slug change in the dashboard doesn't break the abuse cap.
+    Falls back to slug comparison when the user lookup fails (e.g.,
+    demo user was deleted but a bot with the canonical slug exists).
+    """
+    global _DEMO_USER_ID_CACHE
+    if _DEMO_USER_ID_CACHE is None:
+        try:
+            from scripts.seed_demo_restaurant import DEMO_USER_EMAIL
+            from app.models import User
+
+            async with async_session() as session:
+                from sqlalchemy import select as _select
+
+                user = (
+                    await session.execute(
+                        _select(User).where(User.email == DEMO_USER_EMAIL)
+                    )
+                ).scalar_one_or_none()
+                _DEMO_USER_ID_CACHE = user.id if user else -1
+        except Exception:
+            _DEMO_USER_ID_CACHE = -1
+    if _DEMO_USER_ID_CACHE > 0 and bot.user_id == _DEMO_USER_ID_CACHE:
+        return True
+    # Fallback path: legacy slug match for environments where the seed
+    # user was removed but the slug-named bot survives.
+    return bot.slug == DEMO_BOT_SLUG
+
 
 # SSE keep-alive cadence. Same number main.py uses for the dashboard
 # stream so Caddy/CloudFront see traffic on the connection.
@@ -567,7 +606,11 @@ async def post_chat_session(
     # per-session text cap independently. Cap covers only session
     # creation; existing sessions continue to chat normally up to
     # their own per-session daily quota.
-    if bot.slug == DEMO_BOT_SLUG:
+    #
+    # Demo identity: the bot owned by the seeded demo user. Tracking by
+    # owner email (not slug) means the cap keeps applying even after
+    # the owner renames the bot or changes its slug from the dashboard.
+    if await _is_demo_bot(bot):
         client_ip = _client_ip(request)
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         demo_key = f"chat:demo_session_day:{client_ip}:{today}"
@@ -577,7 +620,7 @@ async def post_chat_session(
             logger.warning(
                 "demo session cap hit: ip=%s slug=%s cap=%d",
                 client_ip,
-                DEMO_BOT_SLUG,
+                bot.slug,
                 _DEMO_PER_IP_DAILY_SESSION_CAP,
             )
             raise HTTPException(

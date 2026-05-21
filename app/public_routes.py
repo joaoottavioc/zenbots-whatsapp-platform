@@ -33,15 +33,21 @@ from sqlalchemy import select, func
 
 from app import crud
 from app.database import async_session
-from app.models import Contact, ConversationHistory, Product, UsageEvent
+from app.models import Bot, Contact, ConversationHistory, Product, UsageEvent, User
 
 logger = logging.getLogger(__name__)
 
-# Public-trace endpoints are scoped to the seeded demo restaurant only.
-# Importing the slug constant keeps the two pieces in lockstep — a
-# rename of the demo bot would break both at the same time, not
-# silently disable the trace view.
-from app.chat_routes import DEMO_BOT_SLUG
+# The demo bot is the bot owned by the user the seed script creates
+# (demo@zenbotz.com.br). Identifying it by *owner email* instead of
+# slug means a dashboard rename ("Pizzaria do Zé" → "Johns Dog",
+# slug "pizzaria-do-ze" → "johns-hot-dog") keeps the /eval page
+# pointing at the right bot without code changes.
+#
+# The seed slug from scripts/seed_demo_restaurant.py is kept around as
+# a defensive fallback for environments where the seed user got
+# removed but a bot with the canonical slug still exists. Never
+# hardcoded as the primary identifier.
+from scripts.seed_demo_restaurant import DEMO_USER_EMAIL, DEMO_BOT_SLUG
 
 # Cap on how many recent conversations the index shows. Tighter than
 # the dashboard's owner-only limit because this is unauthenticated
@@ -142,6 +148,36 @@ def _short_session(phone: str) -> str:
     return phone
 
 
+async def _resolve_demo_bot(session) -> Bot | None:
+    """Resolve the demo bot regardless of its current slug.
+
+    Lookup strategy:
+      1. The bot owned by the seeded demo user (demo@zenbotz.com.br).
+         This is the source of truth — even after the owner renames
+         the bot or changes its slug, the user_id linkage stays.
+      2. Fallback: bot with the canonical seed slug, for environments
+         where the demo user was deleted but the slug-named bot
+         survives.
+      3. Returns None if neither resolves.
+    """
+    user = (
+        await session.execute(select(User).where(User.email == DEMO_USER_EMAIL))
+    ).scalar_one_or_none()
+    if user:
+        bot = (
+            await session.execute(
+                select(Bot)
+                .where(Bot.user_id == user.id)
+                .order_by(Bot.id.asc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if bot:
+            return bot
+    # Fallback path — preserve old behavior when the demo user is missing.
+    return await crud.get_bot_by_slug(session, DEMO_BOT_SLUG)
+
+
 @router.get(
     "/trace/demo/conversations",
     summary="Recent demo conversations (index)",
@@ -157,7 +193,7 @@ async def list_demo_conversations() -> JSONResponse:
     Returns 404 if the demo bot hasn't been seeded (fresh dev env).
     """
     async with async_session() as session:
-        bot = await crud.get_bot_by_slug(session, DEMO_BOT_SLUG)
+        bot = await _resolve_demo_bot(session)
         if not bot:
             raise HTTPException(
                 status_code=404,
@@ -280,7 +316,7 @@ async def list_demo_conversations() -> JSONResponse:
     return JSONResponse(
         content={
             "bot_id": bot.id,
-            "bot_slug": DEMO_BOT_SLUG,
+            "bot_slug": bot.slug,
             "conversations": conversations,
         },
         headers={"Cache-Control": _DEMO_TRACE_CACHE_CONTROL},
@@ -306,7 +342,7 @@ async def get_demo_conversation_trace(
     harvested via this endpoint).
     """
     async with async_session() as session:
-        bot = await crud.get_bot_by_slug(session, DEMO_BOT_SLUG)
+        bot = await _resolve_demo_bot(session)
         if not bot:
             raise HTTPException(
                 status_code=404,
@@ -342,7 +378,7 @@ async def get_demo_conversation_trace(
     # doesn't need to format it.
     trace["identity"] = _short_session(contact.phone_number)
     trace["channel"] = contact.channel
-    trace["bot_slug"] = DEMO_BOT_SLUG
+    trace["bot_slug"] = bot.slug
 
     return JSONResponse(
         content=trace,
@@ -383,7 +419,7 @@ async def get_demo_menu() -> JSONResponse:
     weirdly for a menu). Only available products are returned.
     """
     async with async_session() as session:
-        bot = await crud.get_bot_by_slug(session, DEMO_BOT_SLUG)
+        bot = await _resolve_demo_bot(session)
         if not bot:
             raise HTTPException(
                 status_code=404,
@@ -431,7 +467,7 @@ async def get_demo_menu() -> JSONResponse:
 
     return JSONResponse(
         content={
-            "bot_slug": DEMO_BOT_SLUG,
+            "bot_slug": bot.slug,
             "restaurant_name": bot.restaurant_name,
             "categories": categories,
             "total_products": len(rows),
@@ -475,7 +511,7 @@ async def get_router_savings() -> JSONResponse:
     from datetime import datetime, timedelta, timezone
 
     async with async_session() as session:
-        bot = await crud.get_bot_by_slug(session, DEMO_BOT_SLUG)
+        bot = await _resolve_demo_bot(session)
         if not bot:
             raise HTTPException(
                 status_code=404,
