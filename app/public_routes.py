@@ -27,10 +27,32 @@ import json
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Path as PathParam
 from fastapi.responses import JSONResponse
+from sqlalchemy import select, func
+
+from app import crud
+from app.database import async_session
+from app.models import Contact, ConversationHistory, UsageEvent
 
 logger = logging.getLogger(__name__)
+
+# Public-trace endpoints are scoped to the seeded demo restaurant only.
+# Importing the slug constant keeps the two pieces in lockstep — a
+# rename of the demo bot would break both at the same time, not
+# silently disable the trace view.
+from app.chat_routes import DEMO_BOT_SLUG
+
+# Cap on how many recent conversations the index shows. Tighter than
+# the dashboard's owner-only limit because this is unauthenticated
+# traffic — recruiters skim 5-10 conversations, not 100.
+_DEMO_INDEX_LIMIT = 10
+_DEMO_TRACE_MESSAGE_LIMIT = 60
+
+# Short-but-non-trivial cache: data changes when new conversations
+# happen on the demo, which is sporadic. 60s keeps the page fresh
+# without hammering the DB on every render.
+_DEMO_TRACE_CACHE_CONTROL = "public, max-age=60, s-maxage=60"
 
 router = APIRouter(prefix="/public", tags=["Public"])
 
@@ -90,4 +112,239 @@ async def get_eval_latest() -> JSONResponse:
     return JSONResponse(
         content=data,
         headers={"Cache-Control": _CACHE_CONTROL},
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Public conversation-trace surface — DEMO BOT ONLY
+#
+# P4-public of plan/portfolio_pivot.md. Mirrors the owner-only
+# /bots/{bot_id}/conversations/{contact_id}/trace endpoint, but scoped
+# rigidly to the seeded demo bot so a recruiter doesn't need to sign
+# up to see the per-message AI telemetry. The endpoints below verify
+# the contact_id belongs to the demo bot before returning anything
+# — pasting a different bot's contact_id returns 404, not data.
+#
+# Privacy posture: conversations on the demo bot are public-by-design
+# (the widget at /widget?slug=pizzaria-do-ze accepts anyone), so
+# rendering them publicly does not leak anything that wasn't already
+# observable to whoever sent the messages.
+# ─────────────────────────────────────────────────────────────────────
+
+
+def _short_session(phone: str) -> str:
+    """Render a web identity for the UI without showing the full
+    session_id. Web contacts have phone_number = 'web:{uuid}'; we keep
+    the first 6 chars of the uuid as a stable but anonymized handle."""
+    if phone.startswith("web:"):
+        sid = phone[4:]
+        return f"web:{sid[:6]}" if len(sid) > 6 else phone
+    return phone
+
+
+@router.get(
+    "/trace/demo/conversations",
+    summary="Recent demo conversations (index)",
+)
+async def list_demo_conversations() -> JSONResponse:
+    """List the most recent conversations on the demo bot.
+
+    Each item carries enough to render a clickable card on /trace
+    (preview of first message, message count, total cost, total
+    duration). The detail endpoint below renders the full trace for
+    one conversation.
+
+    Returns 404 if the demo bot hasn't been seeded (fresh dev env).
+    """
+    async with async_session() as session:
+        bot = await crud.get_bot_by_slug(session, DEMO_BOT_SLUG)
+        if not bot:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": "demo_bot_unavailable",
+                    "message": (
+                        "O bot demo ainda não foi semeado neste ambiente. "
+                        "Execute scripts/seed_demo_restaurant.py."
+                    ),
+                },
+            )
+
+        # Pull recent contacts that actually have history (otherwise
+        # empty contacts created by a chat that never sent a message
+        # clutter the list).
+        contacts_q = (
+            select(
+                Contact.id,
+                Contact.phone_number,
+                Contact.channel,
+                func.count(ConversationHistory.id).label("msg_count"),
+                func.min(ConversationHistory.created_at).label("started_at"),
+                func.max(ConversationHistory.created_at).label("last_at"),
+            )
+            .join(ConversationHistory, ConversationHistory.contact_id == Contact.id)
+            .where(Contact.bot_id == bot.id)
+            .group_by(Contact.id, Contact.phone_number, Contact.channel)
+            .order_by(func.max(ConversationHistory.created_at).desc())
+            .limit(_DEMO_INDEX_LIMIT)
+        )
+        contact_rows = (await session.execute(contacts_q)).all()
+
+        if not contact_rows:
+            return JSONResponse(
+                content={"bot_id": bot.id, "conversations": []},
+                headers={"Cache-Control": _DEMO_TRACE_CACHE_CONTROL},
+            )
+
+        contact_ids = [r.id for r in contact_rows]
+
+        # Sum cost + duration per contact via the events' trace_ids.
+        # Two-step lookup: history rows → distinct trace_ids → events.
+        history_q = select(
+            ConversationHistory.contact_id, ConversationHistory.trace_id
+        ).where(
+            ConversationHistory.contact_id.in_(contact_ids),
+            ConversationHistory.trace_id.isnot(None),
+        )
+        traces_by_contact: dict[int, set[str]] = {}
+        for row in (await session.execute(history_q)).all():
+            traces_by_contact.setdefault(row.contact_id, set()).add(row.trace_id)
+
+        # First user message preview per contact — gives a clickable
+        # "what was this conversation about" label.
+        preview_q = (
+            select(ConversationHistory.contact_id, ConversationHistory.content)
+            .where(
+                ConversationHistory.contact_id.in_(contact_ids),
+                ConversationHistory.role == "user",
+            )
+            .order_by(
+                ConversationHistory.contact_id,
+                ConversationHistory.created_at.asc(),
+            )
+        )
+        preview_by_contact: dict[int, str] = {}
+        for row in (await session.execute(preview_q)).all():
+            if row.contact_id not in preview_by_contact:
+                preview_by_contact[row.contact_id] = row.content
+
+        # Aggregate cost + duration per contact.
+        all_trace_ids = {
+            tid for trace_set in traces_by_contact.values() for tid in trace_set
+        }
+        stats_by_contact: dict[int, dict] = {
+            cid: {"cost": 0.0, "ms": 0, "tokens": 0} for cid in contact_ids
+        }
+        if all_trace_ids:
+            events_q = select(
+                UsageEvent.trace_id,
+                UsageEvent.cost_usd,
+                UsageEvent.duration_ms,
+                UsageEvent.input_tokens,
+                UsageEvent.output_tokens,
+            ).where(UsageEvent.bot_id == bot.id, UsageEvent.trace_id.in_(all_trace_ids))
+            trace_to_contact: dict[str, int] = {}
+            for cid, trace_set in traces_by_contact.items():
+                for tid in trace_set:
+                    trace_to_contact[tid] = cid
+            for ev in (await session.execute(events_q)).all():
+                cid = trace_to_contact.get(ev.trace_id)
+                if cid is None:
+                    continue
+                stats_by_contact[cid]["cost"] += ev.cost_usd
+                stats_by_contact[cid]["ms"] += ev.duration_ms
+                stats_by_contact[cid]["tokens"] += ev.input_tokens + ev.output_tokens
+
+        conversations = []
+        for row in contact_rows:
+            stats = stats_by_contact[row.id]
+            conversations.append(
+                {
+                    "contact_id": row.id,
+                    "identity": _short_session(row.phone_number),
+                    "channel": row.channel,
+                    "message_count": row.msg_count,
+                    "preview": preview_by_contact.get(row.id, "")[:120],
+                    "started_at": row.started_at.isoformat()
+                    if row.started_at
+                    else None,
+                    "last_at": row.last_at.isoformat() if row.last_at else None,
+                    "totals": {
+                        "cost_usd": round(stats["cost"], 6),
+                        "duration_ms": stats["ms"],
+                        "tokens": stats["tokens"],
+                    },
+                }
+            )
+
+    return JSONResponse(
+        content={
+            "bot_id": bot.id,
+            "bot_slug": DEMO_BOT_SLUG,
+            "conversations": conversations,
+        },
+        headers={"Cache-Control": _DEMO_TRACE_CACHE_CONTROL},
+    )
+
+
+@router.get(
+    "/trace/demo/conversations/{contact_id}",
+    summary="Full trace for one demo conversation",
+)
+async def get_demo_conversation_trace(
+    contact_id: int = PathParam(..., ge=1),
+) -> JSONResponse:
+    """Per-message AI telemetry for a single demo conversation.
+
+    Re-uses crud.get_conversation_trace under the hood; the only
+    difference from the owner-only endpoint is the security model.
+    Here we verify the contact belongs to the demo bot before doing
+    anything else — pasting another bot's contact_id returns 404.
+
+    Web identities are anonymized in the response (phone_number is
+    shortened to 'web:{first 6 chars}' so a session_id can't be
+    harvested via this endpoint).
+    """
+    async with async_session() as session:
+        bot = await crud.get_bot_by_slug(session, DEMO_BOT_SLUG)
+        if not bot:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "demo_bot_unavailable"},
+            )
+
+        contact = (
+            await session.execute(
+                select(Contact).where(
+                    Contact.id == contact_id, Contact.bot_id == bot.id
+                )
+            )
+        ).scalar_one_or_none()
+        if not contact:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": "conversation_not_found",
+                    "message": (
+                        "Esta conversa não existe ou não pertence ao bot demo."
+                    ),
+                },
+            )
+
+        trace = await crud.get_conversation_trace(
+            session,
+            bot_id=bot.id,
+            contact_id=contact_id,
+            limit_messages=_DEMO_TRACE_MESSAGE_LIMIT,
+        )
+
+    # Tag the public view with a non-PII identity label so the frontend
+    # doesn't need to format it.
+    trace["identity"] = _short_session(contact.phone_number)
+    trace["channel"] = contact.channel
+    trace["bot_slug"] = DEMO_BOT_SLUG
+
+    return JSONResponse(
+        content=trace,
+        headers={"Cache-Control": _DEMO_TRACE_CACHE_CONTROL},
     )
