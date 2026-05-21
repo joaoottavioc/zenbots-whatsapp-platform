@@ -610,7 +610,12 @@ async def post_chat_session(
     # Demo identity: the bot owned by the seeded demo user. Tracking by
     # owner email (not slug) means the cap keeps applying even after
     # the owner renames the bot or changes its slug from the dashboard.
-    if await _is_demo_bot(bot):
+    #
+    # Skipped in non-production environments. The cap is there to
+    # protect public traffic from runaway costs; in local dev it just
+    # blocks the developer from iterating after 5 reloads.
+    _env = os.getenv("ENVIRONMENT", "development").lower()
+    if "prod" in _env and await _is_demo_bot(bot):
         client_ip = _client_ip(request)
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         demo_key = f"chat:demo_session_day:{client_ip}:{today}"
