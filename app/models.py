@@ -254,6 +254,14 @@ class ConversationHistory(SQLModel, table=True):
     contact_id: int = Field(foreign_key="contact.id")
     contact: "Contact" = Relationship(back_populates="history")
 
+    # P4 of plan/portfolio_pivot.md — same 12-char trace_id that's
+    # propagated through logs and usage_events.trace_id. Lets the
+    # behind-the-scenes viewer join this row's user message with the
+    # UsageEvent rows produced by processing it (one trace = one
+    # inbound user message, one outbound bot reply). Nullable so
+    # rows written before P4 land remain readable.
+    trace_id: Optional[str] = Field(default=None, max_length=32, index=True)
+
 
 class ProcessedMessage(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

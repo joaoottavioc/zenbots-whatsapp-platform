@@ -300,6 +300,144 @@ async def get_history_for_contact(
     return result.scalars().all()[::-1]
 
 
+async def get_conversation_trace(
+    session: AsyncSession,
+    bot_id: int,
+    contact_id: int,
+    limit_messages: int = 40,
+) -> dict:
+    """Build the behind-the-scenes trace payload for a (bot, contact) pair.
+
+    P4 of plan/portfolio_pivot.md. Joins ConversationHistory ↔ UsageEvent
+    on `trace_id` so the frontend can render each message with the
+    intent + tools + tokens + cost + latency that produced it.
+
+    Returns:
+        {
+          "contact_id": int,
+          "messages": [
+            {
+              "role": "user" | "assistant",
+              "content": str,
+              "created_at": iso,
+              "trace_id": str | None,
+              "trace": {
+                "tokens": {"input": int, "output": int, "cached": int},
+                "cost_usd": float,
+                "duration_ms": int,
+                "operations": [
+                  {"service": "openai", "operation": "get_ai_decision",
+                   "model": "gpt-4o-mini", "tokens": ..., "cost_usd": ...,
+                   "duration_ms": ..., "success": bool}
+                ]
+              }
+            },
+            ...
+          ]
+        }
+
+    Old messages without a trace_id render with `trace = None`, signalling
+    "no per-message data — this conversation predates the instrumentation".
+    """
+    from app.models import UsageEvent
+
+    history_query = (
+        select(ConversationHistory)
+        .where(
+            ConversationHistory.bot_id == bot_id,
+            ConversationHistory.contact_id == contact_id,
+        )
+        .order_by(ConversationHistory.created_at.desc())
+        .limit(limit_messages)
+    )
+    rows = (await session.execute(history_query)).scalars().all()
+    # Render oldest-first (matches dashboard expectation).
+    rows = rows[::-1]
+
+    trace_ids = sorted({r.trace_id for r in rows if r.trace_id})
+    events_by_trace: dict[str, list] = {}
+    if trace_ids:
+        events_query = (
+            select(UsageEvent)
+            .where(
+                UsageEvent.bot_id == bot_id,
+                UsageEvent.trace_id.in_(trace_ids),
+            )
+            .order_by(UsageEvent.created_at.asc())
+        )
+        for ev in (await session.execute(events_query)).scalars().all():
+            events_by_trace.setdefault(ev.trace_id, []).append(ev)
+
+    def _aggregate(events) -> dict:
+        """Roll events into the per-message summary shape."""
+        input_t = sum(e.input_tokens for e in events)
+        output_t = sum(e.output_tokens for e in events)
+        cached_t = sum(e.cached_tokens for e in events)
+        cost = sum(e.cost_usd for e in events)
+        # Latency is *parallel-aware-ish*: events can overlap but the
+        # honest metric for "how long did this message take" is the sum
+        # for sequential LLM/tool calls. Anything fancier (overlap-aware
+        # interval merging) is overkill for v1.
+        duration = sum(e.duration_ms for e in events)
+        return {
+            "tokens": {"input": input_t, "output": output_t, "cached": cached_t},
+            "cost_usd": round(cost, 6),
+            "duration_ms": duration,
+            "operations": [
+                {
+                    "service": e.service,
+                    "operation": e.operation,
+                    "model": e.model,
+                    "tokens": {
+                        "input": e.input_tokens,
+                        "output": e.output_tokens,
+                        "cached": e.cached_tokens,
+                    },
+                    "cost_usd": round(e.cost_usd, 6),
+                    "duration_ms": e.duration_ms,
+                    "success": e.success,
+                    "channel": e.channel,
+                }
+                for e in events
+            ],
+        }
+
+    # Trace data belongs on the USER message (it represents the work to
+    # process that message). The assistant reply that shares the same
+    # trace_id gets no trace block — it's the *output* of the work, not
+    # an independent unit of work.
+    messages = []
+    seen_trace_for_user: set[str] = set()
+    for row in rows:
+        message = {
+            "id": row.id,
+            "role": row.role,
+            "content": row.content,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "trace_id": row.trace_id,
+            "trace": None,
+        }
+        if (
+            row.role == "user"
+            and row.trace_id
+            and row.trace_id not in seen_trace_for_user
+        ):
+            seen_trace_for_user.add(row.trace_id)
+            events = events_by_trace.get(row.trace_id, [])
+            if events:
+                message["trace"] = _aggregate(events)
+        messages.append(message)
+
+    # Convenience totals so the frontend doesn't need to sum again.
+    totals_events = [ev for lst in events_by_trace.values() for ev in lst]
+    return {
+        "bot_id": bot_id,
+        "contact_id": contact_id,
+        "messages": messages,
+        "totals": _aggregate(totals_events) if totals_events else None,
+    }
+
+
 async def add_interaction_to_history(
     session: AsyncSession,
     bot_id: int,
@@ -307,16 +445,33 @@ async def add_interaction_to_history(
     user_content: str,
     assistant_content: str,
 ):
-    """Salva a interação completa, ligando-a ao objeto Contact correto."""
+    """Salva a interação completa, ligando-a ao objeto Contact correto.
+
+    Both rows (user + assistant) inherit the current trace_id from the
+    request-scoped ContextVar so the behind-the-scenes viewer can join
+    them with the UsageEvent rows produced while processing this
+    message. The ContextVar is set at the top of
+    process_whatsapp_message / process_chat_message (one trace per
+    inbound message); reading it here is implicit instrumentation —
+    callers don't need to pass it through.
+    """
+    from app.context import trace_id_var
+
+    trace_id = trace_id_var.get() or None
     contact = await get_or_create_contact(session, bot_id, contact_number)
     user_entry = ConversationHistory(
-        bot_id=bot_id, contact_id=contact.id, role="user", content=user_content
+        bot_id=bot_id,
+        contact_id=contact.id,
+        role="user",
+        content=user_content,
+        trace_id=trace_id,
     )
     assistant_entry = ConversationHistory(
         bot_id=bot_id,
         contact_id=contact.id,
         role="assistant",
         content=assistant_content,
+        trace_id=trace_id,
     )
     session.add_all([user_entry, assistant_entry])
     await session.flush()

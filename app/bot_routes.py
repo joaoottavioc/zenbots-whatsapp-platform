@@ -998,6 +998,58 @@ async def update_order_status(
     return order_dict
 
 
+@router.get("/bots/{bot_id}/conversations/{contact_id}/trace")
+async def get_conversation_trace_route(
+    bot_id: int,
+    contact_id: int,
+    limit_messages: int = Query(40, ge=1, le=200),
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Behind-the-scenes view of a conversation — P4 of
+    plan/portfolio_pivot.md.
+
+    Joins ConversationHistory ↔ UsageEvent on the shared trace_id so the
+    dashboard can render per-message intent + tools + tokens + cost +
+    latency. Owner-only: ownership of `bot_id` is enforced; the contact
+    is verified to belong to the same bot to prevent cross-bot leakage
+    via a guessed contact_id.
+
+    Rows written before P4 land (no trace_id) render with `trace: null`
+    on the frontend — they're still visible as content, just without
+    the metric overlay.
+    """
+    db_bot = await crud.get_bot_by_id(session, bot_id=bot_id)
+    if not db_bot or db_bot.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Acesso negado.")
+
+    # Verify the contact belongs to this bot. Cheap query (Contact PK
+    # lookup + bot_id compare) — important because contact_id is a
+    # global PK across all bots, and we don't want
+    # /bots/{my_bot}/conversations/{their_contact_id}/trace to leak.
+    from sqlalchemy import select
+
+    from app.models import Contact
+
+    contact_row = (
+        await session.execute(
+            select(Contact).where(Contact.id == contact_id, Contact.bot_id == bot_id)
+        )
+    ).scalar_one_or_none()
+    if not contact_row:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "contact_not_found",
+                "message": "Contato não encontrado para este bot.",
+            },
+        )
+
+    return await crud.get_conversation_trace(
+        session, bot_id=bot_id, contact_id=contact_id, limit_messages=limit_messages
+    )
+
+
 @router.get("/bots/{bot_id}/analytics/best-sellers")
 async def get_best_sellers(
     bot_id: int,
