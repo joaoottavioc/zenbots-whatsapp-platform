@@ -2098,7 +2098,66 @@ async def _handle_shopping_intent(
                                 response_to_user += (
                                     f"\n\n⚠️ Indisponível no momento: {names}"
                                 )
-                            # Check unmatched items against unavailable products
+                            # Try the 4-layer search (name ILIKE → keywords →
+                            # description → vector embedding) on items the
+                            # word-overlap matcher above couldn't place. This
+                            # catches Brazilian Portuguese slang / diminutives
+                            # ("coquinha" for "Coca-Cola", "cervejinha" for
+                            # "Heineken") that lack any shared name word but
+                            # do have vector-level semantic proximity to a
+                            # real product. Without this fallback, multi-item
+                            # orders like "coquinha gelada e dog simples"
+                            # silently dropped the unmatched piece because
+                            # the function returned as soon as ANY item
+                            # matched programmatically.
+                            if _prog_unmatched:
+                                _extra_prods = await crud.find_relevant_products(
+                                    session, bot.id, _prog_unmatched
+                                )
+                                _already_added_ids = {
+                                    p.id for p, _, _ in _prog_selections
+                                }
+                                _extra_to_add = [
+                                    p
+                                    for p in _extra_prods
+                                    if p.id not in _already_added_ids
+                                ]
+                                if _extra_to_add:
+                                    _extra_items = [
+                                        {
+                                            "product_id": p.id,
+                                            "quantity": 1,
+                                            "product_name": p.name,
+                                        }
+                                        for p in _extra_to_add
+                                    ]
+                                    _extra_skipped: list[str] = []
+                                    await crud.add_items_to_db_cart(
+                                        session,
+                                        cart.id,
+                                        _extra_items,
+                                        bot_id=bot.id,
+                                        skipped_items=_extra_skipped,
+                                    )
+                                    await _load_cart_items_with_products(cart, session)
+                                    # Rebuild summary including the new items.
+                                    response_to_user = (
+                                        _build_cart_summary_message(cart, bot, "✅")
+                                        + "\n\nAdicionado! Mais alguma coisa ou *só isso* para finalizar? 😊"
+                                    )
+                                    if skipped:
+                                        names = ", ".join(skipped)
+                                        response_to_user += (
+                                            f"\n\n⚠️ Indisponível no momento: {names}"
+                                        )
+                                    # Conservatively assume the fallback search
+                                    # covered _prog_unmatched. If it didn't,
+                                    # the user can re-ask — we'd rather skip
+                                    # "em falta" than falsely claim items the
+                                    # search just placed are unavailable.
+                                    _prog_unmatched = []
+                            # Check anything still unmatched against
+                            # unavailable products (em falta diagnostic).
                             if _prog_unmatched:
                                 _unavail_hits = await crud.find_unavailable_products(
                                     session, bot.id, _prog_unmatched
@@ -3131,16 +3190,36 @@ async def _handle_suggestion_selection(mctx: MessageContext) -> str | None:
         selections: list[tuple] = []
         seen_ids: set[int] = set()
         unmatched_names: list[str] = []
+        # qty=1 unmatched names are kept aside instead of being dropped
+        # outright. They get promoted into unmatched_names below if at
+        # least one item in the message matched a suggestion (signals a
+        # real multi-item order like "uma cervejinha e um dog simples" —
+        # the cervejinha used to be silently lost). When nothing matched
+        # at all, they're treated as noise and the function falls through
+        # to the legacy path / normal flow, same as before.
+        deferred_low_qty: list[str] = []
 
         for qty, item_name in qty_pairs:
             matched = _match_name_to_suggestion(item_name, exclude_ids=seen_ids)
             if matched:
                 selections.append((matched, qty))
                 seen_ids.add(matched.id)
-            elif qty > 1 and item_name.strip() and len(item_name.strip()) >= 3:
-                # Only route to shopping flow if there was an explicit quantity.
-                # Default qty=1 pairs (e.g. (1, "veja")) are noise.
-                unmatched_names.append(item_name.strip())
+            elif item_name.strip() and len(item_name.strip()) >= 3:
+                if qty > 1:
+                    # Explicit qty (e.g., "dois X") — always route to shopping flow.
+                    unmatched_names.append(item_name.strip())
+                else:
+                    # Default qty=1 — could be noise like "veja", or a real
+                    # item like "cervejinha". Decide based on whether other
+                    # items in the same message matched (see post-loop below).
+                    deferred_low_qty.append(item_name.strip())
+
+        # Promote deferred qty=1 unmatched names when the message clearly
+        # contains valid items (at least one selection). Without this, multi-
+        # item orders where some pieces don't fit the current suggestion list
+        # would silently lose those pieces.
+        if selections and deferred_low_qty:
+            unmatched_names.extend(deferred_low_qty)
 
         if selections:
             items_to_add = [

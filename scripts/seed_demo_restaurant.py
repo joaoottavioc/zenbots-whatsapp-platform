@@ -152,14 +152,18 @@ DEMO_PRODUCTS: list[dict] = [
         "price": 7.00,
         "category": "Bebidas",
         "description": "Refrigerante Coca-Cola lata 350ml gelada.",
-        "keywords": "coca, refrigerante, lata",
+        # "coquinha" is the BR-PT diminutive customers use most often;
+        # listing it here closes the slang gap that fuzzy/vector lookup
+        # can't reliably bridge for diminutives. "Coca gelada" / "coca
+        # zero" cover the common qualifier variants.
+        "keywords": "coca, coquinha, coca gelada, coca zero, refrigerante, lata",
     },
     {
         "name": "Coca-Cola 2L",
         "price": 14.00,
         "category": "Bebidas",
         "description": "Refrigerante Coca-Cola garrafa 2 litros.",
-        "keywords": "coca, refrigerante, garrafa",
+        "keywords": "coca, coquinha, coca grande, refrigerante, garrafa",
     },
     {
         "name": "Guaraná Antarctica 2L",
