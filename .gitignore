@@ -37,6 +37,13 @@ htmlcov/
 # Documentation (generated/internal, not tracked).
 docs/
 
+# Internal planning + tech-debt backlogs (kept local, not pushed to the
+# public portfolio repo — they enumerate ongoing work, fixed CVEs, and
+# strategic decisions that don't belong in a public history).
+plan/
+tech_debt/
+test_track/
+
 # Terraform
 **/.terraform/
 *.tfstate
