@@ -1,6 +1,7 @@
 # app/payment_service.py
 import logging
 import os
+import re
 import mercadopago
 import httpx
 from typing import Dict, Any, Optional
@@ -157,13 +158,24 @@ async def create_pix_payment(
     if not base_url:
         logger.warning("BASE_URL not configured, payment webhook may fail")
 
+    # MP requires a syntactically valid payer email even though it is
+    # fictitious. Web widget contacts arrive with a synthesized identity
+    # like "web:{uuid}" (and phone numbers may carry "+"/spaces), which
+    # produce an invalid local-part and a 400 "payer.email must be a valid
+    # email". Keep only email-safe chars and fall back to the order id so
+    # the address is always valid regardless of the channel.
+    safe_local = re.sub(r"[^a-zA-Z0-9._-]", "", contact_phone or "").strip("._-")
+    if not safe_local:
+        safe_local = f"order-{order_id}"
+    payer_email = f"{safe_local}@zenbotz.com.br"
+
     payment_data = {
         "transaction_amount": round(total_amount, 2),
         "description": f"Pedido #{order_id} - {bot_name}",
         "payment_method_id": "pix",
         "date_of_expiration": expiration_date_iso,
         "payer": {
-            "email": f"{contact_phone}@zenbotz.com.br",  # Email fictício para o pagador (MP exige email)
+            "email": payer_email,  # Email fictício para o pagador (MP exige email)
         },
         "external_reference": str(order_id),
         # O Webhook precisa ser notificado na sua URL global
