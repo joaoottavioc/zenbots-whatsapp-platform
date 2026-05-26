@@ -202,6 +202,21 @@ async def create_pix_payment(
                     result.get("status"),
                 )
                 return None
+        else:
+            # Non-2xx from MP (400/401/403/...). The response body carries the
+            # actual reason (e.g. collector has no PIX key, invalid amount).
+            # Without this branch the failure returned None silently, leaving
+            # the customer stuck on "Problema ao gerar o PIX" with no log to
+            # explain why.
+            resp_body = result.get("response", {})
+            logger.error(
+                "MP payment rejected for order_id=%s status=%s message=%s cause=%s",
+                order_id,
+                result.get("status"),
+                resp_body.get("message"),
+                resp_body.get("cause"),
+            )
+            return None
 
     except Exception:
         logger.exception("Critical error calling MP API for order_id=%s", order_id)
