@@ -33,7 +33,7 @@ import uuid
 from datetime import datetime, timezone
 
 import redis.asyncio as redis
-from arq.connections import ArqRedis
+from app.arq_pool import get_arq_pool
 from fastapi import (
     APIRouter,
     File,
@@ -314,7 +314,7 @@ async def post_chat_message(
                 accepted=True, message_id=payload.message_id
             )
 
-    redis_queue: ArqRedis = request.app.state.arq_redis
+    redis_queue = await get_arq_pool(request.app)
     await redis_queue.enqueue_job(
         "process_chat_message",
         bot_id,
@@ -465,7 +465,7 @@ async def post_chat_audio(
 
     # Enqueue exactly like a typed message — the ARQ task can't tell the
     # difference from this point onward.
-    redis_queue: ArqRedis = request.app.state.arq_redis
+    redis_queue = await get_arq_pool(request.app)
     await redis_queue.enqueue_job(
         "process_chat_message",
         bot_id,

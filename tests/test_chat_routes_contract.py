@@ -124,32 +124,42 @@ def test_post_message_dev_allows_empty_allowlist(client):
     fake_redis = MagicMock()
     fake_redis.enqueue_job = AsyncMock()
 
-    with (
-        patch("app.chat_routes.crud.get_bot_by_id", new=AsyncMock(return_value=bot)),
-        # Defensive: pin both pieces of env state this test depends on.
-        # ENVIRONMENT controls the CORS dev-convenience escape hatch;
-        # is_channel_enabled is patched directly because the kill-switch
-        # tests at the end of this file flip WEB_CHANNEL_ENABLED in env,
-        # and some pytest collection orderings leak that state here.
-        patch.dict(os.environ, {"ENVIRONMENT": "development"}, clear=False),
-        patch("app.chat_routes.is_channel_enabled", return_value=True),
-        # Mock the rate limit + plan tier lookup so the request goes all
-        # the way through. CI test DB has no "subscription" table.
-        patch(
-            "app.chat_routes.is_rate_limited",
-            new=AsyncMock(return_value=False),
-        ),
-        patch(
-            "app.chat_routes.crud.get_subscription_by_bot",
-            new=AsyncMock(return_value=None),
-        ),
-    ):
-        response = client.post(
-            "/chat/1/message",
-            json={"session_id": "s", "message_id": "m1", "text": "hi"},
-            headers={"Origin": "https://random-site.com"},
-        )
-    # 202 OR 429 OR 500 — but NOT 403.
+    # Pin a fake ARQ pool so the enqueue path doesn't attempt a real Redis
+    # connection (get_arq_pool lazily creates one when app.state.arq_redis is
+    # None, which it is in the test app whose lifespan can't reach Redis).
+    original_redis = client.app.state.arq_redis
+    client.app.state.arq_redis = fake_redis
+    try:
+        with (
+            patch(
+                "app.chat_routes.crud.get_bot_by_id", new=AsyncMock(return_value=bot)
+            ),
+            # Defensive: pin both pieces of env state this test depends on.
+            # ENVIRONMENT controls the CORS dev-convenience escape hatch;
+            # is_channel_enabled is patched directly because the kill-switch
+            # tests at the end of this file flip WEB_CHANNEL_ENABLED in env,
+            # and some pytest collection orderings leak that state here.
+            patch.dict(os.environ, {"ENVIRONMENT": "development"}, clear=False),
+            patch("app.chat_routes.is_channel_enabled", return_value=True),
+            # Mock the rate limit + plan tier lookup so the request goes all
+            # the way through. CI test DB has no "subscription" table.
+            patch(
+                "app.chat_routes.is_rate_limited",
+                new=AsyncMock(return_value=False),
+            ),
+            patch(
+                "app.chat_routes.crud.get_subscription_by_bot",
+                new=AsyncMock(return_value=None),
+            ),
+        ):
+            response = client.post(
+                "/chat/1/message",
+                json={"session_id": "s", "message_id": "m1", "text": "hi"},
+                headers={"Origin": "https://random-site.com"},
+            )
+    finally:
+        client.app.state.arq_redis = original_redis
+    # 202 OR 429 — but NOT 403.
     assert response.status_code != 403, (
         f"Empty allowlist in dev shouldn't 403, got {response.status_code} {response.text}"
     )

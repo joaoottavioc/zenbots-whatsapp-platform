@@ -10,8 +10,7 @@ from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from dotenv import load_dotenv
-from arq import create_pool
-from arq.connections import RedisSettings
+from app.arq_pool import create_arq_pool
 from app.payment_routes import router as payment_router
 from app import utils
 
@@ -80,12 +79,15 @@ async def lifespan(app: FastAPI):
     # 1. Cria o pool de conexão com o Redis da Fila (ARQ)
     logger.info("Conectando ao Redis Queue...")
     try:
-        app.state.arq_redis = await create_pool(
-            RedisSettings(host=REDIS_HOST, port=REDIS_PORT, database=REDIS_DATABASE)
-        )
+        app.state.arq_redis = await create_arq_pool()
         logger.info("Conexao com Redis Queue estabelecida.")
     except Exception as e:
-        logger.error("Falha ao conectar no Redis: %s", e)
+        # Don't crash the boot — but app.state.arq_redis stays unset. The
+        # enqueue sites use get_arq_pool(), which lazily (re)creates the pool
+        # on the first request once Redis is reachable, so the app self-heals
+        # if the backend happened to boot during a brief Redis outage.
+        app.state.arq_redis = None
+        logger.error("Falha ao conectar no Redis: %s (lazy retry on first job)", e)
 
     # 3. Pre-warm embedding model in background thread (avoids blocking
     #    health checks on first request)
@@ -104,7 +106,7 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down — draining connections")
     await stop_flush_task()
     logger.info("Fechando conexao com Redis Queue...")
-    if hasattr(app.state, "arq_redis"):
+    if getattr(app.state, "arq_redis", None) is not None:
         await app.state.arq_redis.close()
     await engine.dispose()
     logger.info("Aplicacao encerrada.")

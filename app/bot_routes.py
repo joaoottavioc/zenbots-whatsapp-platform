@@ -16,7 +16,7 @@ from fastapi import UploadFile, File
 
 import os
 import httpx
-from arq import ArqRedis
+from app.arq_pool import get_arq_pool
 import asyncio
 from app.menu_storage import upload_bytes_to_s3
 from app.menu_extraction import (
@@ -604,7 +604,7 @@ async def upload_catalog_from_file_endpoint(
             import base64 as _b64
 
             pdf_file, pdf_contents = file_entries[0][0], file_entries[0][1]
-            redis_queue: ArqRedis = request.app.state.arq_redis
+            redis_queue = await get_arq_pool(request.app)
             await redis_queue.enqueue_job(
                 "process_menu_extraction",
                 bot_id,
@@ -1699,8 +1699,9 @@ async def receive_whatsapp_message(request: Request):
 
                 # Se tiver mensagens ou status, enviamos para a fila
                 if "messages" in value or "statuses" in value:
-                    # 1. Recupera o pool do Redis que foi criado no main.py
-                    redis_queue: ArqRedis = request.app.state.arq_redis
+                    # 1. Recupera o pool do Redis (lazy: recriado sob demanda
+                    #    se o startup ocorreu durante uma queda do Redis)
+                    redis_queue = await get_arq_pool(request.app)
 
                     # 2. Enfileira o job 'process_whatsapp_message'
                     # O Worker vai pegar isso aqui e rodar a IA
