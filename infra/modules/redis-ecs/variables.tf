@@ -39,6 +39,18 @@ variable "capacity_providers" {
   default = ["FARGATE"]
 }
 
+# Pin the on-demand FARGATE provider's base so Redis always keeps at least
+# this many task(s) off Spot. Redis is the single dependency the backend's
+# rate limiter and the ARQ queue both rely on; when it was Spot-only a
+# capacity shortage during a reclaim took it to 0 (observed 2026-06-08, ~17
+# min outage). With Redis unresolvable the rate limiter fails closed, so the
+# web widget shows every customer "you're sending too fast". base=1 pins the
+# Redis task to on-demand FARGATE; other providers (FARGATE_SPOT) stay base 0.
+variable "fargate_base" {
+  type    = number
+  default = 0
+}
+
 variable "execution_role_arn" {
   description = "ECS task execution role ARN (for pulling images and logging)"
   type        = string

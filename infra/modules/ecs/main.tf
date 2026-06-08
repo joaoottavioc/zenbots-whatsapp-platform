@@ -255,7 +255,10 @@ resource "aws_ecs_service" "backend" {
     content {
       capacity_provider = capacity_provider_strategy.value
       weight            = capacity_provider_strategy.key == 0 ? 4 : 1
-      base              = 0
+      # Pin the on-demand FARGATE provider's base so the backend always keeps
+      # at least var.backend_fargate_base task(s) off Spot. Other providers
+      # (FARGATE_SPOT) stay at base 0 and absorb scale-out via weight.
+      base = capacity_provider_strategy.value == "FARGATE" ? var.backend_fargate_base : 0
     }
   }
 
@@ -315,7 +318,11 @@ resource "aws_ecs_service" "worker" {
     content {
       capacity_provider = capacity_provider_strategy.value
       weight            = capacity_provider_strategy.key == 0 ? 4 : 1
-      base              = 0
+      # Pin the on-demand FARGATE provider's base so the worker always keeps
+      # at least var.worker_fargate_base task(s) off Spot — otherwise a Spot
+      # interruption during an ARM64 capacity shortage drops it to 0 running
+      # and enqueued jobs (widget replies, WhatsApp msgs) never get processed.
+      base = capacity_provider_strategy.value == "FARGATE" ? var.worker_fargate_base : 0
     }
   }
 

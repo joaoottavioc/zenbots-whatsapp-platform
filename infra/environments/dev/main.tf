@@ -62,6 +62,11 @@ module "redis_ecs" {
 
   cluster_name       = module.ecs.cluster_name
   capacity_providers = ["FARGATE_SPOT", "FARGATE"]
+  # Pin Redis to on-demand FARGATE (base 1) so a Spot reclaim + capacity
+  # shortage can't take it to 0 — that takes the rate limiter (fail-closed)
+  # and ARQ queue down with it, surfacing as a bogus "muitas mensagens" error
+  # in the web widget. ~+$1.4/mo over Spot at the dev schedule (~220 hrs/mo).
+  fargate_base       = 1
   execution_role_arn = module.ecs.execution_role_arn
   cpu_architecture   = "ARM64"
 
@@ -167,9 +172,17 @@ module "ecs" {
   service_discovery_arn = aws_service_discovery_service.backend.arn
 
   capacity_providers = ["FARGATE_SPOT", "FARGATE"]
-  container_insights = false
-  cpu_architecture   = "ARM64"
-  use_ssm_parameters = true
+  # Keep the backend's and worker's single tasks on guaranteed on-demand
+  # FARGATE so a Spot interruption + Spot capacity shortage can't take the API
+  # or the ARQ job consumer to 0 running. (Observed 2026-06-01: worker flapped
+  # on ARM64 us-east-1 Spot reclaim, queue backed up, the web widget went dead
+  # because enqueued replies were never processed.) Redis stays Spot-preferred
+  # (base 0) to hold dev costs down.
+  backend_fargate_base = 1
+  worker_fargate_base  = 1
+  container_insights   = false
+  cpu_architecture     = "ARM64"
+  use_ssm_parameters   = true
 
   # Backend
   backend_image         = local.backend_image

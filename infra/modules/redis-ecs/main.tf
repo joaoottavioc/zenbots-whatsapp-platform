@@ -119,7 +119,11 @@ resource "aws_ecs_service" "redis" {
     content {
       capacity_provider = capacity_provider_strategy.value
       weight            = capacity_provider_strategy.key == 0 ? 4 : 1
-      base              = 0
+      # Pin the on-demand FARGATE provider's base so Redis can't be taken to 0
+      # by a Spot reclaim during an ARM64 capacity shortage. FARGATE_SPOT stays
+      # base 0 and absorbs nothing here (desired_count is 1); the base alone
+      # guarantees the single task lands on on-demand.
+      base = capacity_provider_strategy.value == "FARGATE" ? var.fargate_base : 0
     }
   }
 

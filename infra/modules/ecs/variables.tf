@@ -48,6 +48,27 @@ variable "capacity_providers" {
   default = ["FARGATE"]
 }
 
+# Guaranteed on-demand FARGATE tasks for the backend service. With Spot-only
+# (base=0) a single-task backend can drop to 0 running when its Spot task is
+# interrupted and Spot capacity is simultaneously unavailable (observed on
+# ARM64 in us-east-1). Setting base=1 pins the first backend task to on-demand
+# FARGATE; scale-out beyond it still uses cheap Spot via the weighted strategy.
+variable "backend_fargate_base" {
+  type    = number
+  default = 0
+}
+
+# Same protection for the worker (ARQ consumer). The worker is what drains the
+# job queue — web-widget replies, WhatsApp messages, and cron jobs all flow
+# through it. With Spot-only (base=0) a single-task worker that gets its Spot
+# task interrupted during an ARM64 capacity shortage drops to 0 running, so
+# enqueued jobs pile up and the widget appears dead (message sent, no reply).
+# base=1 pins the first worker task to on-demand FARGATE.
+variable "worker_fargate_base" {
+  type    = number
+  default = 0
+}
+
 variable "container_insights" {
   type    = bool
   default = false

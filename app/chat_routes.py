@@ -50,7 +50,7 @@ from app import crud
 from app import schemas
 from app.channel_toggle import is_channel_enabled
 from app.database import async_session
-from app.rate_limiter import is_rate_limited
+from app.rate_limiter import RateLimiterUnavailable, is_rate_limited
 from app.web_channel import broadcast_web_reply
 
 logger = logging.getLogger(__name__)
@@ -154,6 +154,25 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+def _raise_service_unavailable() -> None:
+    """503 for the widget when the rate limiter's Redis is unreachable.
+
+    Distinct from the 429 "rate_limited" path: if Redis is down the per-IP
+    limiter can't count *and* the ARQ enqueue would fail anyway, so the honest
+    answer is "temporarily unavailable, try again" — not "you're sending too
+    fast", which blames the customer for an infra outage (see the 2026-06-08
+    Redis Spot reclaim that surfaced as a bogus throttle in the widget)."""
+    raise HTTPException(
+        status_code=503,
+        detail={
+            "error": "service_unavailable",
+            "message": "Estamos com uma instabilidade momentânea. "
+            "Tente novamente em instantes. 🙏",
+        },
+        headers={"Retry-After": "5"},
+    )
+
+
 def _ensure_web_channel_enabled() -> None:
     """Phase 5.6 kill switch — return 503 when ops disabled the channel.
 
@@ -242,11 +261,16 @@ async def post_chat_message(
     # poison another restaurant's quota.
     client_ip = _client_ip(request)
     rl_key = f"chat:ip:{client_ip}:bot:{bot_id}"
-    if await is_rate_limited(
-        rl_key,
-        _PER_IP_MESSAGE_LIMIT,
-        _PER_IP_MESSAGE_WINDOW_SECONDS,
-    ):
+    try:
+        throttled = await is_rate_limited(
+            rl_key,
+            _PER_IP_MESSAGE_LIMIT,
+            _PER_IP_MESSAGE_WINDOW_SECONDS,
+            raise_on_error=True,
+        )
+    except RateLimiterUnavailable:
+        _raise_service_unavailable()
+    if throttled:
         logger.warning(
             "chat rate-limit: ip=%s bot_id=%s limit=%d window=%ds",
             client_ip,
@@ -337,11 +361,16 @@ async def post_chat_audio(
     # transcription + LLM, not just LLM.
     client_ip = _client_ip(request)
     rl_key = f"chat:audio:ip:{client_ip}:bot:{bot_id}"
-    if await is_rate_limited(
-        rl_key,
-        _PER_IP_AUDIO_LIMIT,
-        _PER_IP_AUDIO_WINDOW_SECONDS,
-    ):
+    try:
+        throttled = await is_rate_limited(
+            rl_key,
+            _PER_IP_AUDIO_LIMIT,
+            _PER_IP_AUDIO_WINDOW_SECONDS,
+            raise_on_error=True,
+        )
+    except RateLimiterUnavailable:
+        _raise_service_unavailable()
+    if throttled:
         logger.warning(
             "chat audio rate-limit: ip=%s bot_id=%s limit=%d window=%ds",
             client_ip,

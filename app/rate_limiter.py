@@ -8,6 +8,15 @@ import os
 logger = logging.getLogger(__name__)
 from typing import Optional, Tuple
 
+
+class RateLimiterUnavailable(Exception):
+    """Raised by is_rate_limited(raise_on_error=True) when the backing Redis
+    is unreachable, so the caller can distinguish a real throttle from an
+    infrastructure outage and respond with a 503 instead of a misleading 429.
+    Callers that don't pass raise_on_error keep the default fail-closed posture
+    (return True on Redis error) used by the security-sensitive endpoints."""
+
+
 # Pega a URL do ambiente (definida no docker-compose) ou usa localhost como fallback
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
@@ -72,10 +81,17 @@ async def is_spamming(
         return True
 
 
-async def is_rate_limited(key: str, limit: int, window_seconds: int) -> bool:
+async def is_rate_limited(
+    key: str, limit: int, window_seconds: int, raise_on_error: bool = False
+) -> bool:
     """
     Generic rate limiter. Returns True if the key has exceeded `limit`
-    requests within the sliding window. Fails closed on Redis errors.
+    requests within the sliding window.
+
+    On Redis errors the default is to fail closed (return True) — the safe
+    posture for auth/payment endpoints. Pass raise_on_error=True to instead
+    raise RateLimiterUnavailable, so a caller can tell "user is throttled"
+    apart from "Redis is down" and surface a 503 rather than a bogus 429.
     """
     try:
         r = _get_client()
@@ -96,6 +112,8 @@ async def is_rate_limited(key: str, limit: int, window_seconds: int) -> bool:
         logger.error(
             "Redis rate limiter error in is_rate_limited for key=%s: %s", key, e
         )
+        if raise_on_error:
+            raise RateLimiterUnavailable(str(e)) from e
         return True
 
 
