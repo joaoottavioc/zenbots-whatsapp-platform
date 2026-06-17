@@ -176,6 +176,7 @@ app.include_router(health_routes.router)
 app.include_router(monitoring_routes.router)
 app.include_router(chat_routes.router)
 app.include_router(public_routes.router)
+app.include_router(public_routes.root_router)
 
 
 # Rota de verificação de saúde (Health Check)

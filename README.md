@@ -5,7 +5,20 @@
 > widget today, WhatsApp on the way. Built end-to-end: prompts, eval,
 > infra, observability, unit economics.
 
-**Live demo:** `https://zenbotz.com.br/pizzaria-do-ze` *(coming soon — see [`plan/portfolio_pivot.md`](plan/portfolio_pivot.md) §P3)*
+**Live demo:** **[chat with the bot →](https://dev.zenbotz.com.br/widget?slug=johns-hot-dog)** · [conversation eval gallery →](https://dev.zenbotz.com.br/eval)
+
+> ⏰ The interactive widget runs on the cost-optimized dev environment, scheduled
+> **on weekdays ~9 AM–7 PM (BRT / UTC-3)**; it scales to zero off-hours and
+> weekends. The **[eval gallery →](https://dev.zenbotz.com.br/eval)** stays up
+> around the clock (cached real conversation traces), and the GIF below shows the
+> full live flow regardless of the clock.
+
+<!-- TODO: record and embed demo GIF here. Suggested capture:
+     customer orders in the web widget → order appears live on the SSE
+     kitchen-display board → PIX QR generated. Save as .github/media/demo.gif
+     (docs/ is gitignored, so a GIF there would NOT render on GitHub)
+     and replace this comment with: ![ZenBotZ demo](.github/media/demo.gif) -->
+_Demo recording: **GIF coming here** — see the TODO in this file's source._
 
 **Status:** dev environment running on AWS · 442 automated tests ·
 ~79% corpus QA comprehension · ~$0.001 per real customer conversation.

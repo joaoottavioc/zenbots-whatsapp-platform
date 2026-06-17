@@ -25,10 +25,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Path as PathParam
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import select, func
 
 from app import crud
@@ -61,6 +63,11 @@ _DEMO_TRACE_MESSAGE_LIMIT = 60
 _DEMO_TRACE_CACHE_CONTROL = "public, max-age=60, s-maxage=60"
 
 router = APIRouter(prefix="/public", tags=["Public"])
+
+# Root-level router (no /public prefix) for short, memorable links handed
+# directly to recruiters / put on a CV. Kept separate from `router` only
+# so the URL is `…/demo`, not `…/public/demo`.
+root_router = APIRouter(tags=["Public"])
 
 # Snapshot lives at repo-root/docs/eval/latest.json. main.py runs from
 # the repo root in the container (WORKDIR /code), so the relative path
@@ -176,6 +183,51 @@ async def _resolve_demo_bot(session) -> Bot | None:
             return bot
     # Fallback path — preserve old behavior when the demo user is missing.
     return await crud.get_bot_by_slug(session, DEMO_BOT_SLUG)
+
+
+@root_router.get(
+    "/demo",
+    summary="Stable redirect to the live demo widget (rename-proof)",
+)
+async def demo_redirect() -> RedirectResponse:
+    """302 to the demo bot's widget at its *current* slug.
+
+    The widget URL is slug-based (`/widget?slug=...`) and the slug changes
+    whenever the demo bot is renamed in the dashboard. Linking recruiters
+    straight at a slug means every rename silently breaks the link (it has
+    already gone `pizzaria-do-ze` → `johns-hot-dog`). This endpoint resolves
+    the demo bot the same slug-independent way `/eval` does (by owner email,
+    see `_resolve_demo_bot`) and redirects to its current slug — so the link
+    you hand out, `…/demo`, never needs editing again.
+
+    Target host is the frontend (`FRONTEND_URL`), since the widget page is
+    served by the static frontend, not this API.
+
+    404 if the demo bot hasn't been seeded (fresh dev env).
+    """
+    async with async_session() as session:
+        bot = await _resolve_demo_bot(session)
+
+    if not bot or not bot.slug:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "demo_bot_unavailable",
+                "message": (
+                    "Demo bot is not seeded. Run scripts/seed_demo_restaurant.py."
+                ),
+            },
+        )
+
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+    target = f"{frontend_url}/widget?slug={quote(bot.slug, safe='')}"
+    # no-store: the slug can change at any time, so never let a proxy or
+    # browser pin a stale redirect target.
+    return RedirectResponse(
+        url=target,
+        status_code=302,
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.get(
