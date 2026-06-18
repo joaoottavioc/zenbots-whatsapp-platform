@@ -166,8 +166,8 @@ Build with fallbacks from day one.
 
 Two layers:
 
-- **Unit tests** (~442) — handlers, CRUD, route contracts, schemas.
-  Run on every PR.
+- **Unit + integration tests** (~1,891 collected) — handlers, CRUD,
+  route contracts, schemas, infra. Run on every PR.
 - **QA corpus** — ground-truth conversations with expected outcomes.
   Each scenario walks a simulated customer through a bot interaction
   and scores whether the bot understood the request. Current baseline:
@@ -279,7 +279,7 @@ Honest reflective signal — these are real, not buzzword aspirations.
 
 ## Numbers, no marketing
 
-- **442** unit + integration tests
+- **1,891** unit + integration tests
 - **~79.4%** comprehension on the QA corpus
 - **~$0.001** per conversation (measured at the per-call layer)
 - **~3500** input tokens average per LLM call

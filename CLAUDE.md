@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Current Maturity
 
 The platform is in **active development** with the dev environment live on AWS. Key stats:
-- **Test suite**: ~442 tests, ~55% codebase coverage (~433 passing, ~9 fail due to bcrypt/Python 3.14 compat)
+- **Test suite**: ~1,891 tests collected (`pytest --collect-only`), ~55% codebase coverage (CI green on Python 3.10; ~9 fail locally on 3.14 due to bcrypt compat)
 - **Tech debt**: Tracked across 10 backlog files in `tech_debt/`. Major refactorings complete (God Function split, enum-based state machine, security hardening, observability stack). See `tech_debt/` for full status.
 - **Production readiness**: ~45-50% overall. Critical P0 blockers remain in security and data integrity (see `tech_debt/backlog_production.md`).
 - **WhatsApp Embedded Signup**: Working in dev mode (Facebook app review required for production)
