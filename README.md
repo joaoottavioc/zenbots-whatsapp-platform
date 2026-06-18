@@ -5,7 +5,7 @@
 > widget today, WhatsApp on the way. Built end-to-end: prompts, eval,
 > infra, observability, unit economics.
 
-**Live demo:** **[chat with the bot →](https://dev.zenbotz.com.br/widget?slug=johns-hot-dog)** · [conversation eval gallery →](https://dev.zenbotz.com.br/eval)
+**Live demo:** **[chat with the bot →](https://dev-api.zenbotz.com.br/demo)** · [conversation eval gallery →](https://dev.zenbotz.com.br/eval)
 
 > ⏰ The interactive widget runs on the cost-optimized dev environment, scheduled
 > **on weekdays ~9 AM–7 PM (BRT / UTC-3)**; it scales to zero off-hours and
