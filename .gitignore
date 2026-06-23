@@ -28,6 +28,10 @@ db_data/
 .vscode/
 .idea/
 
+# Raw demo recording — the source .mp4 stays local; only the optimized
+# .github/media/demo.gif is committed.
+.github/media/*.mp4
+
 # Test / lint caches
 .pytest_cache/
 .ruff_cache/
@@ -36,6 +40,8 @@ htmlcov/
 
 # Documentation (generated/internal, not tracked).
 docs/
+# Personal interview-prep architecture study guide (kept local).
+docs/zenbotz_comprehensive_architecture.md
 
 # Internal planning + tech-debt backlogs (kept local, not pushed to the
 # public portfolio repo — they enumerate ongoing work, fixed CVEs, and

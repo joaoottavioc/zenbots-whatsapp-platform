@@ -13,12 +13,11 @@
 > around the clock (cached real conversation traces), and the GIF below shows the
 > full live flow regardless of the clock.
 
-<!-- TODO: record and embed demo GIF here. Suggested capture:
-     customer orders in the web widget → order appears live on the SSE
-     kitchen-display board → PIX QR generated. Save as .github/media/demo.gif
-     (docs/ is gitignored, so a GIF there would NOT render on GitHub)
-     and replace this comment with: ![ZenBotZ demo](.github/media/demo.gif) -->
-_Demo recording: **GIF coming here** — see the TODO in this file's source._
+![ZenBotZ live demo — ordering through the web widget](.github/media/demo.gif)
+
+_A real order on the live dev environment: natural-language ordering →
+itemized cart with live pricing → pickup → PIX payment, generated
+end to end by the bot._
 
 **Status:** dev environment running on AWS · 1,891 automated tests ·
 ~79% corpus QA comprehension · ~$0.001 per real customer conversation.
