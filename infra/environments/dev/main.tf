@@ -45,6 +45,9 @@ module "rds" {
   instance_class    = "db.t4g.micro"
   db_password       = var.db_password
   multi_az          = false
+  # Dev data is disposable; 1 day of backups is enough and trims backup
+  # storage beyond the free tier.
+  backup_retention_days = 1
 }
 
 # ------------------ Redis on ECS (replaces ElastiCache for dev) --
@@ -186,7 +189,9 @@ module "ecs" {
 
   # Backend
   backend_image         = local.backend_image
-  backend_cpu           = 1024
+  # 0.5 vCPU is enough for dev traffic (single user); keep 2 GB for the
+  # SentenceTransformer model. Saves ~$3.5/mo over 1 vCPU on-demand.
+  backend_cpu           = 512
   backend_memory        = 2048
   backend_desired_count = 1
   backend_max_count     = 1

@@ -776,26 +776,41 @@ Key points:
 
 ## 17. Cost Breakdown
 
-### Dev Environment (~$20/month)
+### Dev Environment (~$27/month pre-tax, ~$31 invoiced)
+
+> Updated 2026-07-01 against actual Cost Explorer data. The old "$18-20/mo"
+> figure assumed everything ran on Fargate Spot; in June 2026 all three ECS
+> services were deliberately pinned to on-demand FARGATE (`base = 1`) after
+> Spot reclaims + capacity shortage broke the web widget and worker. Guaranteed
+> business-hours capacity costs ~$7/mo over Spot. Brazilian tax (~14%) applies
+> on top of all figures below.
 
 | Service | Cost | Notes |
 |---------|------|-------|
-| NAT instance + Caddy (fck-nat t4g.nano) | $3.07/mo | Always on, HTTPS reverse proxy (24/7) |
+| ECS Fargate on-demand (backend: 0.5 vCPU / 2 GB) | ~$5.06/mo | ~217 hrs/mo (scheduled), `base=1` pins to on-demand |
+| ECS Fargate on-demand (worker: 0.5 vCPU / 1 GB) | ~$4.29/mo | ~217 hrs/mo (scheduled), on-demand |
+| ECS Fargate on-demand (Redis: 0.25 vCPU / 512 MB) | ~$2.29/mo | ~232 hrs/mo (starts 15 min before, stops 15 min after backend) |
+| RDS db.t4g.micro (compute) | ~$3.89/mo | Scheduled stop/start (~243 hrs/mo, 8:30-19:40 BRT) |
+| RDS storage (20 GB gp2) + backups | ~$2.50/mo | Charged 24/7 even when instance is stopped; 1-day backup retention |
 | Public IPv4 (NAT EIP) | $3.65/mo | AWS charges $0.005/hr per public IPv4 since Feb 2024 |
-| ECS Fargate SPOT (backend: 1 vCPU / 2 GB) | ~$2.57-4.29/mo | ~217 hrs/mo, Spot discount 50-70% |
-| RDS db.t4g.micro (compute) | $3.47/mo | Scheduled stop/start (~217 hrs/mo) |
-| RDS storage (20 GB gp3) | $1.60/mo | Charged 24/7 even when instance is stopped |
-| ECS Fargate SPOT (worker: 0.25 vCPU / 512 MB) | ~$0.64-1.07/mo | ~217 hrs/mo (scheduled) |
-| ECS Fargate SPOT (Redis: 0.25 vCPU / 512 MB) | ~$0.64-1.07/mo | ~217 hrs/mo (scheduled) |
-| CloudWatch (logs 3-day + 7 alarms) | ~$1.45/mo | $0.50/GB ingestion + $0.10/alarm |
-| Route 53 (1 zone) | $0.50/mo | A record → NAT EIP |
-| ECR | ~$0.20/mo | ~2 GB stored, lifecycle cleanup |
+| NAT instance + Caddy (fck-nat t4g.nano) + EBS | ~$3.60/mo | Always on, HTTPS reverse proxy (24/7) |
+| Route 53 (1 zone + queries) | ~$1.00/mo | A record → NAT EIP |
+| ECR | ~$0.45/mo | Lifecycle: keep last 9 dev / 9 prod / 3 latest images (one rule per tag prefix — a combined `tagPrefixList` uses AND semantics and matches nothing) |
+| CloudWatch (logs 3-day + alarms) | ~$0-1.45/mo | $0.50/GB ingestion + $0.10/alarm |
 | Cloud Map (1 namespace, 2 services) | ~$0.10/mo | Redis + backend DNS discovery |
-| S3 | ~$0.03/mo | <1 GB, no versioning |
-| SSM Parameter Store (19 params) | $0.00 | Free tier |
-| **Total** | **~$18-20/mo** | Mid-range ~$20 at 60% Spot discount |
+| S3 | ~$0.05/mo | <1 GB, no versioning |
+| SSM Parameter Store (20 params) | $0.00 | Free tier |
+| **Total** | **~$27/mo pre-tax** | ~$31/mo on the invoice with ~14% BR tax |
 
-> **Cost optimization applied (Phases 1-4 + SM cleanup):** Secrets Manager deleted (saved ~$3.20/mo), Container Insights disabled (saved ~$1.50/mo), log retention 7→3 days (saved ~$1/mo), RDS scheduling (saved ~$8/mo), ElastiCache → Redis on ECS (saved ~$10.50/mo), ALB → Caddy on NAT (saved ~$16/mo + $7.30 IPv4). Backend bumped to 1024/2048 for SentenceTransformer model (+~$2.55/mo). This is the cost floor for the current architecture. See `tech_debt/backlog_aws_refactor.md`.
+> **Cost optimization applied (Phases 1-4 + SM cleanup):** Secrets Manager deleted (saved ~$3.20/mo), Container Insights disabled (saved ~$1.50/mo), log retention 7→3 days (saved ~$1/mo), RDS scheduling (saved ~$8/mo), ElastiCache → Redis on ECS (saved ~$10.50/mo), ALB → Caddy on NAT (saved ~$16/mo + $7.30 IPv4). Backend runs 0.5 vCPU / 2 GB (2 GB required by the SentenceTransformer model). See `tech_debt/backlog_aws_refactor.md`.
+
+> **Known failure mode (bit us 2026-06-08):** replacing an ECS service (e.g.
+> changing its capacity provider strategy) makes AWS silently delete its
+> Application Auto Scaling target and scheduled actions. Terraform does not
+> detect this in the same apply — the service then runs 24/7 (~+$5/mo for
+> Redis). Guards: a post-apply drift check in `terraform.yml` asserts all 9
+> scheduled actions exist, and an AWS Budget (`zenbots-monthly-30`, $30/mo)
+> emails at 80%/100% actual and 100% forecasted spend.
 
 ### Prod Environment — Launch Config (estimated, ~$108/month)
 

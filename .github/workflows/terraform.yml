@@ -144,3 +144,21 @@ jobs:
       - name: Terraform Apply
         working-directory: infra/environments/${{ needs.plan.outputs.environment }}
         run: terraform apply -input=false plan.tfplan
+
+      # Replacing an ECS service (e.g. changing its capacity provider
+      # strategy) makes AWS silently delete its Application Auto Scaling
+      # target and scheduled actions, and Terraform does not detect the
+      # drift in the same apply. This happened on 2026-06-08 (Redis) and
+      # left it running 24/7 for a month (~+$5/mo). Fail loudly instead.
+      - name: Verify ECS scheduled scaling actions (drift check)
+        if: needs.plan.outputs.environment == 'dev'
+        run: |
+          COUNT=$(aws application-autoscaling describe-scheduled-actions \
+            --service-namespace ecs \
+            --query "length(ScheduledActions[?contains(ResourceId, 'zenbots-dev')])" \
+            --output text)
+          echo "Found $COUNT scheduled actions (expected 9: 3 services x 3 actions)"
+          if [ "$COUNT" -ne 9 ]; then
+            echo "::error::ECS scheduled scaling actions missing ($COUNT/9). A replaced ECS service deletes its autoscaling target+actions — re-run terraform apply to recreate them."
+            exit 1
+          fi

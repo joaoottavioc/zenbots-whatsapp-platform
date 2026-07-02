@@ -310,13 +310,13 @@ Restaurant owners connect their WhatsApp Business number through Facebook's Embe
 
 | Component | Dev | Prod (planned) |
 |---|---|---|
-| **ECS Fargate** | FARGATE_SPOT ARM64, backend 1 vCPU / 2 GB (1 task), worker 0.25 vCPU / 512 MB (1 task) | FARGATE ARM64, backend 1 vCPU / 2 GB 2-4 tasks (auto-scale), worker 0.25 vCPU / 512 MB 1-2 tasks |
+| **ECS Fargate** | On-demand FARGATE ARM64 (`base=1` pins — Spot reclaims broke availability in June 2026), backend 0.5 vCPU / 2 GB (1 task), worker 0.5 vCPU / 1 GB (1 task) | FARGATE ARM64, backend 1 vCPU / 2 GB 2-4 tasks (auto-scale), worker 0.25 vCPU / 512 MB 1-2 tasks |
 | **RDS PostgreSQL 14** | db.t4g.micro, single-AZ, 20 GB, 7-day backups, scheduled ~50 hrs/wk | db.t4g.small, Multi-AZ, 20 GB→100 GB, 14-day backups, deletion protection |
-| **Redis** | Redis 7 on ECS Fargate SPOT (0.25 vCPU / 512 MB), Cloud Map DNS | ElastiCache cache.t4g.small, 2 nodes Multi-AZ |
+| **Redis** | Redis 7 on ECS Fargate on-demand (0.25 vCPU / 512 MB), Cloud Map DNS | ElastiCache cache.t4g.small, 2 nodes Multi-AZ |
 | **NAT** | fck-nat t4g.nano + Caddy reverse proxy (~$3/mo) | Managed NAT Gateway (~$32/mo) |
 | **HTTPS** | Caddy on NAT instance (Let's Encrypt TLS, Cloud Map → ECS) | ALB + ACM wildcard cert + WAF (2,000 req/5min) |
 | **Scheduling** | 9 AM-7 PM BRT weekdays only (~50 hrs/wk). ECS + RDS + Redis all scheduled. | Always on |
-| **Est. cost** | ~$20/month (cost floor) | ~$108/month (launch), ~$200/month (scaled) |
+| **Est. cost** | ~$27/month pre-tax (~$31 invoiced) | ~$108/month (launch), ~$200/month (scaled) |
 
 **VPC**: `10.0.0.0/16` with 3 tiers across 2 AZs: public (NAT/ALB), private (ECS), isolated (RDS/Redis). S3 Gateway Endpoint (free, S3 traffic bypasses NAT).
 
@@ -383,7 +383,7 @@ Loaded from `.env` locally, from AWS Secrets Manager in AWS. Key variables:
 
 8. **ARM64 Graviton**: Docker images are built for `linux/arm64` to run on Fargate Graviton (20% cheaper than x86). Cross-compiled via `docker/setup-qemu-action` in CI.
 
-9. **Dev cost optimization**: ECS services (backend, worker, Redis) scale to 0 between 7 PM-9 AM BRT on weekdays and all weekend (~50 hrs/week running). RDS stops/starts on the same schedule. ElastiCache replaced by Redis on ECS. ALB replaced by Caddy on fck-nat instance. Secrets Manager deleted (using SSM). Total dev cost: ~$20/month (cost floor for current architecture).
+9. **Dev cost optimization**: ECS services (backend, worker, Redis) scale to 0 between 7 PM-9 AM BRT on weekdays and all weekend (~50 hrs/week running). RDS stops/starts on the same schedule. ElastiCache replaced by Redis on ECS. ALB replaced by Caddy on fck-nat instance. Secrets Manager deleted (using SSM). All three ECS services pinned to on-demand FARGATE (`base=1`) after June 2026 Spot reclaims broke availability. Total dev cost: ~$27/month pre-tax (~$31 invoiced with BR tax). Guards: AWS Budget `zenbots-monthly-30` emails at 80%/100%, and `terraform.yml` has a post-apply check for the 9 ECS scheduled scaling actions (replacing an ECS service silently deletes its autoscaling target + schedule — this left Redis running 24/7 for most of June 2026).
 
 10. **Async SQLAlchemy relationship loading**: Never use `session.refresh(obj, attribute_names=["relationship"])` in async context — it expires ALL attributes on the object, causing `greenlet_spawn` errors on subsequent access. Instead, use direct `SELECT` queries + `set_committed_value` from `sqlalchemy.orm.attributes` (see `_load_cart_items_with_products()` and `_load_bot_payment_config()` in `whatsapp.py`). Similarly, `session.commit()` and `session.rollback()` expire all objects — capture scalar values into local variables before any code path that might commit/rollback.
 
