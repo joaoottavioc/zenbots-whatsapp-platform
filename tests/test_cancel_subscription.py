@@ -49,6 +49,8 @@ class _FakeRedis:
 def _fake_redis(monkeypatch):
     fake = _FakeRedis()
     monkeypatch.setattr(founder, "_client", fake)
+    tomorrow = (datetime.now(timezone.utc).date() + timedelta(days=1)).isoformat()
+    monkeypatch.setenv("FOUNDER_SUNSET_AT", tomorrow)
     yield fake
 
 

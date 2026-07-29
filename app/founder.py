@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 import redis.asyncio as redis
@@ -33,9 +33,12 @@ FOUNDER_PRICE_BRL = 59.90
 FOUNDER_COUNTER_KEY = "founder:redemptions"
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
-# Default sunset 90 days out so dev envs don't accidentally close the promo.
-# Prod should set FOUNDER_SUNSET_AT (ISO date) explicitly per launch plan.
-_DEFAULT_SUNSET = "2026-07-22"
+# No hardcoded fallback date here on purpose: a fixed ISO string always
+# eventually becomes the past and silently sunsets the promo in any
+# environment that forgot to set FOUNDER_SUNSET_AT (this bit dev on
+# 2026-07-22 when a prior "90 days out" default quietly expired). The
+# rolling window in sunset_date() below is the real default.
+_DEFAULT_SUNSET_WINDOW_DAYS = 90
 
 _client: Optional[redis.Redis] = None
 
@@ -53,12 +56,17 @@ def _get_client() -> redis.Redis:
 
 
 def sunset_date() -> date:
-    raw = os.getenv("FOUNDER_SUNSET_AT", _DEFAULT_SUNSET)
+    raw = os.getenv("FOUNDER_SUNSET_AT")
+    rolling_default = datetime.now(timezone.utc).date() + timedelta(
+        days=_DEFAULT_SUNSET_WINDOW_DAYS
+    )
+    if not raw:
+        return rolling_default
     try:
         return date.fromisoformat(raw)
     except ValueError:
         logger.warning("Invalid FOUNDER_SUNSET_AT=%r, falling back to default", raw)
-        return date.fromisoformat(_DEFAULT_SUNSET)
+        return rolling_default
 
 
 def sunset_passed() -> bool:
