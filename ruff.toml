@@ -1,3 +1,11 @@
+# Pinned: CI does `pip install ruff` with no version constraint, and a
+# ruff release can change its default-enabled rule set (0.16.0 added
+# UP/I/BLE/ASYNC/DTZ/RUF/S/SIM/PL/ISC on top of the E4/E7/E9/F this repo
+# was actually written against, surfacing ~1180 "new" errors with zero
+# code changes). Pin so CI/local always agree, and fail loudly instead
+# of silently linting under a different ruleset.
+required-version = "0.15.4"
+
 [lint]
 # Ignore pre-existing style issues that are safe but noisy
 ignore = [

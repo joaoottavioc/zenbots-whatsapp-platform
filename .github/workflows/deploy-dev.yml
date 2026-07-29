@@ -31,7 +31,7 @@ jobs:
         with:
           python-version: "3.10"
           cache: pip
-      - run: pip install ruff
+      - run: pip install ruff==0.15.4
       - run: ruff check app/ tests/
       - run: ruff format --check app/ tests/
 
