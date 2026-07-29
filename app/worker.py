@@ -111,6 +111,27 @@ class WorkerSettings:
     async def on_startup(self):
         setup_logging()
         start_flush_task()
+
+        # Pre-warm the embedding model before polling for jobs. This process
+        # has its own copy of the lazy singleton in embedding_service.py —
+        # separate from the backend's, which pre-warms itself in main.py's
+        # lifespan. Without this, the model loads on-demand inside the first
+        # real job of the day (e.g. right after the scheduled 9 AM ECS
+        # scale-up), stalling that customer's reply. Awaited (not
+        # fire-and-forget) because no jobs are dequeued until this returns,
+        # so blocking here is free; any job enqueued meanwhile just waits in
+        # Redis. Guarded so a load failure degrades gracefully instead of
+        # crashing worker startup.
+        import asyncio
+        from app.embedding_service import _get_model, EmbeddingsUnavailable
+
+        loop = asyncio.get_running_loop()
+        try:
+            await loop.run_in_executor(None, _get_model)
+            logger.info("Embedding model pre-warmed on worker startup")
+        except EmbeddingsUnavailable as e:
+            logger.warning("Embedding model pre-warm failed on worker startup: %s", e)
+
         logger.info("Message worker started, waiting for jobs")
 
     # Executado quando o worker desliga
