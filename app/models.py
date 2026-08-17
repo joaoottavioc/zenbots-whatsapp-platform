@@ -137,12 +137,13 @@ class Bot(SQLModel, table=True):
 
     # ── Channel matrix (plan/in_browser_bots.md Phase 2.5) ──────────────
     # Every existing bot was WhatsApp-only, so whatsapp_enabled defaults
-    # true to preserve current behavior. web_widget_enabled defaults false
-    # — bots stay WhatsApp-only until the owner opts in via dashboard.
+    # true to preserve current behavior. web_widget_enabled now also
+    # defaults true — every new bot gets the widget out of the box; the
+    # owner can still turn it off via dashboard (PUT /bots/{id}).
     # Both true = customer can order via either channel, separate Contact
     # rows per channel (A1b synthesis keeps the carts isolated).
     whatsapp_enabled: bool = Field(default=True)
-    web_widget_enabled: bool = Field(default=False)
+    web_widget_enabled: bool = Field(default=True)
 
     # Per-bot CORS allowlist for the widget. Empty list = block all
     # browser embeds. Phase 2 ingress checks Origin against this list.

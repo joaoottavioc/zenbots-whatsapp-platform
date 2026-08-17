@@ -212,7 +212,7 @@ class BotResponse(BaseModel):
     # The dashboard renders these on the bot card to manage Web Atendimento.
     slug: Optional[str] = None
     whatsapp_enabled: bool = True
-    web_widget_enabled: bool = False
+    web_widget_enabled: bool = True
     web_widget_allowed_origins: List[str] = []
     web_widget_theme: Dict[str, Any] = {}
     web_widget_offline_message: Optional[str] = None

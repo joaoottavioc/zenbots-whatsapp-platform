@@ -2,7 +2,8 @@
 
 Pins the per-bot channel configuration shape:
   - whatsapp_enabled defaults true (every existing bot was WhatsApp-only)
-  - web_widget_enabled defaults false (opt-in via dashboard)
+  - web_widget_enabled defaults true (every bot ships with the widget on;
+    owner can turn it off via dashboard)
   - web_widget_allowed_origins defaults [] (block all browser embeds)
   - web_widget_theme defaults {} (no customization)
   - web_widget_offline_message defaults None
@@ -16,12 +17,12 @@ re-shape every existing bot.
 from app.models import Bot
 
 
-def test_new_bot_defaults_to_whatsapp_only():
-    """The default Bot config is WhatsApp-only — preserves the pre-Phase-2
-    behavior of every existing row in production."""
+def test_new_bot_defaults_to_both_channels():
+    """The default Bot config has WhatsApp on (preserves pre-Phase-2
+    behavior of every existing row) and the web widget on out of the box."""
     bot = Bot(user_id=1, whatsapp_number="5511000000001")
     assert bot.whatsapp_enabled is True
-    assert bot.web_widget_enabled is False
+    assert bot.web_widget_enabled is True
 
 
 def test_new_bot_web_widget_config_defaults():
