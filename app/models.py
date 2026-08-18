@@ -44,7 +44,8 @@ class Channel(str, enum.Enum):
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     email: str = Field(unique=True, index=True)
-    hashed_password: str
+    hashed_password: Optional[str] = Field(default=None)
+    google_sub: Optional[str] = Field(default=None, unique=True, index=True)
     is_admin: bool = Field(default=False)
     is_email_verified: bool = Field(default=False)
 

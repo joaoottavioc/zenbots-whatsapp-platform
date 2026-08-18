@@ -361,6 +361,7 @@ Loaded from `.env` locally, from AWS Secrets Manager in AWS. Key variables:
 - `SECRET_KEY` (JWT signing — validated on startup, raises RuntimeError if missing)
 - `ENCRYPTION_KEY` (Fernet key for encrypting payment tokens at rest)
 - `GOOGLE_MAPS_API_KEY`
+- `GOOGLE_CLIENT_ID` (Google Sign-In — verifies ID tokens from `POST /auth/google`; no client secret needed for this flow)
 - `CORS_ORIGINS` or `CORS_ORIGIN_REGEX` (production CORS — wildcard only in dev)
 - `ENVIRONMENT` (controls CORS strictness, logging level, log format)
 - `LOG_FORMAT` (`text` for local dev, JSON in production)

@@ -9,6 +9,8 @@ from typing import Optional
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as google_id_token
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, validator
@@ -42,6 +44,8 @@ if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY env var is not set.")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 horas
+
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
@@ -86,6 +90,44 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def _issue_session(response: Response, user: "models.User") -> dict:
+    """Create the access token, set the auth + CSRF cookies, return the Token payload.
+
+    Shared by password login (/token) and Google login (/auth/google) so both
+    paths establish sessions identically.
+    """
+    access_token = create_access_token(data={"sub": user.email})
+    csrf_token = secrets.token_urlsafe(32)
+    secure = _is_secure_cookie()
+
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=access_token,
+        httponly=True,
+        secure=secure,
+        samesite=COOKIE_SAMESITE,
+        path="/",
+        max_age=COOKIE_MAX_AGE,
+        domain=COOKIE_DOMAIN,
+    )
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME,
+        value=csrf_token,
+        httponly=False,
+        secure=secure,
+        samesite=COOKIE_SAMESITE,
+        path="/",
+        max_age=COOKIE_MAX_AGE,
+        domain=COOKIE_DOMAIN,
+    )
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "csrf_token": csrf_token,
+    }
 
 
 # --- Password validation ---
@@ -344,7 +386,11 @@ async def login_for_access_token(
         )
 
     user = await crud.get_user_by_email(session, email=form_data.username)
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    if (
+        not user
+        or not user.hashed_password
+        or not verify_password(form_data.password, user.hashed_password)
+    ):
         client_ip = request.client.host if request.client else "unknown"
         logger.warning("AUTH_FAIL login email=%s ip=%s", form_data.username, client_ip)
         raise HTTPException(
@@ -359,36 +405,86 @@ async def login_for_access_token(
             detail="Email não verificado. Verifique sua caixa de entrada ou solicite um novo link.",
         )
 
-    access_token = create_access_token(data={"sub": user.email})
-    csrf_token = secrets.token_urlsafe(32)
-    secure = _is_secure_cookie()
+    return _issue_session(response, user)
 
-    response.set_cookie(
-        key=COOKIE_NAME,
-        value=access_token,
-        httponly=True,
-        secure=secure,
-        samesite=COOKIE_SAMESITE,
-        path="/",
-        max_age=COOKIE_MAX_AGE,
-        domain=COOKIE_DOMAIN,
-    )
-    response.set_cookie(
-        key=CSRF_COOKIE_NAME,
-        value=csrf_token,
-        httponly=False,
-        secure=secure,
-        samesite=COOKIE_SAMESITE,
-        path="/",
-        max_age=COOKIE_MAX_AGE,
-        domain=COOKIE_DOMAIN,
-    )
 
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "csrf_token": csrf_token,
-    }
+# --- Google Sign-In ---
+
+
+class GoogleAuthRequest(BaseModel):
+    credential: str  # Google ID token (JWT) from Google Identity Services
+
+
+async def _check_google_auth_rate_limit(request: Request):
+    """10 requests per 5 minutes per IP for /auth/google (20 in dev)."""
+    client_ip = request.client.host if request.client else "unknown"
+    key = f"rl:google_auth:{client_ip}"
+    if await is_rate_limited(key, limit=10 * _DEV_MULTIPLIER, window_seconds=300):
+        logger.warning("RATE_LIMIT google_auth ip=%s", client_ip)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many requests. Please try again later.",
+        )
+
+
+@router.post(
+    "/google",
+    response_model=schemas.Token,
+    summary="Login/signup via Google Sign-In (ID token)",
+)
+async def login_with_google(
+    payload: GoogleAuthRequest,
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+    _rate_limit: None = Depends(_check_google_auth_rate_limit),
+):
+    if not GOOGLE_CLIENT_ID:
+        logger.error("GOOGLE_CLIENT_ID not configured; /auth/google unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Login com Google indisponível no momento.",
+        )
+
+    try:
+        claims = google_id_token.verify_oauth2_token(
+            payload.credential, google_requests.Request(), GOOGLE_CLIENT_ID
+        )
+    except ValueError as e:
+        logger.warning("AUTH_FAIL google_token invalid: %s", type(e).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token do Google inválido ou expirado.",
+        )
+
+    # Google's own guidance: only trust the email claim for account linking
+    # when Google itself vouches for it via email_verified.
+    if not claims.get("email_verified"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="E-mail do Google não verificado.",
+        )
+
+    google_sub = claims["sub"]
+    email = claims["email"]
+
+    user = await crud.get_user_by_google_sub(session, google_sub=google_sub)
+    if not user:
+        # Auto-link to an existing password account with the same (Google-verified) email.
+        user = await crud.get_user_by_email(session, email=email)
+        if user:
+            user.google_sub = google_sub
+        else:
+            user = models.User(email=email, google_sub=google_sub)
+            session.add(user)
+
+    if not user.is_email_verified:
+        user.is_email_verified = True  # Google already verified this email
+
+    session.add(user)
+    await session.commit()
+    await session.refresh(user)
+
+    return _issue_session(response, user)
 
 
 # --- Logout ---
@@ -589,19 +685,22 @@ async def change_password(
     current_user: models.User = Depends(get_current_user),  # Garante que está logado
     session: AsyncSession = Depends(get_session),
 ):
-    # A. Verifica se a senha ATUAL está correta
-    if not verify_password(payload.current_password, current_user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A senha atual está incorreta.",
-        )
+    # Accounts created via Google Sign-In have no password yet — this call sets
+    # their first one, so there's no "current password" to check against.
+    if current_user.hashed_password is not None:
+        # A. Verifica se a senha ATUAL está correta
+        if not verify_password(payload.current_password, current_user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A senha atual está incorreta.",
+            )
 
-    # B. Verifica se a NOVA senha é igual à antiga (opcional, mas boa prática)
-    if verify_password(payload.new_password, current_user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A nova senha não pode ser igual à atual.",
-        )
+        # B. Verifica se a NOVA senha é igual à antiga (opcional, mas boa prática)
+        if verify_password(payload.new_password, current_user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A nova senha não pode ser igual à atual.",
+            )
 
     # C. Criptografa e salva a nova senha
     current_user.hashed_password = get_password_hash(payload.new_password)

@@ -805,6 +805,13 @@ async def get_user_by_id(session: AsyncSession, user_id: int) -> Optional[User]:
     return result.scalars().first()
 
 
+async def get_user_by_google_sub(
+    session: AsyncSession, google_sub: str
+) -> Optional[User]:
+    result = await session.execute(select(User).where(User.google_sub == google_sub))
+    return result.scalars().first()
+
+
 def _slugify_name(name: str) -> str:
     """Strip accents, lowercase, replace non-alphanumeric with hyphens.
 

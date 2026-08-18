@@ -24,6 +24,10 @@ def _make_app() -> FastAPI:
     async def login():
         return {"ok": True}
 
+    @app.post("/auth/google")
+    async def google_login():
+        return {"ok": True}
+
     @app.post("/auth/register")
     async def register():
         return {"ok": True}
@@ -70,6 +74,14 @@ def test_get_passes_without_csrf(client):
 def test_auth_token_exempt(client):
     resp = client.post(
         "/auth/token", cookies={"access_token": "jwt", "csrf_token": "abc"}
+    )
+    assert resp.status_code == 200
+
+
+def test_auth_google_exempt(client):
+    """A stale access_token cookie must not block re-authenticating via Google."""
+    resp = client.post(
+        "/auth/google", cookies={"access_token": "jwt", "csrf_token": "abc"}
     )
     assert resp.status_code == 200
 

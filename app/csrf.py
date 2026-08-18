@@ -13,6 +13,7 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 EXEMPT_PATHS = {
     "/auth/token",
+    "/auth/google",
     "/auth/register",
     "/auth/forgot-password",
     "/auth/reset-password",
