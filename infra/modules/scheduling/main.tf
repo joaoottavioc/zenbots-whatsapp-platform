@@ -10,6 +10,14 @@ resource "aws_appautoscaling_target" "backend" {
   resource_id        = "service/${var.ecs_cluster_name}/${var.backend_service_name}"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
+
+  lifecycle {
+    # The scheduled actions below flip the live min_capacity between 0 and
+    # var.backend_desired_count directly via AWS's scheduler, independent of
+    # Terraform. Without this, any apply during business hours would fight
+    # the schedule and reset min_capacity back to the off-hours baseline.
+    ignore_changes = [min_capacity]
+  }
 }
 
 resource "aws_appautoscaling_target" "worker" {
@@ -19,6 +27,10 @@ resource "aws_appautoscaling_target" "worker" {
   resource_id        = "service/${var.ecs_cluster_name}/${var.worker_service_name}"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
+
+  lifecycle {
+    ignore_changes = [min_capacity]
+  }
 }
 
 # --- Scale DOWN at 7 PM BRT (10 PM UTC) weekdays ---
@@ -127,6 +139,10 @@ resource "aws_appautoscaling_target" "redis" {
   resource_id        = "service/${var.ecs_cluster_name}/${var.redis_service_name}"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
+
+  lifecycle {
+    ignore_changes = [min_capacity]
+  }
 }
 
 # Scale DOWN Redis 15 min AFTER backend/worker (10:15 PM UTC)

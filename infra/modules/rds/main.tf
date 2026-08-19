@@ -14,6 +14,10 @@ resource "aws_db_parameter_group" "this" {
   parameter {
     name  = "shared_preload_libraries"
     value = "pg_stat_statements"
+    # AWS always enforces pending-reboot for this specific parameter
+    # regardless of what's requested. Declaring it explicitly matches what
+    # RDS actually reports, so this stops showing as a perpetual diff.
+    apply_method = "pending-reboot"
   }
 
   tags = {
@@ -43,9 +47,9 @@ resource "aws_db_instance" "this" {
   vpc_security_group_ids = [var.security_group_id]
   parameter_group_name   = aws_db_parameter_group.this.name
 
-  multi_az            = var.multi_az
-  publicly_accessible = false
-  skip_final_snapshot = var.environment == "dev" ? true : false
+  multi_az                  = var.multi_az
+  publicly_accessible       = false
+  skip_final_snapshot       = var.environment == "dev" ? true : false
   final_snapshot_identifier = var.environment == "dev" ? null : "${var.project}-${var.environment}-final"
 
   backup_retention_period = var.backup_retention_days

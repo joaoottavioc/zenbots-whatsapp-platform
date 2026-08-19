@@ -188,7 +188,7 @@ module "ecs" {
   use_ssm_parameters   = true
 
   # Backend
-  backend_image         = local.backend_image
+  backend_image = local.backend_image
   # 0.5 vCPU is enough for dev traffic (single user); keep 2 GB for the
   # SentenceTransformer model. Saves ~$3.5/mo over 1 vCPU on-demand.
   backend_cpu           = 512
@@ -209,6 +209,9 @@ module "ecs" {
     { name = "FRONTEND_URL", value = "https://dev.zenbotz.com.br" },
     { name = "MP_REDIRECT_URI", value = "https://dev.zenbotz.com.br/pagamentos" },
     { name = "AWS_BUCKET_NAME", value = "zenbots-dev-menus" },
+    # Not a secret — Google OAuth Client IDs are meant to be public (shipped
+    # in frontend JS too), so this goes in plain env vars, not SSM.
+    { name = "GOOGLE_CLIENT_ID", value = "546810534942-t9dgalf56uuc2jb0apct6m90383i9asn.apps.googleusercontent.com" },
   ]
 
   backend_secrets = [

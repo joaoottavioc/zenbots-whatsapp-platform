@@ -131,6 +131,16 @@ resource "aws_instance" "nat" {
   tags = {
     Name = "${var.project}-${var.environment}-nat-instance"
   }
+
+  lifecycle {
+    # fck-nat publishes new AMI builds periodically; `most_recent = true`
+    # above means any unrelated apply would otherwise force-replace this
+    # instance (and its EIP association) to pick up the new AMI, causing a
+    # brief egress outage for every ECS task. AMI upgrades should be a
+    # deliberate `terraform apply -replace=module.nat.aws_instance.nat[0]`,
+    # not a side effect.
+    ignore_changes = [ami]
+  }
 }
 
 # Auto-recovery: restart instance if status checks fail
@@ -155,10 +165,10 @@ resource "aws_cloudwatch_metric_alarm" "nat_recovery" {
 # ------------------ Routes ------------------
 
 resource "aws_route" "private_nat" {
-  count          = length(var.private_route_table_ids)
-  route_table_id = var.private_route_table_ids[count.index]
+  count                  = length(var.private_route_table_ids)
+  route_table_id         = var.private_route_table_ids[count.index]
   destination_cidr_block = "0.0.0.0/0"
 
-  nat_gateway_id = var.nat_type == "gateway" ? aws_nat_gateway.this[0].id : null
+  nat_gateway_id       = var.nat_type == "gateway" ? aws_nat_gateway.this[0].id : null
   network_interface_id = var.nat_type == "instance" ? aws_instance.nat[0].primary_network_interface_id : null
 }
