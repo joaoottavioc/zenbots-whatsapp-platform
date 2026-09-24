@@ -79,6 +79,18 @@ import time as _time
 
 FREE_TIER_FOOTER = "\n\n_Atendimento por ZenBotZ®_"
 
+# Shown when a bot has no products yet — kept distinct from the generic
+# maintenance notice used by the real blocks (plan gate, widget disabled),
+# which reads as an outage. An empty catalogue is almost always a bot whose
+# menu hasn't been imported yet, so say that plainly. Deliberately promises
+# no human: the web widget can't tell an owner testing from a real customer,
+# and human takeover may be inactive for either.
+EMPTY_MENU_MESSAGE = (
+    "Olá! 👋 Nosso cardápio ainda não está disponível por aqui.\n\n"
+    "Estamos finalizando os últimos ajustes — volte em breve para "
+    "fazer seu pedido!"
+)
+
 
 async def _apply_free_tier_branding(text: str, phone_id: str) -> str:
     """Append the Free-tier footer when the bot behind `phone_id` is on Free.
@@ -726,13 +738,9 @@ async def _check_bot_has_products(
         return False
 
     logger.warning("No products configured: bot_id=%s", bot.id)
-    maintenance_msg = (
-        "Olá! Nosso atendimento automático está em manutenção no momento.\n\n"
-        "Um atendente retornará em breve. Obrigado pela compreensão! 🙏"
-    )
     await send_whatsapp_message(
         to=contact_number,
-        message=maintenance_msg,
+        message=EMPTY_MENU_MESSAGE,
         token=decrypt_value(bot.whatsapp_token),
         phone_id=bot.phone_number_id,
     )
@@ -4341,7 +4349,7 @@ async def process_chat_message(
                 logger.warning(
                     "No products configured for web message: bot_id=%s", bot.id
                 )
-                await _emit(_maintenance_msg)
+                await _emit(EMPTY_MENU_MESSAGE)
                 return
 
             # 8. Get or create the web contact (A1b synth lives in the
