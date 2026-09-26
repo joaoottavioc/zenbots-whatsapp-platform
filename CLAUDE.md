@@ -374,6 +374,8 @@ GitHub Actions workflows in `.github/workflows/`:
 
 1. **`pr-checks.yml`** — On PRs: Ruff lint + format (`lint`), pytest (`test`), deterministic simulation tests `pytest tests/simulation -m "not llm"` (`simulation`), Docker build validation (`docker-build`).
    - **`pr-simulation-llm.yml`** — On PRs labeled `run-simulation`: the LLM-backed simulation conversations (`-m llm`) with the real `OPENAI_API_KEY` secret. Same-repo branches only.
+   - **`claude.yml`** — Claude Code on GitHub: runs on `@claude` mentions (from OWNER/MEMBER/COLLABORATOR) and on issues labeled `agent-ready`. Works on `claude/*` branches and opens PRs against `develop`. Uses the Claude GitHub App plus the `ANTHROPIC_API_KEY` secret.
+   - **`claude-review.yml`** — Advisory automated review on every non-draft, same-repo PR to `develop`/`main`: correctness, token/PII leaks, HMAC/webhook checks, `bot_id` tenant isolation, broadcast-after-commit. It comments; it never approves.
 2. **`deploy-dev.yml`** — On push to `develop`: lint → test → build ARM64 image → ECR push → ECS RunTask migration → deploy backend + worker → 8-min stabilization wait → smoke test (`/health/ready`). Uses OIDC auth, cancel-in-progress.
 3. **`deploy-prod.yml`** — On push to `main`: same pipeline + manual approval gate + pre-migration RDS snapshot + zero-downtime deploy (min healthy 100%).
 4. **`terraform.yml`** — On `infra/**` changes: plan posted as PR comment, apply requires manual approval.

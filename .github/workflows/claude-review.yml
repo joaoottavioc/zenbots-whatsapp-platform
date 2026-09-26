@@ -1,0 +1,93 @@
+name: Claude Review
+
+# Automated review on every PR to develop and main. Advisory only: it
+# comments, it never approves or blocks. A human review is still required
+# (branch protection + CODEOWNERS).
+#
+# Action docs: https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
+# Based on examples/pr-review-comprehensive.yml. Pinned to v1.0.235 by SHA.
+
+on:
+  pull_request:
+    branches: [develop, main]
+    types: [opened, synchronize, ready_for_review, reopened]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Skip drafts, and fork PRs (secrets aren't available to them).
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write # Claude GitHub App auth (see claude.yml)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@756cc22e19660d20e8cc9496b4f242475a7f7790 # v1.0.235
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          track_progress: true
+          claude_args: |
+            --model claude-sonnet-5
+            --max-turns 30
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+            BASE: ${{ github.event.pull_request.base.ref }}
+
+            You are reviewing a pull request to ZenBotZ, a multi-tenant SaaS in which
+            each restaurant (a `bot_id`) runs a WhatsApp/web ordering bot. Read CLAUDE.md
+            first, especially "Agent workflow" and "Key Architecture Decisions". Review
+            only the diff (`gh pr diff`), reading surrounding code as needed.
+
+            Report real problems, most severe first. Skip style nits that ruff already
+            enforces, and don't praise. For each finding, leave an inline comment on the
+            exact line that says what breaks and under which input or state. Then post ONE
+            summary comment: a verdict (no blocking issues / needs changes), then the
+            findings as a short list. If you find nothing, say so in one line.
+
+            Check, in this order:
+
+            1. Correctness: logic errors, unhandled None/empty cases, wrong awaits,
+               broken error handling, cart state machine (CartState) transitions that
+               strand a customer, and migrations that add a second Alembic head or
+               aren't reversible.
+            2. Security:
+               - Tokens and secrets: WhatsApp/Mercado Pago/OpenAI tokens, JWTs,
+                 `webhook_token` and `ENCRYPTION_KEY` must never be logged, returned in
+                 API responses or error messages, or stored unencrypted (payment and
+                 WhatsApp tokens go through app/encryption.py).
+               - PII: customer phone numbers must go through `mask_phone()` in logs; no
+                 addresses, names or message bodies in logs or exception messages.
+               - Webhooks: Mercado Pago handlers must keep `require_mp_signature` (HMAC
+                 SHA-256) AND the per-order `webhook_token` check; the WhatsApp webhook
+                 must keep signature verification. Flag any path that bypasses them or
+                 fails open.
+               - LLM output shown to customers must pass through app/sanitize.py.
+               - Auth: new routes need `get_current_user`, plus ownership checks.
+            3. Multi-tenant isolation: every query touching Product, Order, Contact,
+               ShoppingCart, ConversationHistory, PaymentConfig, UsageEvent and similar
+               must be scoped by `bot_id`, and route handlers must verify the bot belongs
+               to the current user. Redis keys, SSE channels (`dashboard_events:{bot_id}`)
+               and caches must include the bot_id. Flag anything that could let one
+               restaurant read or change another's data.
+            4. Broadcast after commit (CLAUDE.md decision #11): `broadcast_order_update`
+               and any other Redis PubSub/SSE publish must happen AFTER
+               `session.commit()`, never before it or inside an uncommitted transaction.
+               Also flag (decision #10) `session.refresh(obj, attribute_names=[...])` in
+               async code, and ORM attributes read after commit/rollback without first
+               being captured into locals.
+            5. Tests: a behavior change without a test, or a bug fix without a test that
+               would have failed before the fix.
