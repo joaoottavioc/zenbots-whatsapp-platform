@@ -63,6 +63,65 @@ jobs:
       - run: pip install -r requirements.txt
       - run: pytest tests/ -v --tb=short --ignore=tests/integration --ignore=tests/simulation
 
+  # Deterministic slice of tests/simulation (no LLM). The LLM-backed
+  # conversations run in pr-simulation-llm.yml when the PR carries the
+  # `run-simulation` label.
+  simulation:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg14
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: botbuilder_sim
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      redis:
+        image: redis:alpine
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/botbuilder_sim
+      REDIS_URL: redis://localhost:6379/0
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      SIM_REDIS_URL: redis://localhost:6379/1
+      SECRET_KEY: test-secret-key-for-ci
+      ENCRYPTION_KEY: TwG3wHb7SKizcVoU0bi3V7x3ODONyZCgdJr8jPK44L0=
+      OPENAI_API_KEY: sk-test-ci-placeholder
+      ENVIRONMENT: test
+      LOG_FORMAT: text
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Cache embedding model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-paraphrase-multilingual-MiniLM-L12-v2
+      # Fresh DB bootstrap: create_all + alembic stamp head (same as ECS).
+      - run: python run_migrations.py
+      - run: pytest tests/simulation -m "not llm" -v --tb=short
+
   docker-build:
     runs-on: ubuntu-latest
     steps:

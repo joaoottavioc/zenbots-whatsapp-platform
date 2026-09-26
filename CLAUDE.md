@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The platform is in **active development** with the dev environment live on AWS. Key stats:
 - **Test suite**: ~1,891 tests collected (`pytest --collect-only`), ~55% codebase coverage (CI green on Python 3.10; ~9 fail locally on 3.14 due to bcrypt compat)
-- **Tech debt**: Tracked across 10 backlog files in `tech_debt/`. Major refactorings complete (God Function split, enum-based state machine, security hardening, observability stack). See `tech_debt/` for full status.
+- **Tech debt**: Tracked in `tech_debt/` and `plan/`, which are **gitignored and exist only on the owner's machine** (this repo is public; they list fixed CVEs and strategy). Agents working from a clone or in CI won't have them — **GitHub Issues is the agent-facing backlog** (created from the local files by `scripts/backlog_to_issues.sh`). Major refactorings complete (God Function split, enum-based state machine, security hardening, observability stack).
 - **Production readiness**: ~45-50% overall. Critical P0 blockers remain in security and data integrity (see `tech_debt/backlog_production.md`).
 - **WhatsApp Embedded Signup**: Working in dev mode (Facebook app review required for production)
 - **Deployment**: Dev environment **fully operational** on AWS (ECS Fargate + RDS + ElastiCache). Production environment not yet provisioned. Full details in `docs/aws_architecture.md`.
@@ -62,6 +62,48 @@ pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 arq app.worker.WorkerSettings --watch /code
 ```
+
+## Agent workflow
+
+Rules for AI agents (Claude Code locally, `claude.yml` on GitHub, or any other) shipping code here. A human approves every merge and every production deploy; agents never do either.
+
+### Picking up work
+- Work comes from **GitHub Issues labeled `agent-ready`**. `tech_debt/` and `plan/` are not in the repo (see Current Maturity).
+- On GitHub: comment `@claude` on the issue, or a maintainer adds the `agent-ready` label, which triggers `claude.yml`.
+- If an issue is ambiguous, touches a CODEOWNERS path in a way the issue doesn't clearly authorize, or needs a secret, an AWS change, or a product decision, **stop and ask in the issue** instead of guessing.
+
+### Branches and PRs
+- Branch from `develop`. Names: `claude/<issue#>-<slug>` (the GitHub action uses `claude/` automatically), or `fix/<slug>`, `feat/<slug>`, `chore/<slug>`, `test/<slug>`.
+- Open PRs **against `develop`**, never `main`. `develop → main` promotion is a human release decision.
+- One issue per PR. Link it (`Closes #N`). Say in the description what you ran and what you did not verify.
+
+### Before opening a PR
+Run these and make sure they pass. Use Python 3.10, via Docker or CI; on 3.14 about 9 bcrypt tests fail locally, which is known.
+```bash
+ruff check app/ tests/ && ruff format --check app/ tests/
+pytest tests/ --ignore=tests/integration --ignore=tests/simulation
+pytest tests/simulation -m "not llm"            # needs Postgres + Redis (docker compose up)
+```
+- A bug fix starts with a **failing test** that reproduces it.
+- If you touch `app/whatsapp.py`, `app/prompt_central.py`, `app/semantic_router.py`, `app/item_extraction.py` or `app/tools_definition.py`, also run `pytest tests/simulation -m llm` locally (the post-edit hook does this in Docker), and ask for the **`run-simulation`** label on the PR. Conversation-quality changes must also pass the corpus acceptance rule (see "Conversation quality loop").
+- New config comes from an env var, is documented in `.env.example`, and is **off when unset**. Never commit secrets, real phone numbers, or customer data. Simulations use the fake phone `5500099990001`.
+
+### Paths that need extra care
+- **CODEOWNERS paths** (review by @joaoottavioc is required): `app/payment_*.py`, `app/webhook_security.py`, `app/auth.py`, `app/encryption.py`, `app/billing_routes.py`, `alembic/versions/`, `infra/`, `.github/workflows/`, `.claude/hooks/`.
+- **Invariants that reviews check** (see Key Architecture Decisions):
+  - broadcast only **after** `session.commit()` (#11)
+  - no `session.refresh(obj, attribute_names=[...])` in async code; capture scalars before commit/rollback (#10)
+  - every query on tenant data is **scoped by `bot_id`**; one restaurant must never see another's data
+  - customer phone numbers go through `mask_phone()` in logs
+  - LLM output goes through `sanitize.py` before reaching customers
+  - payment webhooks keep HMAC plus per-order token verification
+- **Migrations**: `alembic heads` must show a single head. Never edit an applied migration; add a new one. Data seeds (like `plan` rows) must be idempotent.
+
+### Agents never
+- Deploy, promote, or push to `main` or `develop` (branch protection enforces this; don't try to work around it).
+- Edit `deploy-dev.yml`, `deploy-prod.yml`, `terraform.yml` or `infra/` unless the issue explicitly asks for it and a human reviews it.
+- Run `terraform apply`, `alembic upgrade` against AWS, `aws ecs update-service`, or anything that changes AWS or production data.
+- Add, rotate or print secrets. Ask the human to do it.
 
 ## Architecture
 
@@ -328,9 +370,10 @@ Restaurant owners connect their WhatsApp Business number through Facebook's Embe
 
 ### CI/CD Pipelines
 
-Four GitHub Actions workflows in `.github/workflows/`:
+GitHub Actions workflows in `.github/workflows/`:
 
-1. **`pr-checks.yml`** — On PRs: Ruff lint + format, pytest, Docker build validation.
+1. **`pr-checks.yml`** — On PRs: Ruff lint + format (`lint`), pytest (`test`), deterministic simulation tests `pytest tests/simulation -m "not llm"` (`simulation`), Docker build validation (`docker-build`).
+   - **`pr-simulation-llm.yml`** — On PRs labeled `run-simulation`: the LLM-backed simulation conversations (`-m llm`) with the real `OPENAI_API_KEY` secret. Same-repo branches only.
 2. **`deploy-dev.yml`** — On push to `develop`: lint → test → build ARM64 image → ECR push → ECS RunTask migration → deploy backend + worker → 8-min stabilization wait → smoke test (`/health/ready`). Uses OIDC auth, cancel-in-progress.
 3. **`deploy-prod.yml`** — On push to `main`: same pipeline + manual approval gate + pre-migration RDS snapshot + zero-downtime deploy (min healthy 100%).
 4. **`terraform.yml`** — On `infra/**` changes: plan posted as PR comment, apply requires manual approval.

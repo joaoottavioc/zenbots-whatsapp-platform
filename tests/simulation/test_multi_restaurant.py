@@ -36,6 +36,7 @@ from app.models import (
 from app.embedding_service import embed_async
 
 from .menus import sushi, burger, hotdog, pizza, acai
+from ._env import SIM_REDIS_URL
 
 logger = logging.getLogger(__name__)
 
@@ -263,7 +264,7 @@ class MultiSimContext:
 
         wh.send_whatsapp_message = capture_send
         try:
-            pool = aioredis.from_url("redis://redis:6379/1")
+            pool = aioredis.from_url(SIM_REDIS_URL)
             ctx = {"redis": pool}
             await process_whatsapp_message(ctx, self._build_payload(text))
             await pool.aclose()

@@ -1,0 +1,96 @@
+name: PR Simulation (LLM)
+
+# LLM-backed conversation tests from tests/simulation (marker `llm`).
+# Opt-in per PR: add the `run-simulation` label. Kept out of pr-checks.yml so
+# label events don't re-run lint/test/docker-build. Uses the real
+# OPENAI_API_KEY secret (gpt-4o-mini, roughly $0.05-0.20 per run).
+#
+# Secrets are not passed to workflows triggered from forks, so this only runs
+# for branches in this repository.
+
+on:
+  pull_request:
+    branches: [develop, main]
+    types: [opened, synchronize, reopened, labeled]
+
+concurrency:
+  group: pr-simulation-llm-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  simulation-llm:
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'run-simulation') &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.action != 'labeled' || github.event.label.name == 'run-simulation')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: pgvector/pgvector:pg14
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: botbuilder_sim
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      redis:
+        image: redis:alpine
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/botbuilder_sim
+      REDIS_URL: redis://localhost:6379/0
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      SIM_REDIS_URL: redis://localhost:6379/1
+      SECRET_KEY: test-secret-key-for-ci
+      ENCRYPTION_KEY: TwG3wHb7SKizcVoU0bi3V7x3ODONyZCgdJr8jPK44L0=
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ENVIRONMENT: test
+      LOG_FORMAT: text
+    steps:
+      - name: Require OPENAI_API_KEY
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "::error::OPENAI_API_KEY secret is not set; cannot run LLM simulation."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Cache embedding model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-paraphrase-multilingual-MiniLM-L12-v2
+      - run: python run_migrations.py
+      # Same scope as the local post-edit hook: the fixed "Sabor da Serra"
+      # menu suites. The multi/random/real-restaurant suites are for the
+      # weekly corpus run, not per-PR.
+      - run: >-
+          pytest tests/simulation -m llm -v --tb=short
+          --ignore=tests/simulation/test_multi_restaurant.py
+          --ignore=tests/simulation/test_random_restaurants.py
+          --ignore=tests/simulation/test_real_restaurants.py
+          --ignore=tests/simulation/test_real_restaurants_v2.py

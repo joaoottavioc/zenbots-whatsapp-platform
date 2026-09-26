@@ -24,6 +24,7 @@ from app.database import async_session
 from app.models import Bot, Contact, ShoppingCart, CartItem, Product
 
 from .real_restaurant_setup import RESTAURANTS, TEST_SCENARIOS
+from ._env import SIM_REDIS_URL
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +109,7 @@ class RealSimContext:
 
         wh.send_whatsapp_message = capture_send
         try:
-            pool = aioredis.from_url("redis://redis:6379/1")
+            pool = aioredis.from_url(SIM_REDIS_URL)
             ctx = {"redis": pool}
             await process_whatsapp_message(ctx, self._build_payload(text_body))
             await pool.aclose()
