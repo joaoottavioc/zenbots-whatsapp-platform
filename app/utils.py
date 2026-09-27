@@ -8,16 +8,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlmodel.ext.asyncio.session import AsyncSession
 from app.database import get_session
 from app.monitoring import record_api_usage
+from app.pii import mask_phone  # noqa: F401  (re-exported for existing callers)
 
 logger = logging.getLogger(__name__)
-
-
-def mask_phone(phone: str) -> str:
-    """Mask a phone number, keeping first 4 and last 2 digits."""
-    digits = re.sub(r"[^\d]", "", phone)
-    if len(digits) <= 6:
-        return "***"
-    return digits[:4] + "***" + digits[-2:]
 
 
 router = APIRouter(prefix="/utils", tags=["Utils"])

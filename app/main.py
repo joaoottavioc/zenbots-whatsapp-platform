@@ -3,8 +3,11 @@ import os
 from contextlib import asynccontextmanager
 
 from app.logging_config import setup_logging
+from app.sentry_setup import init_sentry
 
 setup_logging()
+# No-op unless SENTRY_DSN is set. Must run before FastAPI() is created.
+init_sentry("backend")
 
 from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware

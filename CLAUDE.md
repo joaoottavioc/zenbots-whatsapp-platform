@@ -105,6 +105,36 @@ pytest tests/simulation -m "not llm"            # needs Postgres + Redis (docker
 - Run `terraform apply`, `alembic upgrade` against AWS, `aws ecs update-service`, or anything that changes AWS or production data.
 - Add, rotate or print secrets. Ask the human to do it.
 
+### Runbook: fixing a production error
+
+Errors reach GitHub as issues labeled `bug` + `agent-ready`, created by Sentry (setup: `docs/error_to_issue.md`). To fix one:
+
+1. **Get the `trace_id`.** It is in the issue body, or on the Sentry event linked from the issue (tag `trace_id`; `bot_id`, `component` and `environment` are there too). If the issue has no trace_id and `SENTRY_AUTH_TOKEN` is available:
+   ```bash
+   curl -s -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
+     "https://sentry.io/api/0/organizations/<org>/issues/<sentry-issue-id>/events/latest/" | jq '.tags'
+   ```
+   No trace_id at all (the error happened outside a message, e.g. a cron): work from the stack trace and `component`.
+2. **Read the logs for that trace.** CloudWatch Logs Insights on `/ecs/zenbots-<env>/worker` (message processing) and `/ecs/zenbots-<env>/backend` (HTTP):
+   ```
+   fields @timestamp, levelname, name, message, bot_id, contact_id
+   | filter trace_id = "<trace_id>"
+   | sort @timestamp asc
+   ```
+   Agents running in GitHub Actions have **no AWS access**. Ask in the issue for a human to run the query and paste the output. Logs from before 2026-09-27 have `trace_id: null` on every `app.*` logger (a logging bug fixed in the agent-ready PR), so older errors can only be correlated by timestamp.
+3. **Read what the trace called.** `usage_events` records every external call (OpenAI, Google Maps, WhatsApp, Mercado Pago, S3) with the same trace_id:
+   ```sql
+   SELECT created_at, service, operation, model, success, duration_ms, cost_usd
+   FROM usage_events WHERE trace_id = '<trace_id>' ORDER BY created_at;
+   ```
+   A `success = false` row usually points at the failing dependency. `conversation_history.trace_id` has the customer's messages for that turn: read it only to understand the flow, and **never paste it into issues, PRs or tests**. Write synthetic messages instead.
+4. **Reproduce with a failing test first.** Put it in the closest existing `tests/test_*.py`, mocking external services as the neighbouring tests do (`tests/test_pii_error_handler.py` shows how to drive `process_whatsapp_message` down an error path). Run it and confirm it fails **for the reason in the stack trace**, not for some other reason.
+5. **Fix the cause**, not the symptom. Wrapping the failing line in `try/except` is not a fix unless the error is truly expected. Keep the change minimal, then run the checks in "Before opening a PR".
+6. **Open a PR to `develop`** with `Fixes #<issue>`, the trace_id, a one-paragraph root cause, the test name, and what you could not verify (e.g. "no AWS access, logs not checked").
+7. **Can't reproduce, or the fix needs a secret, infra or a product decision?** Comment what you found on the issue and stop. Don't ship a guess.
+
+Never copy phone numbers, addresses, names, message text or tokens from logs or Sentry into issues, PRs, commits or test fixtures. Use `5500099990001` and invented data.
+
 ## Architecture
 
 ### Two-Process Architecture
@@ -301,7 +331,9 @@ The observability stack is implemented in Phases 0-3 (Phases 4-5 partially done)
 - `GET /monitoring/leaderboard?days=N&limit=N` — ranks bots by cost
 - `GET /monitoring/alerts/stream` — SSE stream for real-time anomaly alerts
 
-**Structured logging**: JSON format in production (`python-json-logger`), text in dev. Fields: `asctime`, `levelname`, `name`, `message`, `trace_id`, `bot_id`, `contact_id`. Configured via `LOG_FORMAT=text` env var for local dev.
+**Structured logging**: JSON format in production (`python-json-logger`), text in dev. Fields: `asctime`, `levelname`, `name`, `message`, `trace_id`, `bot_id`, `contact_id`. Configured via `LOG_FORMAT=text` env var for local dev. `ContextFilter` must sit on the **handler**: a filter on the root logger isn't applied to records from child loggers, which until 2026-09-27 left `trace_id`/`bot_id` null on every `app.*` line.
+
+**Error reporting (Sentry)**: `app/sentry_setup.py`, off unless `SENTRY_DSN` is set. Captures unhandled exceptions plus every `logger.error` record, tags each event with `trace_id`/`bot_id`/`contact_id`/`channel`/`component`/`environment`, and scrubs PII and credentials (`app/pii.py`) before sending. Stack-frame locals and request bodies are never sent. New errors become GitHub issues; see `docs/error_to_issue.md` and the runbook in "Agent workflow".
 
 **Tracing**: Every WhatsApp message gets a 12-char hex `trace_id` generated in `process_whatsapp_message`, injected into all logs and `usage_events.trace_id` for end-to-end correlation.
 
@@ -410,6 +442,7 @@ Loaded from `.env` locally, from AWS Secrets Manager in AWS. Key variables:
 - `CORS_ORIGINS` or `CORS_ORIGIN_REGEX` (production CORS — wildcard only in dev)
 - `ENVIRONMENT` (controls CORS strictness, logging level, log format)
 - `LOG_FORMAT` (`text` for local dev, JSON in production)
+- `SENTRY_DSN` (optional; empty = Sentry off), `SENTRY_TRACES_SAMPLE_RATE` (default 0), `SENTRY_RELEASE` (optional)
 
 ## Key Architecture Decisions
 

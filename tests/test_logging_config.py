@@ -109,6 +109,49 @@ class TestSetupLogging:
         assert logging.getLogger("httpcore").level >= logging.WARNING
         assert logging.getLogger("sqlalchemy.engine").level >= logging.WARNING
 
+    def _capture(self, log_format: str):
+        import io
+
+        with patch.dict("os.environ", {"LOG_FORMAT": log_format}, clear=False):
+            setup_logging()
+        stream = io.StringIO()
+        logging.getLogger().handlers[0].stream = stream
+        return stream
+
+    def test_child_logger_records_carry_context_json(self):
+        """Regression: the filter sat only on the root *logger*, which Python
+        does not consult for records propagated from child loggers — so every
+        `logging.getLogger(__name__)` line shipped trace_id/bot_id = null."""
+        import json
+
+        stream = self._capture("json")
+        t1 = trace_id_var.set("abc123abc123")
+        t2 = current_bot_id.set(42)
+        try:
+            logging.getLogger("app.whatsapp").warning("child line")
+        finally:
+            trace_id_var.reset(t1)
+            current_bot_id.reset(t2)
+
+        record = json.loads(stream.getvalue().strip().splitlines()[-1])
+        assert record["name"] == "app.whatsapp"
+        assert record["trace_id"] == "abc123abc123"
+        assert record["bot_id"] == 42
+
+    def test_child_logger_text_format_does_not_error(self):
+        """In text mode the missing attribute raised a formatting error and
+        the line was lost."""
+        stream = self._capture("text")
+        t1 = trace_id_var.set("feedfeedfeed")
+        try:
+            with patch("logging.Handler.handleError") as handle_error:
+                logging.getLogger("app.worker").warning("child line")
+        finally:
+            trace_id_var.reset(t1)
+
+        handle_error.assert_not_called()
+        assert "trace=feedfeedfeed" in stream.getvalue()
+
     def teardown_method(self):
         """Restore root logger to avoid polluting other tests."""
         root = logging.getLogger()
