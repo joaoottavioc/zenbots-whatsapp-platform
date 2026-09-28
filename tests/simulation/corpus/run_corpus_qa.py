@@ -80,6 +80,27 @@ BASE_URL = "http://localhost:8000"
 EMAIL = "test1@exemplo.com"
 PASSWORD = "Test123$"
 
+
+def _use_compose() -> bool:
+    """True when this script should shell out to `docker compose exec`.
+
+    Historically "docker on PATH" meant "running on the dev host next to the
+    compose stack". CI runners also have docker, so CORPUS_DIRECT=1 forces
+    the in-process path (direct DB access, pytest in this interpreter).
+    """
+    import shutil
+
+    if os.environ.get("CORPUS_DIRECT") == "1":
+        return False
+    return shutil.which("docker") is not None
+
+
+def _restaurant_count() -> int:
+    """Restaurants per random-pool run (CORPUS_RESTAURANTS, default 5)."""
+    val = os.environ.get("CORPUS_RESTAURANTS", "").strip()
+    return max(1, int(val)) if val.isdigit() else 5
+
+
 # Import phrase bank — handle both module and script execution
 try:
     from tests.simulation.corpus.phrase_bank import (
@@ -315,9 +336,8 @@ def gen_scenarios(products, unavail_indices, seed: str | int | None = None):
 
 async def run_sql(sql):
     """Execute SQL — tries docker psql first, falls back to app DB engine."""
-    import shutil
 
-    if shutil.which("docker"):
+    if _use_compose():
         subprocess.run(
             [
                 "docker",
@@ -423,9 +443,8 @@ async def pre_cleanup():
     invocation kneecapping the first one's pytest sample loop. Bots that
     legitimately leaked from a crashed run (>15 min old) are still cleaned.
     """
-    import shutil
 
-    if shutil.which("docker"):
+    if _use_compose():
         await run_sql("""DO $$ DECLARE _bids int[]; _cids int[]; _carts int[];
         BEGIN
           SELECT ARRAY(SELECT id FROM bot WHERE (phone_number_id LIKE 'rand-test-%'
@@ -465,9 +484,8 @@ async def pre_cleanup():
 async def cleanup_bots(bot_ids):
     if not bot_ids:
         return
-    import shutil
 
-    if shutil.which("docker"):
+    if _use_compose():
         ids = ",".join(str(x) for x in bot_ids)
         run_sql(f"""DO $$ DECLARE _bids int[]:=ARRAY[{ids}]; _cids int[]; _carts int[];
         BEGIN
@@ -634,8 +652,23 @@ async def _main_locked():
     else:
         # Random mode (historical): prefer non-template entries when picking
         # — fall back to templates only if there aren't enough Tier 2.
-        non_template = [e for e in validated if e.get("menu_type") != "template"]
-        template_only = [e for e in validated if e.get("menu_type") == "template"]
+        # Only sample entries whose extraction is on disk: most real-restaurant
+        # extractions are gitignored, so a clone (e.g. CI) only has templates.
+        loadable = [
+            e
+            for e in validated
+            if (CORPUS / "extractions" / f"{e['id']}.json").exists()
+        ]
+        if len(loadable) < len(validated):
+            missing = Counter(
+                e.get("menu_type", "unknown") for e in validated if e not in loadable
+            )
+            print(
+                f"NOTE: {len(validated) - len(loadable)} validated entries have no "
+                f"extraction file here {dict(missing)}; sampling from {len(loadable)}."
+            )
+        non_template = [e for e in loadable if e.get("menu_type") != "template"]
+        template_only = [e for e in loadable if e.get("menu_type") == "template"]
         random.shuffle(non_template)
         random.shuffle(template_only)
         pick_pool = non_template + template_only
@@ -646,9 +679,9 @@ async def _main_locked():
             if cat not in seen_cats:
                 selected.append(e)
                 seen_cats.add(cat)
-            if len(selected) >= 5:
+            if len(selected) >= _restaurant_count():
                 break
-        while len(selected) < 5:
+        while len(selected) < _restaurant_count():
             for e in pick_pool:
                 if e not in selected:
                     selected.append(e)
@@ -767,14 +800,20 @@ async def _main_locked():
         return
 
     # Subscriptions
+    # user_id looked up rather than assumed to be 1 (not true on a dev DB
+    # with other users, nor guaranteed in CI).
     vals = ",".join(
-        f"({b['bot_id']},1,'rand-sub-{b['bot_id']}','authorized',"
-        f"'2027-04-02',NOW(),NOW(),'pro_monthly')"
+        f"({b['bot_id']},(SELECT id FROM \"user\" WHERE email='{EMAIL}'),"
+        f"'rand-sub-{b['bot_id']}','authorized',"
+        f"NOW() + INTERVAL '1 year',NOW(),NOW(),'pro_monthly',false,false)"
         for b in bots.values()
     )
     await run_sql(
         "INSERT INTO subscription (bot_id,user_id,mp_subscription_id,"
-        f"status,current_period_end,created_at,updated_at,plan_type) VALUES {vals};"
+        # is_founder / cancel_at_period_end: NOT NULL with no server default
+        # on a create_all-bootstrapped DB, so set them explicitly.
+        "status,current_period_end,created_at,updated_at,plan_type,"
+        f"is_founder,cancel_at_period_end) VALUES {vals};"
     )
 
     # Write test data
@@ -804,9 +843,7 @@ async def _main_locked():
 
     started_at = datetime.now(timezone.utc).isoformat()
 
-    import shutil
-
-    if shutil.which("docker"):
+    if _use_compose():
         test_cmd = [
             "docker",
             "compose",
@@ -1363,10 +1400,9 @@ def _upload_report(report: dict):
     back to `docker compose exec` when running on the host. Either path that
     succeeds returns early; only a true failure falls through to local save.
     """
-    import shutil
 
     try:
-        if not shutil.which("docker"):
+        if not _use_compose():
             # Inside Docker (e.g. invoked via the /admin/corpus/run-tests
             # endpoint as an in-container subprocess) — import and call directly.
             from app.qa_reports import upload_qa_report

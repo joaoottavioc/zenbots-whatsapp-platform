@@ -14,6 +14,8 @@ After the command finishes, summarize the results in a table showing:
 - Each restaurant name and category
 - Per-scenario pass/fail (add_single, add_multi, unavailable, remove, suggestions, checkout, greeting)
 - Overall score (e.g., 30/35)
-- Any notable failures and which failure mode they match (F7, F8, F9, F10)
+- Any notable failures and which failure mode they match (F7, F8, F9, F10 — defined in CLAUDE.md "Conversation quality loop")
+
+For the full report (cost per conversation, grouping, verdict vs the CI baseline) run `python -m scripts.corpus_qa_report --report <run json> --pytest-log <log> --out-dir corpus-qa` inside the backend container.
 
 Compare the score to the historical baseline (~89% expected).

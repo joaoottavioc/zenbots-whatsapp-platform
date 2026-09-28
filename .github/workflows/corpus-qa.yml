@@ -1,0 +1,198 @@
+name: Corpus QA
+
+# Weekly conversation-quality check: runs the corpus QA harness
+# (tests/simulation/corpus/run_corpus_qa.py) against real menus with the real
+# LLM, compares with the CI baseline (eval/ci_corpus_baseline.json), and
+# opens/updates the issue "Corpus QA report <date>" with the score, failures
+# by mode, cost per conversation and improvement proposals.
+#
+# Population note: CI only has the corpus menus whose extractions are
+# committed (the `template` tier). Real-restaurant extractions are gitignored,
+# so scores here are NOT comparable to eval/latest.json. See CLAUDE.md
+# "Conversation quality loop".
+#
+# Dispatch it on a PR branch ("Use workflow from" → the branch) to apply the
+# acceptance rule to a conversation-quality change.
+#
+# Secrets: OPENAI_API_KEY (required), ANTHROPIC_API_KEY (proposals; optional).
+
+on:
+  schedule:
+    - cron: "0 9 * * 1" # Mondays 09:00 UTC (06:00 BRT)
+  workflow_dispatch:
+    inputs:
+      restaurants:
+        description: "Restaurants to sample (more = less noise, more cost)"
+        default: "5"
+      samples:
+        description: "Runs per restaurant (>1 detects flaky scenarios, F8)"
+        default: "1"
+      proposals:
+        description: "Ask Claude for improvement proposals"
+        type: boolean
+        default: true
+
+concurrency:
+  group: corpus-qa-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  corpus-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    services:
+      postgres:
+        image: pgvector/pgvector:pg14
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: botbuilder_qa
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      redis:
+        image: redis:alpine
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/botbuilder_qa
+      REDIS_URL: redis://localhost:6379/0
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      SIM_REDIS_URL: redis://localhost:6379/1
+      SECRET_KEY: test-secret-key-for-ci
+      ENCRYPTION_KEY: TwG3wHb7SKizcVoU0bi3V7x3ODONyZCgdJr8jPK44L0=
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ENVIRONMENT: test
+      LOG_FORMAT: text
+      PYTHONIOENCODING: utf-8
+      # run_corpus_qa.py: use direct DB/pytest instead of `docker compose exec`
+      CORPUS_DIRECT: "1"
+      CORPUS_RESTAURANTS: ${{ inputs.restaurants || '5' }}
+      CORPUS_SAMPLES: ${{ inputs.samples || '1' }}
+    steps:
+      - name: Require OPENAI_API_KEY
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "::error::OPENAI_API_KEY secret is not set; the corpus run needs the real LLM."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+      - run: pip install -r requirements.txt anthropic==1.9.0
+      - name: Cache embedding model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-paraphrase-multilingual-MiniLM-L12-v2
+
+      - name: Bootstrap database
+        run: |
+          python run_migrations.py
+          python -m scripts.ci_seed_qa_user
+
+      - name: Start backend
+        run: |
+          nohup uvicorn app.main:app --host 127.0.0.1 --port 8000 > backend.log 2>&1 &
+          python - <<'EOF'
+          import sys, time, urllib.request
+          for _ in range(60):
+              try:
+                  body = urllib.request.urlopen("http://127.0.0.1:8000/health/ready", timeout=5).read()
+                  print(body.decode()[:300]); sys.exit(0)
+              except Exception:
+                  time.sleep(3)
+          sys.exit("backend did not become ready in 180s")
+          EOF
+
+      - name: Run corpus QA
+        id: run
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          python tests/simulation/corpus/run_corpus_qa.py 2>&1 | tee corpus.log
+
+      - name: Build report
+        id: report
+        env:
+          ANTHROPIC_API_KEY: ${{ (inputs.proposals || github.event_name == 'schedule') && secrets.ANTHROPIC_API_KEY || '' }}
+        run: |
+          mkdir -p corpus-qa
+          REPORT=$(find .claude/simulation-reports/runs -name 'corpus_*.json' \
+            -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2- || true)
+          if [ -n "$REPORT" ]; then
+            python -m scripts.corpus_qa_report --report "$REPORT" --pytest-log corpus.log \
+              --out-dir corpus-qa --proposals
+            cp "$REPORT" corpus-qa/run.json
+          else
+            echo "failed-run" > corpus-qa/verdict.txt
+            {
+              echo "**Verdict: ⚠️ failed-run** — the harness produced no report."
+              echo
+              echo "Last lines of the run log:"
+              echo '```'
+              tail -n 60 corpus.log 2>/dev/null || echo "(no log)"
+              echo '```'
+            } > corpus-qa/report.md
+          fi
+          echo "verdict=$(cat corpus-qa/verdict.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-qa-${{ github.run_id }}
+          path: |
+            corpus-qa/
+            corpus.log
+            backend.log
+          if-no-files-found: ignore
+
+      - name: Open or update the report issue
+        if: always() && steps.report.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          TITLE="Corpus QA report $(date -u +%F)"
+          if [ "$GITHUB_REF_NAME" != "$DEFAULT_BRANCH" ]; then
+            TITLE="$TITLE ($GITHUB_REF_NAME)"
+          fi
+          # GitHub caps issue bodies at 65,536 characters.
+          head -c 60000 corpus-qa/report.md > body.md
+          gh label create corpus-qa --color c5def5 \
+            --description "Weekly conversation-quality report" --force >/dev/null
+          NUMBER=$(gh issue list --state open --label corpus-qa --limit 50 \
+            --json number,title --jq ".[] | select(.title == \"$TITLE\") | .number" | head -1)
+          if [ -n "$NUMBER" ]; then
+            gh issue edit "$NUMBER" --body-file body.md
+            echo "Updated issue #$NUMBER"
+          else
+            gh issue create --title "$TITLE" --body-file body.md --label corpus-qa
+          fi
+
+      - name: Fail on regression
+        if: steps.report.outputs.verdict == 'regression' || steps.report.outputs.verdict == 'failed-run'
+        run: |
+          echo "::error::Corpus QA verdict: ${{ steps.report.outputs.verdict }} (see the issue / report.md)"
+          exit 1

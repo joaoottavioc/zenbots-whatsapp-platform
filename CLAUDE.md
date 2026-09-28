@@ -135,6 +135,38 @@ Errors reach GitHub as issues labeled `bug` + `agent-ready`, created by Sentry (
 
 Never copy phone numbers, addresses, names, message text or tokens from logs or Sentry into issues, PRs, commits or test fixtures. Use `5500099990001` and invented data.
 
+### Conversation quality loop
+
+`corpus-qa.yml` runs every Monday at 09:00 UTC, and on demand via `workflow_dispatch`. It drives the corpus QA harness (`tests/simulation/corpus/run_corpus_qa.py`) with the real LLM against real menus, then `scripts/corpus_qa_report.py` opens or updates the issue **"Corpus QA report <date>"** (label `corpus-qa`). The issue contains the score against the CI baseline, failures by mode, cost per conversation, and 3–5 testable proposals from Claude.
+
+- **Score** = `comprehension_pass_rate`: the share of scored conversations where the bot produced the right cart or reply. **Cost per conversation** = the sum of `usage_events.cost_usd` during the run ÷ conversations (tests run minus skipped).
+- **Population:** CI only has the corpus menus whose extractions are committed (the 100 `template`-tier menus). The 84 real-restaurant extractions are gitignored, so CI numbers are compared only with **`eval/ci_corpus_baseline.json`**, never with `eval/latest.json` (all 184 menus). Getting parity needs a read-only S3/OIDC role in `infra/`, which is not done yet.
+- **Noise:** each run samples 5 random restaurants (~105 conversations), so ±5pp swings between identical runs are normal. That is why the rule below has a noise band.
+
+**Acceptance rule.** A PR that changes conversation behaviour (`app/whatsapp.py`, `app/prompt_central.py`, `app/semantic_router.py`, `app/item_extraction.py`, `app/tools_definition.py`, or prompts/examples inside them) may be merged only if a `corpus-qa` run **on the PR's branch** (Actions → Corpus QA → Run workflow → pick the branch) reports verdict **pass**:
+- score ≥ baseline score − `noise_pp` (5pp), **and**
+- cost per conversation ≤ baseline × **1.10** (at most +10%).
+
+Link that run's issue in the PR. `regression` blocks the merge. If the score is within ~2pp of the floor, run it again, or with `restaurants=10`, before deciding. The human reviewer enforces this; it is not a required status check because the run costs money and takes ~10 minutes.
+
+**Failure modes** (the mapping lives in `FAILURE_MODES` in `scripts/corpus_qa_report.py`; change both together):
+
+| Code | Meaning | Corpus scenarios |
+|---|---|---|
+| F7 | Product matching: wrong or missing item or quantity when adding | `add_single`, `add_multi`, `abbreviation`, `digit_in_name`, `double_add` |
+| F8 | Flaky: passed in some samples and failed in others (needs `samples > 1`) | any |
+| F9 | Checkout and multi-turn state: flow broken, cart wiped, state lost | `checkout`, `multiturn_flow`, `trap_finish`, `continuation` |
+| F10 | Unavailable-item handling: substitution or a wrong "em falta" | `unavailable` |
+| Other | Cart edits, suggestions, conversational | `remove`, `add_remove`, `subset_remove`, `multi_remove`, `qty_reduction`, `suggestions`, `trap_*`, `question`, `greeting` |
+
+These codes are specific to this report. `backlog_bot_intelligence.md` uses F1–F9 for dated investigation notes, which is a different list.
+
+**Setting or refreshing the baseline** (a human decision, done in a reviewed PR):
+1. Dispatch `corpus-qa` on `develop` with `restaurants=10` and `samples=2` for a steadier number.
+2. `gh run download <run-id> -n corpus-qa-<run-id>`
+3. `python -m scripts.corpus_qa_report --promote corpus-qa/summary.json`, which writes `eval/ci_corpus_baseline.json`.
+4. Commit it in a PR that says why the baseline moved. Refresh it only when a change in score or cost is intended and accepted, never to make a regressing PR pass.
+
 ## Architecture
 
 ### Two-Process Architecture
@@ -407,6 +439,7 @@ GitHub Actions workflows in `.github/workflows/`:
 1. **`pr-checks.yml`** — On PRs: Ruff lint + format (`lint`), pytest (`test`), deterministic simulation tests `pytest tests/simulation -m "not llm"` (`simulation`), Docker build validation (`docker-build`).
    - **`pr-simulation-llm.yml`** — On PRs labeled `run-simulation`: the LLM-backed simulation conversations (`-m llm`) with the real `OPENAI_API_KEY` secret. Same-repo branches only.
    - **`claude.yml`** — Claude Code on GitHub: runs on `@claude` mentions (from OWNER/MEMBER/COLLABORATOR) and on issues labeled `agent-ready`. Works on `claude/*` branches and opens PRs against `develop`. Uses the Claude GitHub App plus the `ANTHROPIC_API_KEY` secret.
+   - **`corpus-qa.yml`**: weekly (Mon 09:00 UTC) and on-demand conversation-quality run with the real LLM. It opens or updates the "Corpus QA report <date>" issue. See "Conversation quality loop".
    - **`claude-review.yml`** — Advisory automated review on every non-draft, same-repo PR to `develop`/`main`: correctness, token/PII leaks, HMAC/webhook checks, `bot_id` tenant isolation, broadcast-after-commit. It comments; it never approves.
 2. **`deploy-dev.yml`** — On push to `develop`: lint → test → build ARM64 image → ECR push → ECS RunTask migration → deploy backend + worker → 8-min stabilization wait → smoke test (`/health/ready`). Uses OIDC auth, cancel-in-progress.
 3. **`deploy-prod.yml`** — On push to `main`: same pipeline + manual approval gate + pre-migration RDS snapshot + zero-downtime deploy (min healthy 100%).

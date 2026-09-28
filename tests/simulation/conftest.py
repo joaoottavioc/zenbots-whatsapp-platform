@@ -234,6 +234,24 @@ def pytest_sessionfinish(session, exitstatus):
 # ---------------------------------------------------------------------------
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def _flush_usage_events():
+    """Persist each test's usage_events before the next one starts.
+
+    The monitoring buffer normally flushes on a timer started by the app
+    lifespan, which pytest doesn't run, so it only flushed at 50 events and
+    dropped the tail at exit — undercounting cost per conversation in corpus
+    QA reports.
+    """
+    yield
+    from app.monitoring import flush_buffer
+
+    try:
+        await flush_buffer()
+    except Exception as e:
+        logger.warning("usage_events flush failed: %s", e)
+
+
 @pytest_asyncio.fixture
 async def db_session():
     await _ensure_test_data()
