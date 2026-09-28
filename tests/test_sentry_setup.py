@@ -90,6 +90,26 @@ class TestInitSentry:
             init_sentry("backend")
         assert mock_init.call_args.kwargs["traces_sample_rate"] == 0.0
 
+    @pytest.mark.parametrize(
+        "dsn",
+        [
+            '"https://public@example.ingest.sentry.io/1"',  # quotes kept literally
+            "not-a-dsn",
+            "https://example.ingest.sentry.io/1",  # missing public key
+        ],
+    )
+    def test_malformed_dsn_does_not_crash_startup(self, monkeypatch, dsn):
+        """Real sentry_sdk.init: a bad DSN must disable Sentry, not raise."""
+        import sentry_sdk
+
+        monkeypatch.setenv("SENTRY_DSN", dsn)
+        try:
+            assert init_sentry("backend") is False
+        finally:
+            # init() falls back to $SENTRY_DSN, so clear it before resetting.
+            monkeypatch.delenv("SENTRY_DSN")
+            sentry_sdk.init()  # reset to a no-op client
+
 
 # ---------------------------------------------------------------------------
 # Tagging

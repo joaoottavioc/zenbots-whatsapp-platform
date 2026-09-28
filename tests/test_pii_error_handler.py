@@ -153,7 +153,11 @@ def sentry_events(monkeypatch):
     assert sentry_setup.init_sentry("worker") is True
     yield events
     sentry_sdk.get_client().close()
+    # init() falls back to $SENTRY_DSN, so clear it first or the fake DSN
+    # would leave a live client for the rest of the suite.
+    monkeypatch.delenv("SENTRY_DSN")
     real_init()  # back to a no-op client for the rest of the suite
+    assert sentry_sdk.get_client().transport is None  # nothing can be sent
 
 
 @pytest.mark.asyncio

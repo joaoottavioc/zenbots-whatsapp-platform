@@ -187,18 +187,27 @@ def init_sentry(component: str) -> bool:
     except ValueError:
         traces_sample_rate = 0.0
 
-    sentry_sdk.init(
-        dsn=dsn,
-        environment=os.getenv("ENVIRONMENT", "development"),
-        release=os.getenv("SENTRY_RELEASE") or None,
-        integrations=integrations,
-        send_default_pii=False,
-        include_local_variables=False,
-        max_request_body_size="never",
-        traces_sample_rate=traces_sample_rate,
-        before_send=before_send,
-        before_send_transaction=before_send,
-    )
+    try:
+        sentry_sdk.init(
+            dsn=dsn,
+            environment=os.getenv("ENVIRONMENT", "development"),
+            release=os.getenv("SENTRY_RELEASE") or None,
+            integrations=integrations,
+            send_default_pii=False,
+            include_local_variables=False,
+            max_request_body_size="never",
+            traces_sample_rate=traces_sample_rate,
+            before_send=before_send,
+            before_send_transaction=before_send,
+        )
+    except Exception as exc:
+        # A malformed DSN (stray quotes, truncated paste) must not stop the
+        # API or the worker from booting; error reporting is optional.
+        logger.warning(
+            "Sentry disabled: init failed (%s). Check SENTRY_DSN.",
+            type(exc).__name__,
+        )
+        return False
     sentry_sdk.set_tag("component", component)
     _initialized = True
     logger.info("Sentry enabled (component=%s)", component)
