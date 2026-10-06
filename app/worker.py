@@ -4,6 +4,7 @@ import logging
 from arq.connections import RedisSettings
 from arq.cron import cron
 from app.logging_config import setup_logging
+from app.sentry_setup import init_sentry
 from app.monitoring import start_flush_task, stop_flush_task, run_aggregate_daily_costs
 
 # Importamos a função pesada que já existe
@@ -54,6 +55,11 @@ async def run_cleanup_conversation_history(ctx):
         count = await cleanup_old_conversation_history(session)
         if count:
             logger.info("Cron: cleaned up %d old conversation history records", count)
+
+
+# No-op unless SENTRY_DSN is set. Module level so ArqIntegration is active
+# before `arq app.worker.WorkerSettings` constructs the Worker.
+init_sentry("worker")
 
 
 # Configurações do Redis (Pega do env ou usa default)

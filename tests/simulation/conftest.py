@@ -26,19 +26,38 @@ from app.models import (
     ShoppingCart,
     CartItem,
     ConversationHistory,
+    Plan,
     Subscription,
 )
 from app.embedding_service import embed_async
 
+from ._env import SIM_REDIS_URL
 from .menu import RESTAURANT_NAME, PRODUCTS
 
 logger = logging.getLogger(__name__)
+
+
+# Suites that build their own restaurants and drive the real LLM end to end.
+_LLM_FILES = {
+    "test_multi_restaurant.py",
+    "test_random_restaurants.py",
+    "test_real_restaurants.py",
+    "test_real_restaurants_v2.py",
+}
 
 
 def pytest_collection_modifyitems(items):
     for item in items:
         if "simulation" in str(item.fspath):
             item.add_marker(pytest.mark.integration)
+            # Every sim_context conversation runs the full pipeline, which
+            # calls the real LLM. CI runs these only with the
+            # `run-simulation` PR label (see pr-checks.yml).
+            if (
+                "sim_context" in getattr(item, "fixturenames", ())
+                or item.fspath.basename in _LLM_FILES
+            ):
+                item.add_marker(pytest.mark.llm)
 
 
 @pytest.fixture(scope="session")
@@ -73,6 +92,26 @@ async def _ensure_test_data():
         return
 
     _prefix = f"_sim_{uuid.uuid4().hex[:8]}"
+
+    # Plans are seeded by data migrations. A DB bootstrapped with
+    # run_migrations.py (create_all + stamp head, e.g. CI) has none, and
+    # the plan gate then blocks every bot with the maintenance message.
+    async with async_session() as session:
+        existing = await session.execute(
+            select(Plan.key).where(Plan.key.in_(["free", "pro_monthly"]))
+        )
+        have = set(existing.scalars().all())
+        if "free" not in have:
+            session.add(
+                Plan(
+                    key="free", title="Free", description="sim", price=0.0, tier="free"
+                )
+            )
+        if "pro_monthly" not in have:
+            session.add(
+                Plan(key="pro_monthly", title="Pro", description="sim", price=0.0)
+            )
+        await session.commit()
 
     async with async_session() as session:
         # Create user
@@ -195,6 +234,24 @@ def pytest_sessionfinish(session, exitstatus):
 # ---------------------------------------------------------------------------
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def _flush_usage_events():
+    """Persist each test's usage_events before the next one starts.
+
+    The monitoring buffer normally flushes on a timer started by the app
+    lifespan, which pytest doesn't run, so it only flushed at 50 events and
+    dropped the tail at exit — undercounting cost per conversation in corpus
+    QA reports.
+    """
+    yield
+    from app.monitoring import flush_buffer
+
+    try:
+        await flush_buffer()
+    except Exception as e:
+        logger.warning("usage_events flush failed: %s", e)
+
+
 @pytest_asyncio.fixture
 async def db_session():
     await _ensure_test_data()
@@ -282,7 +339,7 @@ async def sim_context(db_session, sim_bot, sim_phone_number_id):
 
             wh.send_whatsapp_message = capture_send
             try:
-                pool = aioredis.from_url("redis://redis:6379/1")
+                pool = aioredis.from_url(SIM_REDIS_URL)
                 ctx = {"redis": pool}
                 await process_whatsapp_message(ctx, self._build_payload(text))
                 await pool.aclose()

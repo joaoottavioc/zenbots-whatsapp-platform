@@ -65,6 +65,10 @@ def setup_logging() -> None:
     root.handlers.clear()
 
     handler = logging.StreamHandler()
+    # The filter must also sit on the handler: filters on the root *logger*
+    # are not consulted for records propagated from child loggers
+    # (logging.getLogger(__name__)), which is every app log line.
+    handler.addFilter(ContextFilter())
 
     if os.getenv("LOG_FORMAT", "json").lower() == "text":
         formatter = logging.Formatter(

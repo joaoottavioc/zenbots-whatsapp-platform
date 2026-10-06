@@ -1,0 +1,21 @@
+# Paths that need the owner's review before merge. Enforced when branch
+# protection has "Require review from Code Owners" enabled (see CLAUDE.md
+# "Agent workflow"). Later rules override earlier ones for the same file.
+
+# Payments, auth, crypto, billing
+/app/payment_*.py          @joaoottavioc
+/app/webhook_security.py   @joaoottavioc
+/app/auth.py               @joaoottavioc
+/app/encryption.py         @joaoottavioc
+/app/billing_routes.py     @joaoottavioc
+
+# Schema changes
+/alembic/versions/         @joaoottavioc
+
+# Infrastructure and CI/CD
+/infra/                    @joaoottavioc
+/.github/workflows/        @joaoottavioc
+/.github/CODEOWNERS        @joaoottavioc
+
+# Agent guardrails (the hook agents run after every edit)
+/.claude/hooks/            @joaoottavioc

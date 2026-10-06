@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The platform is in **active development** with the dev environment live on AWS. Key stats:
 - **Test suite**: ~1,891 tests collected (`pytest --collect-only`), ~55% codebase coverage (CI green on Python 3.10; ~9 fail locally on 3.14 due to bcrypt compat)
-- **Tech debt**: Tracked across 10 backlog files in `tech_debt/`. Major refactorings complete (God Function split, enum-based state machine, security hardening, observability stack). See `tech_debt/` for full status.
+- **Tech debt**: Tracked in `tech_debt/` and `plan/`, which are **gitignored and exist only on the owner's machine** (this repo is public; they list fixed CVEs and strategy). Agents working from a clone or in CI won't have them — **GitHub Issues is the agent-facing backlog** (created from the local files by `scripts/backlog_to_issues.sh`). Major refactorings complete (God Function split, enum-based state machine, security hardening, observability stack).
 - **Production readiness**: ~45-50% overall. Critical P0 blockers remain in security and data integrity (see `tech_debt/backlog_production.md`).
 - **WhatsApp Embedded Signup**: Working in dev mode (Facebook app review required for production)
 - **Deployment**: Dev environment **fully operational** on AWS (ECS Fargate + RDS + ElastiCache). Production environment not yet provisioned. Full details in `docs/aws_architecture.md`.
@@ -62,6 +62,110 @@ pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 arq app.worker.WorkerSettings --watch /code
 ```
+
+## Agent workflow
+
+Rules for AI agents (Claude Code locally, `claude.yml` on GitHub, or any other) shipping code here. A human approves every merge and every production deploy; agents never do either.
+
+### Picking up work
+- Work comes from **GitHub Issues labeled `agent-ready`**. `tech_debt/` and `plan/` are not in the repo (see Current Maturity).
+- On GitHub: comment `@claude` on the issue, or a maintainer adds the `agent-ready` label, which triggers `claude.yml`.
+- If an issue is ambiguous, touches a CODEOWNERS path in a way the issue doesn't clearly authorize, or needs a secret, an AWS change, or a product decision, **stop and ask in the issue** instead of guessing.
+
+### Branches and PRs
+- Branch from `develop`. Names: `claude/<issue#>-<slug>` (the GitHub action uses `claude/` automatically), or `fix/<slug>`, `feat/<slug>`, `chore/<slug>`, `test/<slug>`.
+- Open PRs **against `develop`**, never `main`. `develop → main` promotion is a human release decision.
+- One issue per PR. Link it (`Closes #N`). Say in the description what you ran and what you did not verify.
+
+### Before opening a PR
+Run these and make sure they pass. Use Python 3.10, via Docker or CI; on 3.14 about 9 bcrypt tests fail locally, which is known.
+```bash
+ruff check app/ tests/ && ruff format --check app/ tests/
+pytest tests/ --ignore=tests/integration --ignore=tests/simulation
+pytest tests/simulation -m "not llm"            # needs Postgres + Redis (docker compose up)
+```
+- A bug fix starts with a **failing test** that reproduces it.
+- If you touch `app/whatsapp.py`, `app/prompt_central.py`, `app/semantic_router.py`, `app/item_extraction.py` or `app/tools_definition.py`, also run `pytest tests/simulation -m llm` locally (the post-edit hook does this in Docker), and ask for the **`run-simulation`** label on the PR. Conversation-quality changes must also pass the corpus acceptance rule (see "Conversation quality loop").
+- New config comes from an env var, is documented in `.env.example`, and is **off when unset**. Never commit secrets, real phone numbers, or customer data. Simulations use the fake phone `5500099990001`.
+
+### Paths that need extra care
+- **CODEOWNERS paths** (review by @joaoottavioc is required): `app/payment_*.py`, `app/webhook_security.py`, `app/auth.py`, `app/encryption.py`, `app/billing_routes.py`, `alembic/versions/`, `infra/`, `.github/workflows/`, `.claude/hooks/`.
+- **Invariants that reviews check** (see Key Architecture Decisions):
+  - broadcast only **after** `session.commit()` (#11)
+  - no `session.refresh(obj, attribute_names=[...])` in async code; capture scalars before commit/rollback (#10)
+  - every query on tenant data is **scoped by `bot_id`**; one restaurant must never see another's data
+  - customer phone numbers go through `mask_phone()` in logs
+  - LLM output goes through `sanitize.py` before reaching customers
+  - payment webhooks keep HMAC plus per-order token verification
+- **Migrations**: `alembic heads` must show a single head. Never edit an applied migration; add a new one. Data seeds (like `plan` rows) must be idempotent.
+
+### Agents never
+- Deploy, promote, or push to `main` or `develop` (branch protection enforces this; don't try to work around it).
+- Edit `deploy-dev.yml`, `deploy-prod.yml`, `terraform.yml` or `infra/` unless the issue explicitly asks for it and a human reviews it.
+- Run `terraform apply`, `alembic upgrade` against AWS, `aws ecs update-service`, or anything that changes AWS or production data.
+- Add, rotate or print secrets. Ask the human to do it.
+
+### Runbook: fixing a production error
+
+Errors reach GitHub as issues labeled `bug` + `agent-ready`, created by Sentry (setup: `docs/error_to_issue.md`). To fix one:
+
+1. **Get the `trace_id`.** It is in the issue body, or on the Sentry event linked from the issue (tag `trace_id`; `bot_id`, `component` and `environment` are there too). If the issue has no trace_id and `SENTRY_AUTH_TOKEN` is available:
+   ```bash
+   curl -s -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
+     "https://sentry.io/api/0/organizations/<org>/issues/<sentry-issue-id>/events/latest/" | jq '.tags'
+   ```
+   No trace_id at all (the error happened outside a message, e.g. a cron): work from the stack trace and `component`.
+2. **Read the logs for that trace.** CloudWatch Logs Insights on `/ecs/zenbots-<env>/worker` (message processing) and `/ecs/zenbots-<env>/backend` (HTTP):
+   ```
+   fields @timestamp, levelname, name, message, bot_id, contact_id
+   | filter trace_id = "<trace_id>"
+   | sort @timestamp asc
+   ```
+   Agents running in GitHub Actions have **no AWS access**. Ask in the issue for a human to run the query and paste the output. Logs from before 2026-09-27 have `trace_id: null` on every `app.*` logger (a logging bug fixed in the agent-ready PR), so older errors can only be correlated by timestamp.
+3. **Read what the trace called.** `usage_events` records every external call (OpenAI, Google Maps, WhatsApp, Mercado Pago, S3) with the same trace_id:
+   ```sql
+   SELECT created_at, service, operation, model, success, duration_ms, cost_usd
+   FROM usage_events WHERE trace_id = '<trace_id>' ORDER BY created_at;
+   ```
+   A `success = false` row usually points at the failing dependency. `conversation_history.trace_id` has the customer's messages for that turn: read it only to understand the flow, and **never paste it into issues, PRs or tests**. Write synthetic messages instead.
+4. **Reproduce with a failing test first.** Put it in the closest existing `tests/test_*.py`, mocking external services as the neighbouring tests do (`tests/test_pii_error_handler.py` shows how to drive `process_whatsapp_message` down an error path). Run it and confirm it fails **for the reason in the stack trace**, not for some other reason.
+5. **Fix the cause**, not the symptom. Wrapping the failing line in `try/except` is not a fix unless the error is truly expected. Keep the change minimal, then run the checks in "Before opening a PR".
+6. **Open a PR to `develop`** with `Fixes #<issue>`, the trace_id, a one-paragraph root cause, the test name, and what you could not verify (e.g. "no AWS access, logs not checked").
+7. **Can't reproduce, or the fix needs a secret, infra or a product decision?** Comment what you found on the issue and stop. Don't ship a guess.
+
+Never copy phone numbers, addresses, names, message text or tokens from logs or Sentry into issues, PRs, commits or test fixtures. Use `5500099990001` and invented data.
+
+### Conversation quality loop
+
+`corpus-qa.yml` runs every Monday at 09:00 UTC, and on demand via `workflow_dispatch`. It drives the corpus QA harness (`tests/simulation/corpus/run_corpus_qa.py`) with the real LLM against real menus, then `scripts/corpus_qa_report.py` opens or updates the issue **"Corpus QA report <date>"** (label `corpus-qa`). The issue contains the score against the CI baseline, failures by mode, cost per conversation, and 3–5 testable proposals from Claude.
+
+- **Score** = `comprehension_pass_rate`: the share of scored conversations where the bot produced the right cart or reply. **Cost per conversation** = the sum of `usage_events.cost_usd` during the run ÷ conversations (tests run minus skipped).
+- **Population:** CI only has the corpus menus whose extractions are committed (the 100 `template`-tier menus). The 84 real-restaurant extractions are gitignored, so CI numbers are compared only with **`eval/ci_corpus_baseline.json`**, never with `eval/latest.json` (all 184 menus). Getting parity needs a read-only S3/OIDC role in `infra/`, which is not done yet.
+- **Noise:** each run samples 5 random restaurants (~105 conversations), so ±5pp swings between identical runs are normal. That is why the rule below has a noise band.
+
+**Acceptance rule.** A PR that changes conversation behaviour (`app/whatsapp.py`, `app/prompt_central.py`, `app/semantic_router.py`, `app/item_extraction.py`, `app/tools_definition.py`, or prompts/examples inside them) may be merged only if a `corpus-qa` run **on the PR's branch** (Actions → Corpus QA → Run workflow → pick the branch) reports verdict **pass**:
+- score ≥ baseline score − `noise_pp` (5pp), **and**
+- cost per conversation ≤ baseline × **1.10** (at most +10%).
+
+Link that run's issue in the PR. `regression` blocks the merge. If the score is within ~2pp of the floor, run it again, or with `restaurants=10`, before deciding. The human reviewer enforces this; it is not a required status check because the run costs money and takes ~10 minutes.
+
+**Failure modes** (the mapping lives in `FAILURE_MODES` in `scripts/corpus_qa_report.py`; change both together):
+
+| Code | Meaning | Corpus scenarios |
+|---|---|---|
+| F7 | Product matching: wrong or missing item or quantity when adding | `add_single`, `add_multi`, `abbreviation`, `digit_in_name`, `double_add` |
+| F8 | Flaky: passed in some samples and failed in others (needs `samples > 1`) | any |
+| F9 | Checkout and multi-turn state: flow broken, cart wiped, state lost | `checkout`, `multiturn_flow`, `trap_finish`, `continuation` |
+| F10 | Unavailable-item handling: substitution or a wrong "em falta" | `unavailable` |
+| Other | Cart edits, suggestions, conversational | `remove`, `add_remove`, `subset_remove`, `multi_remove`, `qty_reduction`, `suggestions`, `trap_*`, `question`, `greeting` |
+
+These codes are specific to this report. `backlog_bot_intelligence.md` uses F1–F9 for dated investigation notes, which is a different list.
+
+**Setting or refreshing the baseline** (a human decision, done in a reviewed PR):
+1. Dispatch `corpus-qa` on `develop` with `restaurants=10` and `samples=2` for a steadier number.
+2. `gh run download <run-id> -n corpus-qa-<run-id>`
+3. `python -m scripts.corpus_qa_report --promote corpus-qa/summary.json`, which writes `eval/ci_corpus_baseline.json`.
+4. Commit it in a PR that says why the baseline moved. Refresh it only when a change in score or cost is intended and accepted, never to make a regressing PR pass.
 
 ## Architecture
 
@@ -259,7 +363,9 @@ The observability stack is implemented in Phases 0-3 (Phases 4-5 partially done)
 - `GET /monitoring/leaderboard?days=N&limit=N` — ranks bots by cost
 - `GET /monitoring/alerts/stream` — SSE stream for real-time anomaly alerts
 
-**Structured logging**: JSON format in production (`python-json-logger`), text in dev. Fields: `asctime`, `levelname`, `name`, `message`, `trace_id`, `bot_id`, `contact_id`. Configured via `LOG_FORMAT=text` env var for local dev.
+**Structured logging**: JSON format in production (`python-json-logger`), text in dev. Fields: `asctime`, `levelname`, `name`, `message`, `trace_id`, `bot_id`, `contact_id`. Configured via `LOG_FORMAT=text` env var for local dev. `ContextFilter` must sit on the **handler**: a filter on the root logger isn't applied to records from child loggers, which until 2026-09-27 left `trace_id`/`bot_id` null on every `app.*` line.
+
+**Error reporting (Sentry)**: `app/sentry_setup.py`, off unless `SENTRY_DSN` is set. Captures unhandled exceptions plus every `logger.error` record, tags each event with `trace_id`/`bot_id`/`contact_id`/`channel`/`component`/`environment`, and scrubs PII and credentials (`app/pii.py`) before sending. Stack-frame locals and request bodies are never sent. New errors become GitHub issues; see `docs/error_to_issue.md` and the runbook in "Agent workflow".
 
 **Tracing**: Every WhatsApp message gets a 12-char hex `trace_id` generated in `process_whatsapp_message`, injected into all logs and `usage_events.trace_id` for end-to-end correlation.
 
@@ -328,9 +434,13 @@ Restaurant owners connect their WhatsApp Business number through Facebook's Embe
 
 ### CI/CD Pipelines
 
-Four GitHub Actions workflows in `.github/workflows/`:
+GitHub Actions workflows in `.github/workflows/`:
 
-1. **`pr-checks.yml`** — On PRs: Ruff lint + format, pytest, Docker build validation.
+1. **`pr-checks.yml`** — On PRs: Ruff lint + format (`lint`), pytest (`test`), deterministic simulation tests `pytest tests/simulation -m "not llm"` (`simulation`), Docker build validation (`docker-build`).
+   - **`pr-simulation-llm.yml`** — On PRs labeled `run-simulation`: the LLM-backed simulation conversations (`-m llm`) with the real `OPENAI_API_KEY` secret. Same-repo branches only.
+   - **`claude.yml`** — Claude Code on GitHub: runs on `@claude` mentions (from OWNER/MEMBER/COLLABORATOR) and on issues labeled `agent-ready`. Works on `claude/*` branches and opens PRs against `develop`. Uses the Claude GitHub App plus the `ANTHROPIC_API_KEY` secret.
+   - **`corpus-qa.yml`**: weekly (Mon 09:00 UTC) and on-demand conversation-quality run with the real LLM. It opens or updates the "Corpus QA report <date>" issue. See "Conversation quality loop".
+   - **`claude-review.yml`** — Advisory automated review on every non-draft, same-repo PR to `develop`/`main`: correctness, token/PII leaks, HMAC/webhook checks, `bot_id` tenant isolation, broadcast-after-commit. It comments; it never approves.
 2. **`deploy-dev.yml`** — On push to `develop`: lint → test → build ARM64 image → ECR push → ECS RunTask migration → deploy backend + worker → 8-min stabilization wait → smoke test (`/health/ready`). Uses OIDC auth, cancel-in-progress.
 3. **`deploy-prod.yml`** — On push to `main`: same pipeline + manual approval gate + pre-migration RDS snapshot + zero-downtime deploy (min healthy 100%).
 4. **`terraform.yml`** — On `infra/**` changes: plan posted as PR comment, apply requires manual approval.
@@ -365,6 +475,7 @@ Loaded from `.env` locally, from AWS Secrets Manager in AWS. Key variables:
 - `CORS_ORIGINS` or `CORS_ORIGIN_REGEX` (production CORS — wildcard only in dev)
 - `ENVIRONMENT` (controls CORS strictness, logging level, log format)
 - `LOG_FORMAT` (`text` for local dev, JSON in production)
+- `SENTRY_DSN` (optional; empty = Sentry off), `SENTRY_TRACES_SAMPLE_RATE` (default 0), `SENTRY_RELEASE` (optional)
 
 ## Key Architecture Decisions
 
